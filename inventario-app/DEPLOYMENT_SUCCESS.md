@@ -6,7 +6,7 @@
 
 ## 🌐 Production URLs
 
-**Main URL:** https://inventario-app-sand.vercel.app
+**Main URL:** https://muqui.vercel.app
 
 **Vercel Dashboard:** https://vercel.com/quirons-projects/inventario-app
 
@@ -133,7 +133,7 @@ Open this file in your browser to run automated tests:
 ## 🎯 How to Use
 
 ### 1. **Access the App**
-- **Production:** https://inventario-app-sand.vercel.app
+- **Production:** https://muqui.vercel.app/login
 - **Local:** http://localhost:5174
 
 ### 2. **Login**
