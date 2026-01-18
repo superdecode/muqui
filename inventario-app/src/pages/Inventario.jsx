@@ -134,9 +134,9 @@ export default function Inventario() {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <Package className="text-white" size={28} />
-                <h1 className="text-3xl font-bold text-white">Gestión de Productos</h1>
+                <h1 className="text-3xl font-bold text-white">Catálogo de Productos</h1>
               </div>
-              <p className="text-white/90">Administra tu catálogo de productos e inventario</p>
+              <p className="text-white/90">Gestiona el catálogo completo de productos</p>
             </div>
             <Button
               variant="white"

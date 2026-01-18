@@ -127,18 +127,32 @@ export const getUbicaciones = async () => {
 }
 
 /**
- * Obtiene todo el inventario
+ * Obtiene todo el inventario con stock_minimo de productos
  */
 export const getInventario = async () => {
   try {
-    const data = await getSheetData('Inventario')
-    return data.map(inv => ({
+    const [inventarioData, productosData] = await Promise.all([
+      getSheetData('Inventario'),
+      getSheetData('Productos')
+    ])
+
+    // Crear un mapa de productos para lookup rápido
+    const productosMap = {}
+    productosData.forEach(prod => {
+      productosMap[prod.id] = {
+        stock_minimo: parseInt(prod.stock_minimo) || 0,
+        frecuencia_inventario_Dias: parseInt(prod.frecuencia_inventario_Dias) || 1
+      }
+    })
+
+    return inventarioData.map(inv => ({
       id: inv.id,
       producto_id: inv.producto_id,
       producto: inv.producto,
       ubicacion_id: inv.ubicacion_id,
       ubicacion: inv.ubicacion,
       stock_actual: parseInt(inv.stock_actual) || 0,
+      stock_minimo: productosMap[inv.producto_id]?.stock_minimo || 0,
       especificacion: inv.especificacion || '',
       unidad_medida: inv.unidad_medida,
       categoria: inv.categoria,
