@@ -24,7 +24,7 @@ export const useTransferencias = (ubicacionId) => {
             )
           : mockTransferencias
       }
-      return api.getTransferencias(ubicacionId)
+      return api.getMovimientos(ubicacionId)
     }
   })
 

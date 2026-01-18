@@ -64,9 +64,9 @@ export const api = {
     return response
   },
 
-  getTransferencias: async (ubicacionId) => {
+  getMovimientos: async (ubicacionId) => {
     const response = await apiClient.post('', {
-      action: 'getTransferencias',
+      action: 'getMovimientos',
       ubicacionId
     })
     return response
