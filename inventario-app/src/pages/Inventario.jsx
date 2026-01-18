@@ -5,13 +5,20 @@ import Input from '../components/common/Input'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ProductoForm from '../components/productos/ProductoForm'
 import useInventario from '../hooks/useInventario'
+import { useToastStore } from '../stores/toastStore'
+import { useQueryClient } from '@tanstack/react-query'
+import dataService from '../services/dataService'
+import { exportInventarioToCSV } from '../utils/exportUtils'
 
 export default function Inventario() {
   const { inventario, isLoading } = useInventario()
+  const toast = useToastStore()
+  const queryClient = useQueryClient()
   const [searchTerm, setSearchTerm] = useState('')
   const [categoriaFilter, setCategoriaFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [selectedProducto, setSelectedProducto] = useState(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   // Filtrar inventario
   const filteredInventario = inventario?.filter(item => {
@@ -27,14 +34,65 @@ export default function Inventario() {
 
   const handleDelete = async (productoId) => {
     if (window.confirm('¿Estás seguro de que deseas eliminar este producto?')) {
-      // TODO: Implementar eliminación
-      console.log('Eliminar producto:', productoId)
+      try {
+        setIsSaving(true)
+        const response = await dataService.deleteProducto(productoId)
+
+        if (response.success) {
+          toast.success('Producto Eliminado', response.message || 'El producto se ha eliminado correctamente')
+          queryClient.invalidateQueries(['inventario'])
+          queryClient.invalidateQueries(['productos'])
+        } else {
+          toast.error('Error al Eliminar', response.message || 'No se pudo eliminar el producto')
+        }
+      } catch (error) {
+        toast.error('Error al Eliminar', error.message || 'No se pudo eliminar el producto. Intenta nuevamente.')
+      } finally {
+        setIsSaving(false)
+      }
     }
   }
 
   const handleSave = async (productoData) => {
-    // TODO: Implementar guardado en Google Sheets
-    console.log('Guardar producto:', productoData)
+    try {
+      setIsSaving(true)
+      let response
+
+      if (selectedProducto) {
+        // Actualizar producto existente
+        response = await dataService.updateProducto(selectedProducto.id, productoData)
+        if (response.success) {
+          toast.success('Producto Actualizado', response.message || 'El producto se ha actualizado correctamente')
+        }
+      } else {
+        // Crear nuevo producto
+        response = await dataService.createProducto(productoData)
+        if (response.success) {
+          toast.success('Producto Creado', response.message || 'El producto se ha creado correctamente')
+        }
+      }
+
+      if (response.success) {
+        queryClient.invalidateQueries(['inventario'])
+        queryClient.invalidateQueries(['productos'])
+        handleCloseForm()
+      } else {
+        toast.error('Error al Guardar', response.message || 'No se pudo guardar el producto')
+      }
+    } catch (error) {
+      toast.error('Error al Guardar', error.message || 'No se pudo guardar el producto. Intenta nuevamente.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleExportar = () => {
+    try {
+      exportInventarioToCSV(filteredInventario)
+      toast.success('Exportación Exitosa', 'El inventario se ha exportado a CSV correctamente')
+    } catch (error) {
+      toast.error('Error al Exportar', error.message || 'No se pudo exportar el inventario')
+    }
   }
 
   const handleCloseForm = () => {
@@ -121,7 +179,12 @@ export default function Inventario() {
             </select>
           </div>
 
-          <Button variant="outline" className="md:w-auto">
+          <Button
+            variant="outline"
+            className="md:w-auto"
+            onClick={handleExportar}
+            disabled={filteredInventario.length === 0}
+          >
             <Download size={20} className="mr-2" />
             Exportar
           </Button>
@@ -254,6 +317,7 @@ export default function Inventario() {
           producto={selectedProducto}
           onClose={handleCloseForm}
           onSave={handleSave}
+          isLoading={isSaving}
         />
       )}
     </div>
