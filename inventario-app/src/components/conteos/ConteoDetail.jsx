@@ -1,19 +1,38 @@
+import { useQuery } from '@tanstack/react-query'
 import Modal from '../common/Modal'
 import Button from '../common/Button'
+import LoadingSpinner from '../common/LoadingSpinner'
 import { Package, MapPin, Calendar, User, CheckCircle, AlertCircle } from 'lucide-react'
-import { formatDate } from '../../utils/formatters'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
+import dataService from '../../services/dataService'
 
 export default function ConteoDetail({ conteo, onClose }) {
-  const getDiferencia = (producto) => {
-    if (producto.stock_fisico === null || producto.stock_fisico === undefined) return null
-    return producto.stock_fisico - producto.stock_sistema
+  // Cargar detalles del conteo
+  const { data: detalles = [], isLoading } = useQuery({
+    queryKey: ['conteo-detalle', conteo.id],
+    queryFn: () => dataService.getDetalleConteos(conteo.id)
+  })
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '-'
+    try {
+      return format(new Date(dateString), "d 'de' MMMM, yyyy", { locale: es })
+    } catch {
+      return '-'
+    }
+  }
+
+  const getDiferencia = (cantidad_fisica, cantidad_sistema) => {
+    if (cantidad_fisica === null || cantidad_fisica === undefined) return null
+    return cantidad_fisica - cantidad_sistema
   }
 
   return (
     <Modal onClose={onClose}>
-      <div className="bg-white rounded-2xl shadow-card max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="bg-gradient-ocean p-6 rounded-t-2xl">
+        <div className="bg-gradient-light-blue p-6 rounded-t-2xl">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold text-white">Detalle de Conteo</h2>
@@ -31,7 +50,7 @@ export default function ConteoDetail({ conteo, onClose }) {
           </div>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 bg-white rounded-b-2xl">
           {/* Info General */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="flex items-start gap-3">
@@ -50,7 +69,7 @@ export default function ConteoDetail({ conteo, onClose }) {
               </div>
               <div>
                 <p className="text-sm text-slate-600">Ubicación</p>
-                <p className="font-semibold text-slate-900">{conteo.ubicacion}</p>
+                <p className="font-semibold text-slate-900">{conteo.ubicacion_id}</p>
               </div>
             </div>
 
@@ -70,66 +89,93 @@ export default function ConteoDetail({ conteo, onClose }) {
               </div>
               <div>
                 <p className="text-sm text-slate-600">Responsable</p>
-                <p className="font-semibold text-slate-900">{conteo.responsable}</p>
+                <p className="font-semibold text-slate-900">{conteo.usuario_responsable_id || '-'}</p>
               </div>
             </div>
+
+            {conteo.usuario_ejecutor_id && (
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <User className="text-blue-600" size={20} />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-600">Ejecutado por</p>
+                  <p className="font-semibold text-slate-900">{conteo.usuario_ejecutor_id}</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Productos */}
           <div>
             <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
               <Package size={20} className="text-primary-600" />
-              Productos Contados
+              Productos Contados {detalles.length > 0 && `(${detalles.length} items)`}
             </h3>
-            <div className="space-y-3">
-              {conteo.productos?.map((producto, index) => {
-                const diferencia = getDiferencia(producto)
-                return (
-                  <div key={index} className="border border-slate-200 rounded-xl p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-                      <div className="md:col-span-1">
-                        <p className="font-medium text-slate-900">{producto.nombre}</p>
-                      </div>
-                      
-                      <div className="text-center">
-                        <p className="text-xs text-slate-600 mb-1">Stock Sistema</p>
-                        <p className="text-lg font-bold text-slate-900">{producto.stock_sistema}</p>
-                      </div>
 
-                      <div className="text-center">
-                        <p className="text-xs text-slate-600 mb-1">Stock Físico</p>
-                        <p className="text-lg font-bold text-slate-900">
-                          {producto.stock_fisico !== null && producto.stock_fisico !== undefined 
-                            ? producto.stock_fisico 
-                            : '-'}
-                        </p>
-                      </div>
+            {isLoading ? (
+              <div className="py-8">
+                <LoadingSpinner text="Cargando detalles..." />
+              </div>
+            ) : detalles.length === 0 ? (
+              <div className="text-center py-8 bg-slate-50 rounded-xl">
+                <Package size={48} className="mx-auto text-slate-300 mb-3" />
+                <p className="text-slate-600">No hay productos contados en este conteo</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {detalles.map((detalle, index) => {
+                  const diferencia = getDiferencia(detalle.cantidad_fisica, detalle.cantidad_sistema)
+                  return (
+                    <div key={index} className="border border-slate-200 rounded-xl p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center">
+                        <div className="md:col-span-2">
+                          <p className="font-medium text-slate-900">{detalle.producto_id}</p>
+                          {detalle.observaciones && (
+                            <p className="text-xs text-slate-500 mt-1">{detalle.observaciones}</p>
+                          )}
+                        </div>
 
-                      <div className="text-center">
-                        <p className="text-xs text-slate-600 mb-1">Diferencia</p>
-                        {diferencia !== null ? (
-                          <div className="flex items-center justify-center gap-2">
-                            {diferencia === 0 ? (
-                              <CheckCircle className="text-green-600" size={20} />
-                            ) : (
-                              <AlertCircle className="text-yellow-600" size={20} />
-                            )}
-                            <p className={`text-lg font-bold ${
-                              diferencia === 0 ? 'text-green-600' : 
-                              diferencia > 0 ? 'text-blue-600' : 'text-red-600'
-                            }`}>
-                              {diferencia > 0 ? '+' : ''}{diferencia}
-                            </p>
-                          </div>
-                        ) : (
-                          <p className="text-slate-400">Pendiente</p>
-                        )}
+                        <div className="text-center">
+                          <p className="text-xs text-slate-600 mb-1">Stock Sistema</p>
+                          <p className="text-lg font-bold text-slate-900">{detalle.cantidad_sistema || 0}</p>
+                        </div>
+
+                        <div className="text-center">
+                          <p className="text-xs text-slate-600 mb-1">Stock Físico</p>
+                          <p className="text-lg font-bold text-slate-900">
+                            {detalle.cantidad_fisica !== null && detalle.cantidad_fisica !== undefined
+                              ? detalle.cantidad_fisica
+                              : '-'}
+                          </p>
+                        </div>
+
+                        <div className="text-center">
+                          <p className="text-xs text-slate-600 mb-1">Diferencia</p>
+                          {diferencia !== null ? (
+                            <div className="flex items-center justify-center gap-2">
+                              {diferencia === 0 ? (
+                                <CheckCircle className="text-green-600" size={20} />
+                              ) : (
+                                <AlertCircle className="text-yellow-600" size={20} />
+                              )}
+                              <p className={`text-lg font-bold ${
+                                diferencia === 0 ? 'text-green-600' :
+                                diferencia > 0 ? 'text-blue-600' : 'text-red-600'
+                              }`}>
+                                {diferencia > 0 ? '+' : ''}{diferencia}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-slate-400">-</p>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* Observaciones */}

@@ -80,7 +80,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
   if (isLoading) {
     return (
       <Modal onClose={onClose}>
-        <div className="bg-white rounded-2xl shadow-card max-w-4xl w-full p-12">
+        <div className="max-w-4xl w-full p-12 bg-white rounded-2xl">
           <LoadingSpinner text="Cargando productos para conteo..." />
         </div>
       </Modal>
@@ -90,7 +90,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
   if (productosConteo.length === 0) {
     return (
       <Modal onClose={onClose}>
-        <div className="bg-white rounded-2xl shadow-card max-w-2xl w-full p-8">
+        <div className="max-w-2xl w-full p-8 bg-white rounded-2xl">
           <div className="text-center">
             <Package size={64} className="mx-auto text-slate-300 mb-4" />
             <h3 className="text-xl font-semibold text-slate-900 mb-2">
@@ -110,14 +110,14 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
 
   return (
     <Modal onClose={onClose}>
-      <div className="bg-white rounded-2xl shadow-card max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="bg-gradient-ocean p-6 rounded-t-2xl">
+        <div className="bg-gradient-light-blue p-6 rounded-t-2xl">
           <h2 className="text-2xl font-bold text-white">Ejecutar Conteo</h2>
           <p className="text-white/90">{conteo.ubicacion || conteo.ubicacion_id} - {conteo.tipo_conteo}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6 bg-white rounded-b-2xl">
           {/* Error Alert */}
           {error && (
             <Alert type="error" className="mb-4">

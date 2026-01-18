@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Google Sheets</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 { color: #004AFF; }
+        h2 { color: #333; border-bottom: 2px solid #004AFF; padding-bottom: 10px; }
+        button {
+            background: #004AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0039cc; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background: #004AFF;
+            color: white;
+        }
+        .loading { color: #666; font-style: italic; }
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test de Conexión Google Sheets</h1>
+
+    <div class="container">
+        <h2>📊 Configuración</h2>
+        <p><strong>Spreadsheet ID:</strong> 1y3BSVe6CcHGeyIvLuSAhDdHyR7nRXSboulfiKPe6s-c</p>
+        <p><strong>API Key:</strong> AIzaSyAnCEFz9o1DX9ymBW78iDcE6Z3ckOAb_Gg</p>
+        <button onclick="testAllSheets()">🔄 Probar Todas las Hojas</button>
+    </div>
+
+    <div class="container">
+        <h2>1️⃣ Productos</h2>
+        <button onclick="testProductos()">Cargar Productos</button>
+        <div id="productos-result"></div>
+    </div>
+
+    <div class="container">
+        <h2>2️⃣ Inventario</h2>
+        <button onclick="testInventario()">Cargar Inventario</button>
+        <div id="inventario-result"></div>
+    </div>
+
+    <div class="container">
+        <h2>3️⃣ Conteos</h2>
+        <button onclick="testConteos()">Cargar Conteos</button>
+        <div id="conteos-result"></div>
+    </div>
+
+    <div class="container">
+        <h2>4️⃣ Movimientos</h2>
+        <button onclick="testMovimientos()">Cargar Movimientos</button>
+        <div id="movimientos-result"></div>
+    </div>
+
+    <div class="container">
+        <h2>5️⃣ Ubicaciones</h2>
+        <button onclick="testUbicaciones()">Cargar Ubicaciones</button>
+        <div id="ubicaciones-result"></div>
+    </div>
+
+    <script>
+        const SPREADSHEET_ID = '1y3BSVe6CcHGeyIvLuSAhDdHyR7nRXSboulfiKPe6s-c';
+        const API_KEY = 'AIzaSyAnCEFz9o1DX9ymBW78iDcE6Z3ckOAb_Gg';
+
+        function buildSheetURL(sheetName) {
+            return `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${sheetName}?key=${API_KEY}`;
+        }
+
+        async function testSheet(sheetName, resultId) {
+            const resultDiv = document.getElementById(resultId);
+            resultDiv.innerHTML = '<p class="loading">⏳ Cargando...</p>';
+
+            try {
+                const response = await fetch(buildSheetURL(sheetName));
+                const data = await response.json();
+
+                if (response.ok && data.values) {
+                    const rows = data.values.length - 1; // Minus header
+                    const headers = data.values[0];
+
+                    let html = `<p class="success">✅ ${rows} registros cargados</p>`;
+                    html += `<p><strong>Columnas:</strong> ${headers.join(', ')}</p>`;
+
+                    if (rows > 0) {
+                        html += '<table>';
+                        html += '<tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr>';
+
+                        // Show first 5 rows
+                        for (let i = 1; i <= Math.min(6, data.values.length - 1); i++) {
+                            const row = data.values[i] || [];
+                            html += '<tr>' + headers.map((h, idx) =>
+                                `<td>${row[idx] || '-'}</td>`
+                            ).join('') + '</tr>';
+                        }
+
+                        html += '</table>';
+
+                        if (rows > 5) {
+                            html += `<p><em>... y ${rows - 5} registros más</em></p>`;
+                        }
+                    }
+
+                    resultDiv.innerHTML = html;
+                } else {
+                    resultDiv.innerHTML = `<p class="error">❌ Error: ${data.error?.message || 'No se pudo cargar'}</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error de red: ${error.message}</p>`;
+            }
+        }
+
+        function testProductos() {
+            testSheet('Productos', 'productos-result');
+        }
+
+        function testInventario() {
+            testSheet('Inventario', 'inventario-result');
+        }
+
+        function testConteos() {
+            testSheet('Conteos', 'conteos-result');
+        }
+
+        function testMovimientos() {
+            testSheet('Movimientos', 'movimientos-result');
+        }
+
+        function testUbicaciones() {
+            testSheet('Ubicaciones', 'ubicaciones-result');
+        }
+
+        function testAllSheets() {
+            testProductos();
+            testInventario();
+            testConteos();
+            testMovimientos();
+            testUbicaciones();
+        }
+
+        // Auto-test on load
+        window.onload = () => {
+            console.log('🚀 Página cargada - Click en los botones para probar');
+        };
+    </script>
+</body>
+</html>

@@ -16,7 +16,11 @@ export default function Modal({
       }
     }
 
-    if (isOpen) {
+    // Si isOpen no está definido (undefined), asumimos que el modal debe estar abierto
+    // ya que el componente padre lo está montando
+    const shouldBeOpen = isOpen === undefined ? true : isOpen
+
+    if (shouldBeOpen) {
       document.addEventListener('keydown', handleEscape)
       document.body.style.overflow = 'hidden'
     }
@@ -27,7 +31,8 @@ export default function Modal({
     }
   }, [isOpen, onClose])
 
-  if (!isOpen) return null
+  // Solo retornar null si isOpen está explícitamente en false
+  if (isOpen === false) return null
 
   const sizes = {
     sm: 'max-w-md',

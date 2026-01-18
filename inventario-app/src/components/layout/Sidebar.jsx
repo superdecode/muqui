@@ -18,7 +18,7 @@ export default function Sidebar() {
 
   const menuItems = [
     { to: '/', icon: Home, label: 'Dashboard' },
-    { to: '/inventario', icon: Package, label: 'Inventario', permission: 'inventario.ver' },
+    { to: '/productos', icon: Package, label: 'Productos', permission: 'inventario.ver' },
     { to: '/movimientos', icon: ArrowRightLeft, label: 'Movimientos', permission: 'transferencias.confirmar' },
     { to: '/conteos', icon: ClipboardCheck, label: 'Conteos', permission: 'conteos.ejecutar' },
     { to: '/reportes', icon: FileBarChart, label: 'Reportes', permission: 'reportes.ver' }

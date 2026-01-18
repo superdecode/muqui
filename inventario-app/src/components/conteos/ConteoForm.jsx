@@ -34,14 +34,14 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
 
   return (
     <Modal onClose={onClose}>
-      <div className="bg-white rounded-2xl shadow-card max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="bg-gradient-ocean p-6 rounded-t-2xl">
+        <div className="bg-gradient-light-blue p-6 rounded-t-2xl">
           <h2 className="text-2xl font-bold text-white">Programar Conteo</h2>
           <p className="text-white/90">Crea un nuevo conteo de inventario</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6 bg-white rounded-b-2xl">
           {/* Error Alert */}
           {error && (
             <Alert type="error" className="mb-4">

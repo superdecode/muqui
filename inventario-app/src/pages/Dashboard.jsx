@@ -143,7 +143,7 @@ export default function Dashboard() {
       <div className="bg-white rounded-2xl shadow-card p-6 border border-slate-100">
         <h2 className="text-2xl font-bold text-slate-900 mb-6">Acciones Rápidas</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Link to="/inventario" className="group relative overflow-hidden p-6 rounded-2xl bg-gradient-ocean text-white shadow-soft hover:shadow-glow transition-all duration-300 transform hover:-translate-y-1">
+          <Link to="/productos" className="group relative overflow-hidden p-6 rounded-2xl bg-gradient-ocean text-white shadow-soft hover:shadow-glow transition-all duration-300 transform hover:-translate-y-1">
             <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-500"></div>
             <div className="relative z-10">
               <Package className="mb-3" size={32} />

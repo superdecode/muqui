@@ -7,6 +7,7 @@ import ToastContainer from './components/common/ToastContainer'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Inventario from './pages/Inventario'
+import Productos from './pages/Productos'
 import Movimientos from './pages/Movimientos'
 import Conteos from './pages/Conteos'
 import Reportes from './pages/Reportes'
@@ -39,7 +40,10 @@ function ProtectedRoute({ children }) {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true
+      }}>
         <ToastContainer />
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -54,6 +58,7 @@ function App() {
           >
             <Route index element={<Dashboard />} />
             <Route path="inventario" element={<Inventario />} />
+            <Route path="productos" element={<Productos />} />
             <Route path="movimientos" element={<Movimientos />} />
             <Route path="transferencias" element={<Navigate to="/movimientos" replace />} />
             <Route path="conteos" element={<Conteos />} />
