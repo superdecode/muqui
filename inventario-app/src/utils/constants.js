@@ -1,0 +1,77 @@
+// Constantes de la aplicación
+
+export const TIPO_UBICACION = {
+  BODEGA: 'BODEGA',
+  PUNTO_VENTA: 'PUNTO_VENTA'
+}
+
+export const ESTADO_TRANSFERENCIA = {
+  PENDIENTE: 'PENDIENTE',
+  CONFIRMADA: 'CONFIRMADA',
+  CANCELADA: 'CANCELADA',
+  EDITADA: 'EDITADA'
+}
+
+export const ESTADO_CONTEO = {
+  PENDIENTE: 'PENDIENTE',
+  EN_PROCESO: 'EN_PROCESO',
+  COMPLETADO: 'COMPLETADO',
+  VENCIDO: 'VENCIDO'
+}
+
+export const TIPO_CONTEO = {
+  DIARIO: 'DIARIO',
+  SEMANAL: 'SEMANAL',
+  QUINCENAL: 'QUINCENAL',
+  MENSUAL: 'MENSUAL'
+}
+
+export const TIPO_ALERTA = {
+  STOCK_MINIMO: 'STOCK_MINIMO',
+  CONTEO_PENDIENTE: 'CONTEO_PENDIENTE',
+  TRANSFERENCIA_SIN_CONFIRMAR: 'TRANSFERENCIA_SIN_CONFIRMAR',
+  DIFERENCIA_INVENTARIO: 'DIFERENCIA_INVENTARIO'
+}
+
+export const PRIORIDAD_ALERTA = {
+  BAJA: 'BAJA',
+  MEDIA: 'MEDIA',
+  ALTA: 'ALTA',
+  CRITICA: 'CRITICA'
+}
+
+export const UNIDADES_MEDIDA = [
+  'KG',
+  'GR',
+  'ML',
+  'LT',
+  'LB',
+  'UNIDAD',
+  'BOLSA',
+  'BULTO',
+  'GALON',
+  'TARRO'
+]
+
+export const FRECUENCIA_INVENTARIO = {
+  DIARIO: { valor: 1, label: 'Diario' },
+  SEMANAL: { valor: 7, label: 'Semanal' },
+  QUINCENAL: { valor: 15, label: 'Quincenal' },
+  MENSUAL: { valor: 30, label: 'Mensual' }
+}
+
+export const CATEGORIAS_PRODUCTOS = [
+  'TAPIOCA',
+  'TÉ',
+  'LÁCTEOS',
+  'POLVOS',
+  'SIROPES',
+  'TOPPINGS',
+  'CAFÉ',
+  'OTROS'
+]
+
+export const ESTADOS = {
+  ACTIVO: 'ACTIVO',
+  INACTIVO: 'INACTIVO'
+}

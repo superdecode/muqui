@@ -1,0 +1,775 @@
+# Sistema de Gestión de Inventario Multi-tienda - Especificaciones Técnicas
+
+## 1. CONTEXTO Y OBJETIVOS
+
+### 1.1 Situación Actual
+- 3 bodegas independientes (1 corporativa + 2 franquiciados)
+- 6 puntos de venta (4 corporativos + 2 franquiciados)
+- Gestión manual mediante Google Sheets
+- Problemas: duplicación de datos, errores humanos, falta de precisión, análisis complejo
+
+### 1.2 Objetivo Principal
+Desarrollar una aplicación web responsive (optimizada para móvil) que:
+- Elimine duplicación de registros (especialmente en transferencias)
+- Automatice cálculos y reportes
+- Garantice integridad de datos
+- Proporcione visibilidad según roles
+- Funcione offline para consultas
+
+---
+
+## 2. ARQUITECTURA DEL SISTEMA
+
+### 2.1 Modelo de Datos
+
+#### Entidad: EMPRESA
+```
+- id
+- nombre
+- tipo (CORPORATIVO | FRANQUICIADO)
+- estado (ACTIVO | INACTIVO)
+- fecha_creacion
+```
+
+#### Entidad: BODEGA
+```
+- id
+- nombre
+- empresa_id (FK)
+- direccion
+- responsable_id (FK Usuario)
+- estado (ACTIVO | INACTIVO)
+- fecha_creacion
+```
+
+#### Entidad: PUNTO_VENTA
+```
+- id
+- nombre
+- empresa_id (FK)
+- bodega_principal_id (FK Bodega)
+- direccion
+- responsable_id (FK Usuario)
+- estado (ACTIVO | INACTIVO)
+- fecha_creacion
+```
+
+#### Entidad: PRODUCTO
+```
+- id
+- nombre
+- especificacion (ej: "3 KG", "900 ML")
+- unidad_medida (ej: "KG", "ML", "LT", "GR", "LB", "UNIDAD", "BOLSA", "BULTO", "GALON", "TARRO", "LB")
+- stock_minimo_default (número)
+- frecuencia_inventario_dias (DIARIO (1) | SEMANAL (7) | QUINCENAL (15) | MENSUAL (30))
+- categoria
+- estado (ACTIVO | INACTIVO)
+- fecha_creacion
+```
+
+#### Entidad: PRODUCTO_TIENDA
+```
+- id
+- producto_id (FK)
+- ubicacion_id (FK - puede ser Bodega o Punto_Venta)
+- tipo_ubicacion (BODEGA | PUNTO_VENTA)
+- stock_minimo (override del default)
+- es_importante (boolean)
+- estado (ACTIVO | INACTIVO)
+```
+
+#### Entidad: INVENTARIO
+```
+- id
+- producto_id (FK)
+- ubicacion_id (FK)
+- tipo_ubicacion (BODEGA | PUNTO_VENTA)
+- cantidad_actual
+- ultima_actualizacion
+- fecha_creacion
+```
+
+#### Entidad: MOVIMIENTO_INVENTARIO
+```
+- id
+- producto_id (FK)
+- ubicacion_id (FK)
+- tipo_ubicacion (BODEGA | PUNTO_VENTA)
+- tipo_movimiento (ENTRADA | SALIDA | AJUSTE | TRANSFERENCIA_SALIDA | TRANSFERENCIA_ENTRADA | CONTEO_INVENTARIO)
+- cantidad
+- inventario_anterior
+- inventario_nuevo
+- transferencia_id (FK, nullable)
+- conteo_id (FK, nullable)
+- usuario_id (FK)
+- observaciones
+- fecha_movimiento
+- fecha_creacion
+```
+
+#### Entidad: TRANSFERENCIA
+```
+- id
+- origen_id (FK)
+- tipo_origen (BODEGA | PUNTO_VENTA)
+- destino_id (FK)
+- tipo_destino (BODEGA | PUNTO_VENTA)
+- estado (PENDIENTE | CONFIRMADA | CANCELADA | EDITADA)
+- usuario_creacion_id (FK)
+- usuario_confirmacion_id (FK, nullable)
+- fecha_creacion
+- fecha_confirmacion (nullable)
+- fecha_limite_edicion
+- observaciones_creacion
+- observaciones_confirmacion
+```
+
+#### Entidad: DETALLE_TRANSFERENCIA
+```
+- id
+- transferencia_id (FK)
+- producto_id (FK)
+- cantidad_enviada
+- cantidad_recibida (nullable hasta confirmación)
+- diferencia (calculado)
+- observaciones
+```
+
+#### Entidad: CONTEO_INVENTARIO
+```
+- id
+- ubicacion_id (FK)
+- tipo_ubicacion (BODEGA | PUNTO_VENTA)
+- tipo_conteo (DIARIO | SEMANAL | QUINCENAL | MENSUAL)
+- estado (PENDIENTE | EN_PROCESO | COMPLETADO | VENCIDO)
+- usuario_responsable_id (FK)
+- usuario_ejecutor_id (FK, nullable)
+- fecha_programada
+- fecha_inicio (nullable)
+- fecha_completado (nullable)
+- observaciones
+```
+
+#### Entidad: DETALLE_CONTEO
+```
+- id
+- conteo_id (FK)
+- producto_id (FK)
+- cantidad_sistema
+- cantidad_fisica
+- diferencia (calculado)
+- observaciones
+- contado (boolean)
+```
+
+#### Entidad: USUARIO
+```
+- id
+- nombre_completo
+- email
+- password_hash
+- rol_id (FK)
+- empresa_id (FK)
+- ubicaciones_asignadas (JSON array de IDs)
+- estado (ACTIVO | INACTIVO)
+- ultimo_acceso
+- fecha_creacion
+```
+
+#### Entidad: ROL
+```
+- id
+- nombre (ADMIN_GLOBAL | ADMIN_EMPRESA | GERENTE_OPERATIVO | JEFE_PUNTO | OPERADOR | CONSULTA)
+- descripcion
+- permisos (JSON)
+```
+
+#### Entidad: ALERTA
+```
+- id
+- tipo (STOCK_MINIMO | CONTEO_PENDIENTE | TRANSFERENCIA_SIN_CONFIRMAR | DIFERENCIA_INVENTARIO)
+- prioridad (BAJA | MEDIA | ALTA | CRITICA)
+- entidad_relacionada_id
+- tipo_entidad
+- ubicacion_id
+- mensaje
+- estado (ACTIVA | LEIDA | RESUELTA)
+- usuarios_notificados (JSON array)
+- fecha_creacion
+- fecha_resolucion
+```
+
+---
+
+## 3. SISTEMA DE ROLES Y PERMISOS
+
+### 3.1 Definición de Roles
+
+#### ADMIN_GLOBAL (Dueño/Gerente General)
+**Visibilidad:** TODO el sistema
+**Permisos:**
+- Ver inventarios de todas las bodegas y puntos de venta
+- Crear/editar/eliminar empresas, bodegas, puntos de venta
+- Crear/editar/eliminar productos (catálogo maestro)
+- Crear/editar/eliminar usuarios
+- Gestionar roles y permisos
+- Ver todos los reportes consolidados
+- Crear/editar/confirmar transferencias sin restricción de tiempo
+- Crear/editar conteos de inventario
+- Ajustar inventarios
+- Configurar alertas globales
+- Exportar datos
+
+#### ADMIN_EMPRESA (Franquiciado)
+**Visibilidad:** Su empresa (bodegas y puntos de venta propios)
+**Permisos:**
+- Ver inventarios de sus bodegas y puntos de venta
+- Crear/editar puntos de venta de su empresa
+- Activar/desactivar productos para sus ubicaciones
+- Crear/editar usuarios de su empresa
+- Ver reportes de su empresa
+- Crear/editar/confirmar transferencias dentro de su empresa
+- Crear/editar conteos de inventario de su empresa
+- Ajustar inventarios de su empresa
+- Configurar alertas para su empresa
+- Exportar datos de su empresa
+
+#### GERENTE_OPERATIVO
+**Visibilidad:** Bodegas corporativas + Puntos de venta corporativos
+**Permisos:**
+- Ver inventarios de bodegas y puntos corporativos
+- Crear productos en bodega (entradas)
+- Crear transferencias desde bodega a puntos de venta
+- Editar transferencias (mismo día o no confirmadas)
+- Ver reportes operativos
+- Crear conteos de inventario
+- Ajustar inventarios con justificación
+- Ver y gestionar alertas
+- Exportar reportes
+
+#### JEFE_PUNTO
+**Visibilidad:** Su punto de venta asignado
+**Permisos:**
+- Ver inventario de su punto de venta
+- Confirmar transferencias recibidas
+- Crear transferencias entre puntos (si está habilitado)
+- Ejecutar conteos de inventario
+- Realizar ajustes menores (con límite)
+- Ver reportes de su punto
+- Ver alertas de su punto
+- Exportar datos de su punto
+
+#### OPERADOR
+**Visibilidad:** Su punto de venta asignado
+**Permisos:**
+- Ver inventario de su punto de venta
+- Confirmar transferencias recibidas
+- Registrar consumos/salidas
+- Ejecutar conteos de inventario
+- Ver alertas de su punto
+
+#### CONSULTA (Solo lectura)
+**Visibilidad:** Según asignación
+**Permisos:**
+- Ver inventarios asignados
+- Ver reportes
+- Exportar datos
+
+### 3.2 Matriz de Permisos Detallada
+
+```json
+{
+  "productos": {
+    "crear": ["ADMIN_GLOBAL"],
+    "editar": ["ADMIN_GLOBAL"],
+    "ver_catalogo": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO"],
+    "activar_desactivar_tienda": ["ADMIN_GLOBAL", "ADMIN_EMPRESA"]
+  },
+  "inventario": {
+    "ver_bodega": ["ADMIN_GLOBAL", "GERENTE_OPERATIVO"],
+    "ver_punto_venta": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO", "JEFE_PUNTO", "OPERADOR", "CONSULTA"],
+    "ajustar": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO", "JEFE_PUNTO"],
+    "entrada_bodega": ["ADMIN_GLOBAL", "GERENTE_OPERATIVO"]
+  },
+  "transferencias": {
+    "crear_desde_bodega": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO"],
+    "crear_entre_puntos": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO", "JEFE_PUNTO"],
+    "confirmar": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO", "JEFE_PUNTO", "OPERADOR"],
+    "editar_mismo_dia": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO", "JEFE_PUNTO"],
+    "editar_confirmada_mismo_dia": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO", "JEFE_PUNTO"],
+    "editar_confirmada_otro_dia": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO"],
+    "cancelar": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO"]
+  },
+  "conteos": {
+    "programar": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO"],
+    "ejecutar": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO", "JEFE_PUNTO", "OPERADOR"],
+    "aprobar": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO"]
+  },
+  "reportes": {
+    "ver_globales": ["ADMIN_GLOBAL"],
+    "ver_empresa": ["ADMIN_GLOBAL", "ADMIN_EMPRESA"],
+    "ver_operativos": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO"],
+    "ver_punto": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO", "JEFE_PUNTO", "OPERADOR", "CONSULTA"],
+    "exportar": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO", "JEFE_PUNTO", "CONSULTA"]
+  },
+  "usuarios": {
+    "crear_global": ["ADMIN_GLOBAL"],
+    "crear_empresa": ["ADMIN_GLOBAL", "ADMIN_EMPRESA"],
+    "editar_permisos": ["ADMIN_GLOBAL", "ADMIN_EMPRESA"],
+    "ver_lista": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO"]
+  },
+  "configuracion": {
+    "empresas": ["ADMIN_GLOBAL"],
+    "bodegas": ["ADMIN_GLOBAL", "ADMIN_EMPRESA"],
+    "puntos_venta": ["ADMIN_GLOBAL", "ADMIN_EMPRESA"],
+    "alertas": ["ADMIN_GLOBAL", "ADMIN_EMPRESA", "GERENTE_OPERATIVO"]
+  }
+}
+```
+
+---
+
+## 4. FLUJOS OPERATIVOS PRINCIPALES
+
+### 4.1 Flujo: Entrada de Mercancía a Bodega
+**Actor:** Gerente Operativo
+**Pasos:**
+1. Seleccionar bodega
+2. Agregar productos (búsqueda/selección del catálogo)
+3. Ingresar cantidades
+4. Agregar observaciones opcionales
+5. Confirmar entrada
+6. Sistema crea movimientos tipo ENTRADA
+7. Actualiza inventario
+8. Registra en histórico
+
+### 4.2 Flujo: Transferencia Bodega → Punto de Venta
+**Actor Origen:** Gerente Operativo
+**Actor Destino:** Jefe de Punto/Operador
+
+**Etapa 1 - Creación:**
+1. Gerente selecciona bodega origen
+2. Selecciona punto de venta destino
+3. Agrega productos y cantidades
+4. Confirma creación
+5. Sistema:
+   - Crea registro de transferencia (estado: PENDIENTE)
+   - NO afecta inventarios aún
+   - Genera alerta al responsable del destino
+
+**Etapa 2 - Confirmación:**
+1. Responsable en punto destino ve transferencia pendiente
+2. Revisa productos y cantidades
+3. Puede ajustar "cantidad recibida" si hay diferencias
+4. Confirma recepción
+5. Sistema:
+   - Actualiza estado: CONFIRMADA
+   - Crea MOVIMIENTO_INVENTARIO tipo TRANSFERENCIA_SALIDA en origen (resta)
+   - Crea MOVIMIENTO_INVENTARIO tipo TRANSFERENCIA_ENTRADA en destino (suma)
+   - Actualiza inventarios de origen y destino
+   - Si hay diferencias, crea alerta
+
+**Reglas de Edición:**
+- Antes de confirmar: Creador puede editar sin restricción
+- Confirmada mismo día: Creador puede editar, requiere re-confirmación
+- Confirmada día anterior: Solo ADMIN_GLOBAL o GERENTE_OPERATIVO, requiere justificación
+
+### 4.3 Flujo: Transferencia Entre Puntos de Venta
+**Lógica idéntica al 4.2**, diferencia:
+- Creador puede ser Jefe de Punto (con permiso)
+- Origen y destino son ambos puntos de venta
+
+### 4.4 Flujo: Conteo de Inventario
+**Actor Programador:** Gerente Operativo
+**Actor Ejecutor:** Jefe de Punto/Operador
+
+**Etapa 1 - Programación:**
+1. Gerente programa conteo
+2. Selecciona ubicación (bodega o punto de venta)
+3. Define tipo: DIARIO | SEMANAL | QUINCENAL | MENSUAL
+4. Selecciona productos a contar (puede ser filtro por frecuencia)
+5. Asigna responsable
+6. Define fecha programada
+7. Sistema crea CONTEO_INVENTARIO (estado: PENDIENTE)
+
+**Etapa 2 - Ejecución:**
+1. Responsable ve conteo pendiente (alerta si pasa fecha)
+2. Inicia conteo (estado: EN_PROCESO)
+3. Sistema precarga cantidad_sistema para cada producto
+4. Responsable ingresa cantidad_fisica para cada producto
+5. Puede marcar productos como "no contados" con observación
+6. Finaliza conteo
+7. Sistema:
+   - Calcula diferencias: cantidad_fisica - cantidad_sistema
+   - Actualiza estado: COMPLETADO
+   - Si hay diferencias > X%, genera alerta
+   - Puede configurarse para crear MOVIMIENTOS de ajuste automático o requerir aprobación
+
+**Variación - Conteo Selectivo:**
+- Sistema permite crear conteo solo de productos marcados como "importantes"
+- O filtrar por categoría
+
+### 4.5 Flujo: Cálculo de Consumo
+**Automatizado por sistema**
+
+**Fórmula:**
+```
+Consumo = (Inventario Inicial - Inventario Final) + Entradas - Salidas
+
+Donde:
+- Inventario Inicial: Cantidad al inicio del periodo
+- Inventario Final: Cantidad al final del periodo  
+- Entradas: Suma de transferencias recibidas confirmadas
+- Salidas: Suma de transferencias enviadas confirmadas
+```
+
+**Ejemplo:**
+```
+Inicio día: 100 unidades
+Fin día: 80 unidades
+Recibido: 15 unidades
+Enviado: 5 unidades
+
+Consumo = (100 - 80) + 15 - 5 = 30 unidades consumidas
+```
+
+**Implementación:**
+- Se calcula para reportes, no se almacena como campo
+- Puede calcularse por: día, semana, mes
+- Base para reportes de rotación
+
+---
+
+## 5. SISTEMA DE ALERTAS
+
+### 5.1 Tipos de Alertas
+
+#### Alerta: STOCK_MINIMO
+**Condición:** `stock_actual <= stock_minimo AND es_importante = true`
+**Destinatarios:**
+- Jefe de Punto (para su punto)
+- Gerente Operativo (todos los puntos corporativos)
+- Admin Global (todos)
+**Frecuencia:** Chequeo diario automático
+**Prioridad:**
+- CRITICA: stock = 0
+- ALTA: stock < 50% del mínimo
+- MEDIA: stock <= mínimo
+
+#### Alerta: CONTEO_PENDIENTE
+**Condición:** `fecha_programada <= HOY AND estado = PENDIENTE`
+**Destinatarios:** Usuario responsable asignado
+**Frecuencia:** Diaria
+**Prioridad:**
+- ALTA: Vencido hace > 2 días
+- MEDIA: Vencido hace 1 día
+- BAJA: Hoy es el día
+
+#### Alerta: TRANSFERENCIA_SIN_CONFIRMAR
+**Condición:** `días_desde_creacion >= N AND estado = PENDIENTE`
+**Parámetro N configurable (ej: 3 días)
+**Destinatarios:** 
+- Responsable punto destino
+- Gerente Operativo
+**Prioridad:** MEDIA → ALTA si > 5 días
+
+#### Alerta: DIFERENCIA_INVENTARIO
+**Condición:** `ABS(diferencia) >= umbral`
+**Generada en:** Confirmación de conteos
+**Destinatarios:**
+- Jefe de Punto
+- Gerente Operativo
+**Prioridad:** 
+- CRITICA: diferencia > 20%
+- ALTA: diferencia > 10%
+
+### 5.2 Canales de Notificación
+- **In-App:** Siempre (badge con contador)
+- **Email:** Alertas ALTA y CRITICA
+- **Configuración:** Usuario puede personalizar preferencias
+
+---
+
+## 6. REPORTES REQUERIDOS
+
+### 6.1 Reporte: Stock Actual
+**Vistas:**
+- Por punto de venta individual
+- Por bodega
+- Consolidado empresa
+- Global (todas las empresas)
+
+**Columnas:**
+- Producto (concatenado)
+- Stock actual
+- Stock mínimo
+- Estado (OK | CERCA_MINIMO | POR_DEBAJO_MINIMO | CRITICO)
+- Última actualización
+
+**Filtros:**
+- Ubicación
+- Categoría producto
+- Solo productos importantes
+- Solo productos con alerta
+
+**Exportable:** Excel
+
+### 6.2 Reporte: Consumo por Producto
+**Periodo:** Diario, Semanal, Mensual, Rango personalizado
+**Vistas:** Por punto, consolidado
+
+**Columnas:**
+- Producto
+- Inventario inicial
+- Entradas
+- Salidas
+- Inventario final
+- Consumo calculado
+- Consumo promedio diario
+- Tendencia (gráfica)
+
+**Exportable:** Excel
+
+### 6.3 Reporte: Rotación de Inventario
+**Periodo:** Semanal, Mensual
+
+**Columnas:**
+- Producto
+- Stock promedio
+- Consumo total periodo
+- Rotación (Consumo / Stock promedio)
+- Días de cobertura estimados
+- Clasificación ABC
+
+**Exportable:** Excel
+
+### 6.4 Reporte: Transferencias
+**Filtros:** Periodo, Estado, Origen, Destino
+
+**Columnas:**
+- Fecha creación
+- Origen → Destino
+- Productos (resumen)
+- Estado
+- Días sin confirmar (si aplica)
+- Diferencias (si hubo)
+
+**Drill-down:** Ver detalle de transferencia
+
+**Exportable:** Excel
+
+### 6.5 Reporte: Historial de Conteos
+**Filtros:** Periodo, Ubicación, Usuario
+
+**Columnas:**
+- Fecha programada
+- Fecha ejecutada
+- Ubicación
+- Responsable
+- # productos contados
+- # productos con diferencias
+- % precisión
+- Observaciones
+
+**Exportable:** Excel
+
+### 6.6 Dashboard Principal
+**Widgets:**
+- Alertas activas (contador por tipo)
+- Productos críticos (stock = 0)
+- Conteos pendientes HOY
+- Transferencias sin confirmar > 3 días
+- Gráfica: Consumo últimos 7 días (top 10 productos)
+- Gráfica: Stock vs Mínimo (productos importantes)
+
+**Actualización:** Tiempo real
+
+---
+
+## 7. CARACTERÍSTICAS TÉCNICAS
+
+### 7.1 Requerimientos de Plataforma
+- **Aplicación Web:** Progressive Web App (PWA)
+- **Responsive:** Diseño mobile-first
+- **Compatibilidad:** Últimas versiones de Chrome, Firefox, Safari, Edge
+- **Funcionalidad Offline:**
+  - Consulta de inventarios (lectura de cache)
+  - Vista de reportes previamente cargados
+  - Crear transferencias/conteos (almacenar en cola)
+  - Sincronización automática al recuperar conexión
+  - Indicador claro de estado online/offline
+- **Requisito Online:**
+  - Confirmar transferencias
+  - Actualizar inventarios
+  - Enviar datos
+
+### 7.2 Stack Tecnológico Sugerido
+
+**Backend:**
+- Node.js + Express (o Python + FastAPI)
+- Base de datos: PostgreSQL (relacional, robusto para inventarios)
+- Autenticación: JWT
+- API REST
+
+**Frontend:**
+- React + TypeScript (o Vue.js)
+- UI Framework: Material-UI o Ant Design
+- State Management: Redux Toolkit o Zustand
+- Offline: Service Workers + IndexedDB
+
+**Infraestructura:**
+- Deploy: AWS/GCP/Azure o Vercel/Netlify (frontend) + Railway/Render (backend)
+- Storage: S3 para exportaciones
+- Emails: SendGrid o AWS SES
+- CDN: CloudFront
+
+**Opcional - Migración desde Google Sheets:**
+- Script de importación inicial
+- API de Google Sheets (lectura) para sincronización transitoria
+
+### 7.3 Seguridad
+- HTTPS obligatorio
+- Contraseñas hasheadas (bcrypt)
+- Rate limiting en API
+- Validación de permisos en cada endpoint
+- Logs de auditoría para acciones críticas
+- Backups automáticos diarios
+- Encriptación de datos sensibles en BD
+
+---
+
+## 8. CASOS DE USO ESPECÍFICOS
+
+### 8.1 Caso: Diferencia en Transferencia
+**Escenario:** Bodega envía 100 unidades, punto recibe 95
+
+**Flujo:**
+1. Gerente crea transferencia: 100 unidades producto X
+2. Sistema resta 100 de bodega (al confirmar en destino)
+3. Operador en punto recibe, cuenta físicamente: 95
+4. En confirmación, ajusta "cantidad recibida" a 95
+5. Sistema:
+   - Suma 95 al punto (no 100)
+   - Registra diferencia: -5 unidades
+   - Crea alerta DIFERENCIA_INVENTARIO
+   - Genera reporte de investigación
+6. Gerente revisa alerta, puede:
+   - Ajustar inventario bodega si error fue ahí
+   - Registrar pérdida en tránsito
+   - Crear nota interna
+
+### 8.2 Caso: Conteo Revela Diferencia
+**Escenario:** Sistema dice 50, conteo físico da 45
+
+**Flujo:**
+1. Operador ejecuta conteo
+2. Ingresa 45 como cantidad física
+3. Sistema calcula diferencia: -5 (faltante)
+4. Marca para aprobación de supervisor
+5. Jefe de Punto revisa, puede:
+   - Aprobar ajuste: Sistema crea MOVIMIENTO tipo AJUSTE por -5
+   - Rechazar: Solicitar reconteo
+   - Investigar: Revisar movimientos recientes
+6. Si se aprueba, inventario se actualiza a 45
+
+### 8.3 Caso: Producto No Disponible en Punto
+**Escenario:** Punto X no maneja producto Y
+
+**Configuración:**
+1. Admin configura productos activos por ubicación
+2. Producto Y se marca como INACTIVO para Punto X
+3. En transferencias hacia Punto X, producto Y no aparece en selector
+4. En reportes, Punto X no muestra producto Y
+
+### 8.4 Caso: Edición de Transferencia Confirmada
+**Escenario:** Se confirmó transferencia ayer con error
+
+**Restricción:**
+- Solo ADMIN_GLOBAL o GERENTE_OPERATIVO
+- Requiere ingresar justificación
+
+**Flujo:**
+1. Gerente accede a transferencia confirmada
+2. Sistema verifica permiso y fecha
+3. Muestra advertencia: "Esta transferencia ya afectó inventarios"
+4. Gerente edita cantidad, ingresa justificación
+5. Sistema:
+   - Crea movimientos de reversión (contabilidad)
+   - Crea nuevos movimientos con valores correctos
+   - Actualiza inventarios
+   - Marca transferencia con flag "editada post-confirmación"
+   - Registra en log de auditoría
+
+---
+
+## 9. DATOS INICIALES (CATÁLOGO DE PRODUCTOS)
+
+```
+TAPIOCA | 3 KG | UNIDAD | 5
+TAPIOCA MUQUI | KG | UNIDAD | 20
+NATA DE COCO | 5 KG | BOLSA | 2
+TÉ VERDE | 1.2 KG | UNIDAD | 0.5
+TÉ NEGRO | 1.2 KG | UNIDAD | 0.5
+TÉ MATCHA | 100 GR | UNIDAD | 0.5
+TÉ CHAI | 3 KG | UNIDAD | 0.5
+TARO EN POLVO | 1 KG | UNIDAD | 1
+LECHE EN POLVO | 25 KG | BULTO | 0.2
+LECHE LIQUIDA | 900 ML | UNIDAD | 16
+LECHE CONDENSADA | 5 LT | GALON | 2
+CREMA DE LECHE | 1100 ML | UNIDAD | 12
+YOGURT | 900 ML | UNIDAD | 6
+QUESO | 250 GR | UNIDAD | 6
+PROTEINA ISO | 5LB | TARRO | 0.2
+COCOA | LB | LB | 0
+OREO | 4 KG | UNIDAD | 0.5
+MILO | 1.6 KG | UNIDAD | 1
+CHIPS DE CHOCOLATE | 250 GR | UNIDAD | 5
+PANELA | 1 LB | BOLSA | 6
+AZÚCAR | 1 LB | BOLSA | 6
+AZUCAR PREPARADA | LITROS | LITROS | 2
+CHOCOLISTO | 1000 GR | UNIDAD | 1
+CAFÉ LIOFILIZADO JUAN VALDEZ | 250 GR | UNIDAD | 2
+CAFE GOURMET | 1 KG | BOLSA | 1
+CREMA DE COCO | 1 KG | UNIDAD | 2
+MAICENA | 90 GR | UNIDAD | 2
+```
+
+**Nota:** Cada producto requiere configuración adicional de:
+- Frecuencia de inventario (a definir por importancia)
+- Categoría
+- Activo/Inactivo por ubicación
+
+---
+
+## 10. ROADMAP DE DESARROLLO
+
+### Fase 1: MVP (4-6 semanas)
+- [ ] Modelo de datos y base de datos
+- [ ] Autenticación y sistema de usuarios
+- [ ] CRUD de productos (catálogo maestro)
+- [ ] CRUD de empresas, bodegas, puntos de venta
+- [ ] Módulo de inventarios (consulta)
+- [ ] Módulo de transferencias (crear, confirmar, básico)
+- [ ] Roles y permisos básicos
+- [ ] Dashboard simple
+- [ ] Responsive mobile
+
+### Fase 2: Operaciones Completas (4 semanas)
+- [ ] Conteos de inventario (programar, ejecutar)
+- [ ] Cálculo de consumos
+- [ ] Sistema de alertas (todos los tipos)
+- [ ] Notificaciones email
+- [ ] Edición de transferencias (con reglas)
+- [ ] Historial de movimientos
+- [ ] Auditoría básica
+
+### Fase 3: Reportería (3 semanas)
+- [ ] Reporte de stock actual
+- [ ] Reporte de consumos
+- [ ] Reporte de rotación
+- [ ] Reporte de transferencias
+- [ ] Historial de conteos
+- [ ] Exportación a Excel
+- [ ] Gráficas y visualizaciones
+
+### Fase 4: Optimización (2-
