@@ -12,7 +12,7 @@ import {
   mockTransferencias,
   mockConteos,
   mockAlertas,
-  mockUsuarios,
+  mockUsers,
   mockEmpresas
 } from '../data/mockData'
 
@@ -41,7 +41,7 @@ const dataService = {
   getUsuarios: async () => {
     if (USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 300))
-      return mockUsuarios
+      return mockUsers
     }
 
     if (USE_GOOGLE_SHEETS) {
