@@ -1,8 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useAlertasStore } from '../stores/alertasStore'
-import api from '../services/api'
-import { mockAlertas } from '../data/mockData'
+import dataService from '../services/dataService'
 
 const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true'
 
@@ -18,13 +17,7 @@ export const useAlertas = (usuarioId) => {
     refetch
   } = useQuery({
     queryKey: ['alertas', usuarioId],
-    queryFn: async () => {
-      if (USE_MOCK_DATA) {
-        await new Promise(resolve => setTimeout(resolve, 400))
-        return mockAlertas
-      }
-      return api.getAlertas(usuarioId)
-    },
+    queryFn: () => dataService.getAlertas(usuarioId),
     refetchInterval: 60000 // Refetch cada minuto
   })
 
@@ -42,7 +35,8 @@ export const useAlertas = (usuarioId) => {
         await new Promise(resolve => setTimeout(resolve, 200))
         return { success: true }
       }
-      return api.marcarAlertaLeida(alertaId)
+      // TODO: Implementar cuando tengamos backend de escritura
+      throw new Error('Función no implementada para Google Sheets API')
     },
     onSuccess: (_, alertaId) => {
       marcarComoLeida(alertaId)
@@ -57,7 +51,8 @@ export const useAlertas = (usuarioId) => {
         await new Promise(resolve => setTimeout(resolve, 200))
         return { success: true }
       }
-      return api.marcarAlertaResuelta(alertaId)
+      // TODO: Implementar cuando tengamos backend de escritura
+      throw new Error('Función no implementada para Google Sheets API')
     },
     onSuccess: (_, alertaId) => {
       marcarComoResuelta(alertaId)
