@@ -2,7 +2,8 @@ import { useState } from 'react'
 import Button from '../common/Button'
 import Input from '../common/Input'
 import Modal from '../common/Modal'
-import { Search, Package, ArrowRight } from 'lucide-react'
+import Alert from '../common/Alert'
+import { Search, Package, ArrowRight, AlertCircle } from 'lucide-react'
 
 export default function TransferenciaForm({ onClose, onSave }) {
   const [formData, setFormData] = useState({
@@ -13,6 +14,8 @@ export default function TransferenciaForm({ onClose, onSave }) {
   })
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedProductos, setSelectedProductos] = useState([])
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   // Mock products for demo
   const mockProducts = [
@@ -43,19 +46,42 @@ export default function TransferenciaForm({ onClose, onSave }) {
     ))
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!formData.origen || !formData.destino || selectedProductos.length === 0) {
-      alert('Por favor completa todos los campos')
+    setError('')
+    
+    // Validaciones
+    if (!formData.origen) {
+      setError('Por favor selecciona una ubicación de origen')
       return
     }
-    onSave({
-      ...formData,
-      productos: selectedProductos,
-      fecha: new Date(),
-      estado: 'PENDIENTE'
-    })
-    onClose()
+    if (!formData.destino) {
+      setError('Por favor selecciona una ubicación de destino')
+      return
+    }
+    if (formData.origen === formData.destino) {
+      setError('La ubicación de origen y destino no pueden ser la misma')
+      return
+    }
+    if (selectedProductos.length === 0) {
+      setError('Por favor agrega al menos un producto a la transferencia')
+      return
+    }
+    
+    setLoading(true)
+    try {
+      await onSave({
+        ...formData,
+        productos: selectedProductos,
+        fecha: new Date(),
+        estado: 'PENDIENTE'
+      })
+      onClose()
+    } catch (err) {
+      setError('Error al crear la transferencia. Por favor intenta nuevamente.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -68,6 +94,16 @@ export default function TransferenciaForm({ onClose, onSave }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Error Alert */}
+          {error && (
+            <Alert type="error" className="mb-4">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={18} />
+                {error}
+              </div>
+            </Alert>
+          )}
+
           {/* Ubicaciones */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -208,11 +244,11 @@ export default function TransferenciaForm({ onClose, onSave }) {
 
           {/* Botones */}
           <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={onClose} disabled={loading}>
               Cancelar
             </Button>
-            <Button type="submit" variant="primary">
-              Crear Transferencia
+            <Button type="submit" variant="primary" loading={loading}>
+              {loading ? 'Creando...' : 'Crear Transferencia'}
             </Button>
           </div>
         </form>

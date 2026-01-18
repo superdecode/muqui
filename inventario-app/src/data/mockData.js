@@ -2,70 +2,96 @@
 
 export const mockUsers = [
   {
-    id: 1,
-    nombre_completo: 'Admin Global',
-    email: 'admin@muqui.com',
+    id: 'USR001',
+    nombre: 'Admin Global',
+    email: 'muqui.coo@gmail.com',
+    password: 'temporal123',
     rol: 'ADMIN_GLOBAL',
-    empresa_id: 1,
-    ubicacion_nombre: 'Todas las ubicaciones',
-    estado: 'ACTIVO'
+    empresa_id: 'MK001',
+    ubicaciones_asignadas: ['LM001', 'LM002', 'LM003', 'LM004', 'LM005', 'LM006', 'LM007'],
+    estado: 'ACTIVO',
+    fecha_creacion: '2025-01-01'
   },
   {
-    id: 2,
-    nombre_completo: 'Gerente Operativo',
+    id: 'USR002',
+    nombre: 'Gerente Operativo',
     email: 'gerente@muqui.com',
+    password: 'temporal123',
     rol: 'GERENTE_OPERATIVO',
-    empresa_id: 1,
-    ubicacion_nombre: 'Bodega Principal',
-    estado: 'ACTIVO'
+    empresa_id: 'MK001',
+    ubicaciones_asignadas: ['LM001', 'LM004', 'LM005'],
+    estado: 'ACTIVO',
+    fecha_creacion: '2025-01-01'
+  }
+]
+
+export const mockEmpresas = [
+  {
+    id: 'MK001',
+    nombre: 'Muqui',
+    tipo: 'CORPORATIVO',
+    estado: 'ACTIVO',
+    fecha_creacion: '2025-01-01'
   },
   {
-    id: 3,
-    nombre_completo: 'Jefe de Punto',
-    email: 'jefe@muqui.com',
-    rol: 'JEFE_PUNTO',
-    empresa_id: 1,
-    ubicacion_nombre: 'Punto de Venta 1',
-    estado: 'ACTIVO'
+    id: 'MK010',
+    nombre: 'Quiron Elements',
+    tipo: 'FRANQUICIADO',
+    estado: 'ACTIVO',
+    fecha_creacion: '2025-01-01'
+  },
+  {
+    id: 'MK040',
+    nombre: 'Capital Alliance',
+    tipo: 'FRANQUICIADO',
+    estado: 'ACTIVO',
+    fecha_creacion: '2025-01-01'
+  },
+  {
+    id: 'MK050',
+    nombre: 'El Rancho de Solrach',
+    tipo: 'FRANQUICIADO',
+    estado: 'ACTIVO',
+    fecha_creacion: '2025-01-01'
   }
 ]
 
 export const mockProductos = [
   {
-    id: 1,
+    id: 'PROD001',
     nombre: 'TAPIOCA',
     especificacion: '3 KG',
     unidad_medida: 'UNIDAD',
-    presentacion: 'UNIDAD',
     concatenado: 'TAPIOCA (3 KG) - UNIDAD',
-    stock_minimo_default: 5,
-    frecuencia_inventario: 'DIARIO',
-    categoria: 'TAPIOCA',
-    estado: 'ACTIVO'
+    stock_minimo: 5,
+    frecuencia_inventario_Dias: 1,
+    categoria: 'IMPORTANTE',
+    estado: 'ACTIVO',
+    ubicacion_id: ['LM001', 'LM004', 'LM005', 'LM006', 'LM007']
   },
   {
-    id: 2,
+    id: 'PROD002',
     nombre: 'TAPIOCA MUQUI',
     especificacion: 'KG',
-    unidad_medida: 'KG',
-    presentacion: 'UNIDAD',
+    unidad_medida: 'UNIDAD',
     concatenado: 'TAPIOCA MUQUI (KG) - UNIDAD',
-    stock_minimo_default: 20,
-    frecuencia_inventario: 'DIARIO',
-    categoria: 'TAPIOCA',
-    estado: 'ACTIVO'
+    stock_minimo: 20,
+    frecuencia_inventario_Dias: 1,
+    categoria: 'IMPORTANTE',
+    estado: 'ACTIVO',
+    ubicacion_id: ['LM001', 'LM004', 'LM005']
   },
   {
-    id: 3,
+    id: 'PROD003',
     nombre: 'NATA DE COCO',
     especificacion: '5 KG',
     unidad_medida: 'BOLSA',
-    presentacion: 'BOLSA',
     concatenado: 'NATA DE COCO (5 KG) - BOLSA',
-    stock_minimo_default: 2,
-    frecuencia_inventario: 'SEMANAL',
+    stock_minimo: 2,
+    frecuencia_inventario_Dias: 7,
     categoria: 'TOPPINGS',
-    estado: 'ACTIVO'
+    estado: 'ACTIVO',
+    ubicacion_id: ['LM001', 'LM004', 'LM005', 'LM006']
   },
   {
     id: 4,
@@ -153,298 +179,236 @@ export const mockProductos = [
   }
 ]
 
+export const mockUbicaciones = [
+  {
+    id: 'LM001',
+    nombre: 'Bodega Principal Corporativa',
+    empresa_id: 'MK001',
+    direccion: 'Dirección Bodega 1',
+    responsable_id: 'USR001',
+    tipo_ubicacion: 'BODEGA',
+    estado: 'ACTIVO',
+    fecha_creacion: '2025-01-01'
+  },
+  {
+    id: 'LM004',
+    nombre: 'San Pedro Plaza',
+    empresa_id: 'MK010',
+    direccion: 'Neiva, Huila',
+    responsable_id: 'USR002',
+    tipo_ubicacion: 'PUNTO_VENTA',
+    estado: 'ACTIVO',
+    fecha_creacion: '2025-01-01'
+  },
+  {
+    id: 'LM005',
+    nombre: 'Santa Lucia',
+    empresa_id: 'MK001',
+    direccion: 'Neiva, Huila',
+    responsable_id: 'USR002',
+    tipo_ubicacion: 'PUNTO_VENTA',
+    estado: 'ACTIVO',
+    fecha_creacion: '2025-01-01'
+  },
+  {
+    id: 'LM006',
+    nombre: 'Unico',
+    empresa_id: 'MK010',
+    direccion: 'Neiva, Huila',
+    responsable_id: 'USR002',
+    tipo_ubicacion: 'PUNTO_VENTA',
+    estado: 'ACTIVO',
+    fecha_creacion: '2025-01-01'
+  },
+  {
+    id: 'LM007',
+    nombre: 'Megamall',
+    empresa_id: 'MK040',
+    direccion: 'Bucaramanga, Stder',
+    responsable_id: 'USR002',
+    tipo_ubicacion: 'PUNTO_VENTA',
+    estado: 'ACTIVO',
+    fecha_creacion: '2025-01-01'
+  }
+]
+
 export const mockInventario = [
   {
-    id: 1,
-    producto_id: 1,
-    producto: 'TAPIOCA (3 KG) - UNIDAD',
-    ubicacion_id: 1,
-    ubicacion_nombre: 'Bodega Principal',
-    tipo_ubicacion: 'BODEGA',
-    stock_actual: 25,
-    stock_minimo: 5,
+    id: 'INV001',
+    producto_id: 'PROD001',
+    producto: 'TAPIOCA',
+    ubicacion_id: 'LM001',
+    ubicacion: 'Bodega Principal Corporativa',
+    stock_actual: 50,
+    especificacion: '3KG',
     unidad_medida: 'UNIDAD',
-    categoria: 'TAPIOCA',
-    es_importante: true,
-    ultima_actualizacion: new Date().toISOString()
+    categoria: 'IMPORTANTE',
+    ultima_actualizacion: '2025-01-15 10:00:00'
   },
   {
-    id: 2,
-    producto_id: 2,
-    producto: 'TAPIOCA MUQUI (KG) - UNIDAD',
-    ubicacion_id: 1,
-    ubicacion_nombre: 'Bodega Principal',
-    tipo_ubicacion: 'BODEGA',
+    id: 'INV002',
+    producto_id: 'PROD002',
+    producto: 'TAPIOCA MUQUI',
+    ubicacion_id: 'LM001',
+    ubicacion: 'Bodega Principal Corporativa',
     stock_actual: 45,
-    stock_minimo: 20,
-    unidad_medida: 'KG',
-    categoria: 'TAPIOCA',
-    es_importante: true,
-    ultima_actualizacion: new Date().toISOString()
-  },
-  {
-    id: 3,
-    producto_id: 4,
-    producto: 'TÉ VERDE (1.2 KG) - UNIDAD',
-    ubicacion_id: 1,
-    ubicacion_nombre: 'Bodega Principal',
-    tipo_ubicacion: 'BODEGA',
-    stock_actual: 3,
-    stock_minimo: 5,
+    especificacion: 'KG',
     unidad_medida: 'UNIDAD',
-    categoria: 'TÉ',
-    es_importante: true,
-    ultima_actualizacion: new Date().toISOString()
+    categoria: 'IMPORTANTE',
+    ultima_actualizacion: '2025-01-15 10:00:00'
   },
   {
-    id: 4,
-    producto_id: 6,
-    producto: 'LECHE EN POLVO (25 KG) - BULTO',
-    ubicacion_id: 1,
-    ubicacion_nombre: 'Bodega Principal',
-    tipo_ubicacion: 'BODEGA',
-    stock_actual: 0,
-    stock_minimo: 2,
-    unidad_medida: 'BULTO',
-    categoria: 'LÁCTEOS',
-    es_importante: true,
-    ultima_actualizacion: new Date().toISOString()
-  },
-  {
-    id: 5,
-    producto_id: 7,
-    producto: 'LECHE LIQUIDA (900 ML) - UNIDAD',
-    ubicacion_id: 2,
-    ubicacion_nombre: 'Punto de Venta 1',
-    tipo_ubicacion: 'PUNTO_VENTA',
-    stock_actual: 8,
-    stock_minimo: 16,
-    unidad_medida: 'UNIDAD',
-    categoria: 'LÁCTEOS',
-    es_importante: true,
-    ultima_actualizacion: new Date().toISOString()
-  },
-  {
-    id: 6,
-    producto_id: 8,
-    producto: 'OREO (4 KG) - UNIDAD',
-    ubicacion_id: 2,
-    ubicacion_nombre: 'Punto de Venta 1',
-    tipo_ubicacion: 'PUNTO_VENTA',
-    stock_actual: 5,
-    stock_minimo: 3,
-    unidad_medida: 'UNIDAD',
+    id: 'INV003',
+    producto_id: 'PROD003',
+    producto: 'NATA DE COCO',
+    ubicacion_id: 'LM001',
+    ubicacion: 'Bodega Principal Corporativa',
+    stock_actual: 12,
+    especificacion: '5KG',
+    unidad_medida: 'BOLSA',
     categoria: 'TOPPINGS',
-    es_importante: false,
-    ultima_actualizacion: new Date().toISOString()
+    ultima_actualizacion: '2025-01-15 10:00:00'
+  },
+  {
+    id: 'INV004',
+    producto_id: 'PROD001',
+    producto: 'TAPIOCA',
+    ubicacion_id: 'LM005',
+    ubicacion: 'Santa Lucia',
+    stock_actual: 8,
+    especificacion: '3KG',
+    unidad_medida: 'UNIDAD',
+    categoria: 'IMPORTANTE',
+    ultima_actualizacion: '2025-01-15 10:00:00'
   }
 ]
 
 export const mockTransferencias = [
   {
-    id: 1,
-    origen_id: 1,
-    origen_nombre: 'Bodega Principal',
-    tipo_origen: 'BODEGA',
-    destino_id: 2,
-    destino_nombre: 'Punto de Venta 1',
-    tipo_destino: 'PUNTO_VENTA',
+    id: 'MV001',
+    tipo_movimiento: 'TRANSFERENCIA',
+    origen_id: 'LM001',
+    destino_id: 'LM005',
     estado: 'PENDIENTE',
-    usuario_creacion: 'Gerente Operativo',
+    usuario_creacion_id: 'USR002',
     fecha_creacion: new Date().toISOString(),
-    observaciones_creacion: 'Transferencia semanal de productos básicos',
-    total_productos: 5,
+    observaciones_creacion: 'Pedido semanal',
+    total_productos: 2,
     productos: [
-      {
-        producto_id: 1,
-        producto_nombre: 'TAPIOCA (3 KG) - UNIDAD',
-        cantidad_enviada: 10,
-        cantidad_recibida: null
-      },
-      {
-        producto_id: 7,
-        producto_nombre: 'LECHE LIQUIDA (900 ML) - UNIDAD',
-        cantidad_enviada: 24,
-        cantidad_recibida: null
-      }
+      { nombre: 'TAPIOCA', cantidad: 10 },
+      { nombre: 'TAPIOCA MUQUI', cantidad: 15 }
     ]
   },
   {
-    id: 2,
-    origen_id: 1,
-    origen_nombre: 'Bodega Principal',
-    tipo_origen: 'BODEGA',
-    destino_id: 3,
-    destino_nombre: 'Punto de Venta 2',
-    tipo_destino: 'PUNTO_VENTA',
+    id: 'MV002',
+    tipo_movimiento: 'TRANSFERENCIA',
+    origen_id: 'LM001',
+    destino_id: 'LM004',
     estado: 'CONFIRMADA',
-    usuario_creacion: 'Gerente Operativo',
-    usuario_confirmacion: 'Jefe de Punto 2',
+    usuario_creacion_id: 'USR002',
+    usuario_confirmacion_id: 'USR002',
     fecha_creacion: new Date(Date.now() - 86400000).toISOString(),
     fecha_confirmacion: new Date(Date.now() - 43200000).toISOString(),
-    observaciones_creacion: 'Reabastecimiento urgente',
+    observaciones_creacion: 'Reabastecimiento',
     observaciones_confirmacion: 'Recibido completo',
-    total_productos: 3,
+    total_productos: 1,
     productos: [
-      {
-        producto_id: 2,
-        producto_nombre: 'TAPIOCA MUQUI (KG) - UNIDAD',
-        cantidad_enviada: 15,
-        cantidad_recibida: 15,
-        diferencia: 0
-      }
+      { nombre: 'NATA DE COCO', cantidad: 5 }
     ]
   }
 ]
 
 export const mockConteos = [
   {
-    id: 1,
-    ubicacion_id: 2,
-    ubicacion_nombre: 'Punto de Venta 1',
+    id: 'CONT001',
+    ubicacion_id: 'LM004',
     tipo_ubicacion: 'PUNTO_VENTA',
-    tipo_conteo: 'DIARIO',
+    tipo_conteo: 'SEMANAL',
     estado: 'PENDIENTE',
-    usuario_responsable: 'Jefe de Punto 1',
+    usuario_responsable_id: 'USR002',
     fecha_programada: new Date().toISOString(),
-    observaciones: 'Conteo diario de productos importantes'
+    observaciones: 'Conteo semanal rutinario',
+    productos: [
+      { nombre: 'TAPIOCA', stock_sistema: 8, stock_fisico: null },
+      { nombre: 'TAPIOCA MUQUI', stock_sistema: 12, stock_fisico: null }
+    ]
   },
   {
-    id: 2,
-    ubicacion_id: 1,
-    ubicacion_nombre: 'Bodega Principal',
+    id: 'CONT002',
+    ubicacion_id: 'LM001',
     tipo_ubicacion: 'BODEGA',
     tipo_conteo: 'SEMANAL',
     estado: 'COMPLETADO',
-    usuario_responsable: 'Gerente Operativo',
-    usuario_ejecutor: 'Gerente Operativo',
+    usuario_responsable_id: 'USR002',
+    usuario_ejecutor_id: 'USR002',
     fecha_programada: new Date(Date.now() - 86400000).toISOString(),
     fecha_inicio: new Date(Date.now() - 82800000).toISOString(),
     fecha_completado: new Date(Date.now() - 79200000).toISOString(),
     observaciones: 'Conteo semanal completo',
     productos: [
-      {
-        producto_id: 1,
-        producto_nombre: 'TAPIOCA (3 KG) - UNIDAD',
-        cantidad_sistema: 25,
-        cantidad_fisica: 25,
-        diferencia: 0,
-        contado: true
-      },
-      {
-        producto_id: 4,
-        producto_nombre: 'TÉ VERDE (1.2 KG) - UNIDAD',
-        cantidad_sistema: 5,
-        cantidad_fisica: 3,
-        diferencia: -2,
-        contado: true
-      }
+      { nombre: 'TAPIOCA', stock_sistema: 50, stock_fisico: 50 },
+      { nombre: 'TAPIOCA MUQUI', stock_sistema: 45, stock_fisico: 43 }
     ]
   }
 ]
 
 export const mockAlertas = [
   {
-    id: 1,
-    tipo: 'STOCK_MINIMO',
-    prioridad: 'CRITICA',
-    entidad_relacionada_id: 4,
-    tipo_entidad: 'INVENTARIO',
-    ubicacion_id: 1,
-    ubicacion_nombre: 'Bodega Principal',
-    mensaje: 'LECHE EN POLVO (25 KG) - SIN STOCK',
-    estado: 'ACTIVA',
-    fecha_creacion: new Date().toISOString()
-  },
-  {
-    id: 2,
-    tipo: 'STOCK_MINIMO',
-    prioridad: 'ALTA',
-    entidad_relacionada_id: 3,
-    tipo_entidad: 'INVENTARIO',
-    ubicacion_id: 1,
-    ubicacion_nombre: 'Bodega Principal',
-    mensaje: 'TÉ VERDE (1.2 KG) - Stock por debajo del mínimo (3/5)',
-    estado: 'ACTIVA',
-    fecha_creacion: new Date().toISOString()
-  },
-  {
-    id: 3,
+    id: 'ALERT001',
     tipo: 'TRANSFERENCIA_SIN_CONFIRMAR',
     prioridad: 'MEDIA',
-    entidad_relacionada_id: 1,
+    entidad_relacionada_id: 'MV001',
     tipo_entidad: 'TRANSFERENCIA',
-    ubicacion_id: 2,
-    ubicacion_nombre: 'Punto de Venta 1',
-    mensaje: 'Transferencia #1 pendiente de confirmación',
+    ubicacion_id: 'LM005',
+    mensaje: 'Transferencia MV001 pendiente de confirmación',
     estado: 'ACTIVA',
-    fecha_creacion: new Date().toISOString()
+    usuarios_notificados: ['USR002'],
+    fecha_creacion: new Date().toISOString(),
+    fecha_resolucion: null
   },
   {
-    id: 4,
+    id: 'ALERT002',
+    tipo: 'STOCK_BAJO',
+    prioridad: 'ALTA',
+    entidad_relacionada_id: 'INV004',
+    tipo_entidad: 'INVENTARIO',
+    ubicacion_id: 'LM005',
+    mensaje: 'TAPIOCA - Stock bajo (8 unidades)',
+    estado: 'ACTIVA',
+    usuarios_notificados: ['USR002'],
+    fecha_creacion: new Date().toISOString(),
+    fecha_resolucion: null
+  },
+  {
+    id: 'ALERT003',
     tipo: 'CONTEO_PENDIENTE',
     prioridad: 'MEDIA',
-    entidad_relacionada_id: 1,
+    entidad_relacionada_id: 'CONT001',
     tipo_entidad: 'CONTEO',
-    ubicacion_id: 2,
-    ubicacion_nombre: 'Punto de Venta 1',
+    ubicacion_id: 'LM004',
     mensaje: 'Conteo diario programado para hoy',
     estado: 'ACTIVA',
     fecha_creacion: new Date().toISOString()
   },
   {
-    id: 5,
-    tipo: 'STOCK_MINIMO',
+    id: 'ALERT004',
+    tipo: 'STOCK_BAJO',
     prioridad: 'ALTA',
-    entidad_relacionada_id: 5,
+    entidad_relacionada_id: 'INV003',
     tipo_entidad: 'INVENTARIO',
-    ubicacion_id: 2,
-    ubicacion_nombre: 'Punto de Venta 1',
-    mensaje: 'LECHE LIQUIDA (900 ML) - Stock por debajo del mínimo (8/16)',
+    ubicacion_id: 'LM001',
+    mensaje: 'NATA DE COCO - Stock disponible',
     estado: 'ACTIVA',
-    fecha_creacion: new Date().toISOString()
-  }
-]
-
-export const mockUbicaciones = [
-  {
-    id: 1,
-    nombre: 'Bodega Principal',
-    tipo: 'BODEGA',
-    empresa_id: 1,
-    empresa_nombre: 'Corporativo Muqui',
-    direccion: 'Calle Principal 123',
-    responsable: 'Gerente Operativo',
-    estado: 'ACTIVO'
-  },
-  {
-    id: 2,
-    nombre: 'Punto de Venta 1',
-    tipo: 'PUNTO_VENTA',
-    empresa_id: 1,
-    empresa_nombre: 'Corporativo Muqui',
-    bodega_principal_id: 1,
-    direccion: 'Centro Comercial A, Local 15',
-    responsable: 'Jefe de Punto 1',
-    estado: 'ACTIVO'
-  },
-  {
-    id: 3,
-    nombre: 'Punto de Venta 2',
-    tipo: 'PUNTO_VENTA',
-    empresa_id: 1,
-    empresa_nombre: 'Corporativo Muqui',
-    bodega_principal_id: 1,
-    direccion: 'Avenida Principal 456',
-    responsable: 'Jefe de Punto 2',
-    estado: 'ACTIVO'
+    usuarios_notificados: ['USR002'],
+    fecha_creacion: new Date().toISOString(),
+    fecha_resolucion: null
   }
 ]
 
 // Helper para login mock
 export const mockLogin = (email, password) => {
-  // Contraseña por defecto: admin123
-  if (password !== 'admin123') {
+  // Contraseña por defecto: temporal123
+  if (password !== 'temporal123' && password !== 'admin123') {
     return {
       success: false,
       message: 'Contraseña incorrecta'
@@ -469,6 +433,7 @@ export const mockLogin = (email, password) => {
 
 export default {
   mockUsers,
+  mockEmpresas,
   mockProductos,
   mockInventario,
   mockTransferencias,

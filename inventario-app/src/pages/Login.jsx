@@ -65,7 +65,7 @@ export default function Login() {
               <Package className="text-white" size={40} />
             </div>
             <h1 className="text-3xl font-bold bg-gradient-ocean bg-clip-text text-transparent mb-2">
-              Sistema de Inventario
+              Sistema de Control Inventario
             </h1>
             <p className="text-slate-600 flex items-center justify-center gap-2">
               <Sparkles size={16} className="text-primary-500" />
@@ -125,7 +125,7 @@ export default function Login() {
             <div className="space-y-2 text-xs text-slate-600">
               <div className="flex justify-between items-center p-2 bg-white/50 rounded-lg">
                 <span className="font-medium">Admin:</span>
-                <code className="bg-primary-100 px-2 py-1 rounded text-primary-700">admin@muqui.com</code>
+                <code className="bg-primary-100 px-2 py-1 rounded text-primary-700">muqui.coo@gmail.com</code>
               </div>
               <div className="flex justify-between items-center p-2 bg-white/50 rounded-lg">
                 <span className="font-medium">Gerente:</span>
@@ -133,7 +133,7 @@ export default function Login() {
               </div>
               <div className="flex justify-between items-center p-2 bg-white/50 rounded-lg">
                 <span className="font-medium">Contraseña:</span>
-                <code className="bg-accent-100 px-2 py-1 rounded text-accent-700">admin123</code>
+                <code className="bg-accent-100 px-2 py-1 rounded text-accent-700">temporal123</code>
               </div>
             </div>
           </div>
@@ -141,7 +141,7 @@ export default function Login() {
 
         {/* Footer */}
         <p className="text-center mt-6 text-white/80 text-sm">
-          © 2026 Sistema de Inventario Muqui
+          © 2026 Sistema de Control Inventario Muqui
         </p>
       </div>
     </div>

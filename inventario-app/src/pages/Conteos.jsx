@@ -94,13 +94,14 @@ export default function Conteos() {
     setShowDetail(true)
   }
 
-  const handleSaveConteo = (nuevoConteo) => {
+  const handleSaveConteo = async (nuevoConteo) => {
     const newConteo = {
       ...nuevoConteo,
       id: conteos.length + 1,
       estado: 'PENDIENTE'
     }
     setConteos([newConteo, ...conteos])
+    setShowForm(false)
   }
 
   const handleCompleteConteo = (conteoId, productos) => {

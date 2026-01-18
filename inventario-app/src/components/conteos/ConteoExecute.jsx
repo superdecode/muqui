@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import Button from '../common/Button'
 import Modal from '../common/Modal'
+import Alert from '../common/Alert'
 import { Package, CheckCircle, AlertCircle } from 'lucide-react'
 
 export default function ConteoExecute({ conteo, onClose, onComplete }) {
   const [productos, setProductos] = useState(
     conteo.productos.map(p => ({ ...p, stock_fisico: p.stock_fisico || '' }))
   )
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   const handleStockChange = (index, value) => {
     const newProductos = [...productos]
@@ -14,17 +17,31 @@ export default function ConteoExecute({ conteo, onClose, onComplete }) {
     setProductos(newProductos)
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    setError('')
     
     // Validar que todos los productos tengan stock físico
     const allFilled = productos.every(p => p.stock_fisico !== '' && p.stock_fisico !== null)
     if (!allFilled) {
-      alert('Por favor ingresa el stock físico de todos los productos')
+      setError('Por favor ingresa el stock físico de todos los productos antes de completar el conteo')
       return
     }
 
-    onComplete(conteo.id, productos)
+    // Validar que los valores sean números válidos
+    const invalidValues = productos.filter(p => isNaN(p.stock_fisico) || p.stock_fisico < 0)
+    if (invalidValues.length > 0) {
+      setError('Los valores de stock físico deben ser números positivos')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await onComplete(conteo.id, productos)
+    } catch (err) {
+      setError('Error al completar el conteo. Por favor intenta nuevamente.')
+      setLoading(false)
+    }
   }
 
   const getDiferencia = (producto) => {
@@ -42,6 +59,16 @@ export default function ConteoExecute({ conteo, onClose, onComplete }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Error Alert */}
+          {error && (
+            <Alert type="error" className="mb-4">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={18} />
+                {error}
+              </div>
+            </Alert>
+          )}
+
           {/* Instrucciones */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
             <div className="flex items-start gap-3">
@@ -147,12 +174,12 @@ export default function ConteoExecute({ conteo, onClose, onComplete }) {
 
           {/* Botones */}
           <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={onClose} disabled={loading}>
               Cancelar
             </Button>
-            <Button type="submit" variant="success">
+            <Button type="submit" variant="success" loading={loading}>
               <CheckCircle size={20} className="mr-2" />
-              Completar Conteo
+              {loading ? 'Completando...' : 'Completar Conteo'}
             </Button>
           </div>
         </form>

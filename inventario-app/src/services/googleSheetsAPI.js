@@ -62,6 +62,25 @@ const parseSheetData = (values) => {
 }
 
 /**
+ * Obtiene todas las empresas
+ */
+export const getEmpresas = async () => {
+  try {
+    const data = await getSheetData('Empresas')
+    return data.map(empresa => ({
+      id: empresa.id,
+      nombre: empresa.nombre,
+      tipo: empresa.tipo,
+      estado: empresa.estado || 'ACTIVO',
+      fecha_creacion: empresa.fecha_creacion
+    }))
+  } catch (error) {
+    console.error('Error obteniendo empresas:', error)
+    return []
+  }
+}
+
+/**
  * Obtiene todos los productos
  */
 export const getProductos = async () => {
@@ -72,11 +91,12 @@ export const getProductos = async () => {
       nombre: producto.nombre,
       especificacion: producto.especificacion || '',
       unidad_medida: producto.unidad_medida,
-      stock_minimo_default: parseInt(producto.stock_minimo_default) || 0,
-      frecuencia_inventario_dias: parseInt(producto.frecuencia_inventario_dias) || 30,
+      concatenado: producto.concatenado || '',
+      stock_minimo: parseInt(producto.stock_minimo) || 0,
+      frecuencia_inventario_Dias: parseInt(producto.frecuencia_inventario_Dias) || 1,
       categoria: producto.categoria,
       estado: producto.estado || 'ACTIVO',
-      fecha_creacion: producto.fecha_creacion
+      ubicacion_id: producto.ubicacion_id ? producto.ubicacion_id.split(',').map(id => id.trim().replace(/"/g, '')) : []
     }))
   } catch (error) {
     console.error('Error obteniendo productos:', error)
@@ -89,7 +109,17 @@ export const getProductos = async () => {
  */
 export const getUbicaciones = async () => {
   try {
-    return await getSheetData('Ubicaciones')
+    const data = await getSheetData('Ubicaciones')
+    return data.map(ubicacion => ({
+      id: ubicacion.id,
+      nombre: ubicacion.nombre,
+      empresa_id: ubicacion.empresa_id,
+      direccion: ubicacion.direccion || '',
+      responsable_id: ubicacion.responsable_id,
+      tipo_ubicacion: ubicacion.tipo_ubicacion,
+      estado: ubicacion.estado || 'ACTIVO',
+      fecha_creacion: ubicacion.fecha_creacion
+    }))
   } catch (error) {
     console.error('Error obteniendo ubicaciones:', error)
     return []
@@ -101,7 +131,19 @@ export const getUbicaciones = async () => {
  */
 export const getInventario = async () => {
   try {
-    return await getSheetData('Inventario')
+    const data = await getSheetData('Inventario')
+    return data.map(inv => ({
+      id: inv.id,
+      producto_id: inv.producto_id,
+      producto: inv.producto,
+      ubicacion_id: inv.ubicacion_id,
+      ubicacion: inv.ubicacion,
+      stock_actual: parseInt(inv.stock_actual) || 0,
+      especificacion: inv.especificacion || '',
+      unidad_medida: inv.unidad_medida,
+      categoria: inv.categoria,
+      ultima_actualizacion: inv.ultima_actualizacion
+    }))
   } catch (error) {
     console.error('Error obteniendo inventario:', error)
     return []
@@ -109,13 +151,46 @@ export const getInventario = async () => {
 }
 
 /**
- * Obtiene todas las transferencias
+ * Obtiene todos los movimientos
  */
-export const getTransferencias = async () => {
+export const getMovimientos = async () => {
   try {
-    return await getSheetData('Transferencias')
+    const data = await getSheetData('Movimientos')
+    return data.map(mov => ({
+      id: mov.id,
+      tipo_movimiento: mov.tipo_movimiento,
+      origen_id: mov.origen_id,
+      destino_id: mov.destino_id,
+      estado: mov.estado,
+      usuario_creacion_id: mov.usuario_creacion_id,
+      usuario_confirmacion_id: mov.usuario_confirmacion_id,
+      fecha_creacion: mov.fecha_creacion,
+      fecha_confirmacion: mov.fecha_confirmacion,
+      fecha_limite_edicion: mov.fecha_limite_edicion,
+      observaciones_creacion: mov.observaciones_creacion || '',
+      observaciones_confirmacion: mov.observaciones_confirmacion || ''
+    }))
   } catch (error) {
-    console.error('Error obteniendo transferencias:', error)
+    console.error('Error obteniendo movimientos:', error)
+    return []
+  }
+}
+
+/**
+ * Obtiene detalles de movimientos
+ */
+export const getDetalleMovimientos = async () => {
+  try {
+    const data = await getSheetData('Detalle_movimientos')
+    return data.map(det => ({
+      id: det.id,
+      movimiento_id: det.movimiento_id,
+      producto_id: det.producto_id,
+      cantidad: parseInt(det.cantidad) || 0,
+      observaciones: det.observaciones || ''
+    }))
+  } catch (error) {
+    console.error('Error obteniendo detalle movimientos:', error)
     return []
   }
 }
@@ -125,9 +200,44 @@ export const getTransferencias = async () => {
  */
 export const getConteos = async () => {
   try {
-    return await getSheetData('Conteos')
+    const data = await getSheetData('Conteo')
+    return data.map(conteo => ({
+      id: conteo.id,
+      ubicacion_id: conteo.ubicacion_id,
+      tipo_ubicacion: conteo.tipo_ubicacion,
+      tipo_conteo: conteo.tipo_conteo,
+      estado: conteo.estado,
+      usuario_responsable_id: conteo.usuario_responsable_id,
+      usuario_ejecutor_id: conteo.usuario_ejecutor_id,
+      fecha_programada: conteo.fecha_programada,
+      fecha_inicio: conteo.fecha_inicio,
+      fecha_completado: conteo.fecha_completado,
+      observaciones: conteo.observaciones || ''
+    }))
   } catch (error) {
     console.error('Error obteniendo conteos:', error)
+    return []
+  }
+}
+
+/**
+ * Obtiene detalles de conteos
+ */
+export const getDetalleConteos = async () => {
+  try {
+    const data = await getSheetData('Detalle_conteo')
+    return data.map(det => ({
+      id: det.id,
+      conteo_id: det.conteo_id,
+      producto_id: det.producto_id,
+      cantidad_sistema: parseInt(det.cantidad_sistema) || 0,
+      cantidad_fisica: det.cantidad_fisica ? parseInt(det.cantidad_fisica) : null,
+      diferencia: det.diferencia ? parseInt(det.diferencia) : null,
+      observaciones: det.observaciones || '',
+      contado: det.contado === 'SI'
+    }))
+  } catch (error) {
+    console.error('Error obteniendo detalle conteos:', error)
     return []
   }
 }
@@ -137,7 +247,20 @@ export const getConteos = async () => {
  */
 export const getAlertas = async () => {
   try {
-    return await getSheetData('Alertas')
+    const data = await getSheetData('Alertas')
+    return data.map(alerta => ({
+      id: alerta.id,
+      tipo: alerta.tipo,
+      prioridad: alerta.prioridad,
+      entidad_relacionada_id: alerta.entidad_relacionada_id,
+      tipo_entidad: alerta.tipo_entidad,
+      ubicacion_id: alerta.ubicacion_id,
+      mensaje: alerta.mensaje,
+      estado: alerta.estado,
+      usuarios_notificados: alerta.usuarios_notificados ? JSON.parse(alerta.usuarios_notificados) : [],
+      fecha_creacion: alerta.fecha_creacion,
+      fecha_resolucion: alerta.fecha_resolucion
+    }))
   } catch (error) {
     console.error('Error obteniendo alertas:', error)
     return []
@@ -149,24 +272,24 @@ export const getAlertas = async () => {
  */
 export const getUsuarios = async () => {
   try {
-    return await getSheetData('Usuarios')
+    const data = await getSheetData('Usuarios')
+    return data.map(usuario => ({
+      id: usuario.id,
+      email: usuario.email,
+      password: usuario.password,
+      nombre: usuario.nombre,
+      rol: usuario.rol,
+      empresa_id: usuario.empresa_id,
+      ubicaciones_asignadas: usuario.ubicaciones_asignadas ? usuario.ubicaciones_asignadas.split(',').map(id => id.trim().replace(/"/g, '')) : [],
+      estado: usuario.estado || 'ACTIVO',
+      fecha_creacion: usuario.fecha_creacion
+    }))
   } catch (error) {
     console.error('Error obteniendo usuarios:', error)
     return []
   }
 }
 
-/**
- * Obtiene las empresas
- */
-export const getEmpresas = async () => {
-  try {
-    return await getSheetData('Empresas')
-  } catch (error) {
-    console.error('Error obteniendo empresas:', error)
-    return []
-  }
-}
 
 /**
  * Login con Google Sheets

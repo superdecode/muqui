@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import Button from '../common/Button'
 import Modal from '../common/Modal'
-import { Calendar, MapPin, User } from 'lucide-react'
+import Alert from '../common/Alert'
+import { Calendar, MapPin, User, AlertCircle } from 'lucide-react'
 
 export default function ConteoForm({ onClose, onSave }) {
   const [formData, setFormData] = useState({
@@ -11,19 +12,35 @@ export default function ConteoForm({ onClose, onSave }) {
     responsable: '',
     observaciones: ''
   })
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!formData.ubicacion || !formData.responsable) {
-      alert('Por favor completa todos los campos requeridos')
+    setError('')
+    
+    if (!formData.ubicacion) {
+      setError('Por favor selecciona una ubicación')
       return
     }
-    onSave({
-      ...formData,
-      fecha_programada: new Date(formData.fecha_programada),
-      productos: []
-    })
-    onClose()
+    if (!formData.responsable) {
+      setError('Por favor ingresa el nombre del responsable')
+      return
+    }
+    
+    setLoading(true)
+    try {
+      await onSave({
+        ...formData,
+        fecha_programada: new Date(formData.fecha_programada),
+        productos: []
+      })
+      onClose()
+    } catch (err) {
+      setError('Error al programar el conteo. Por favor intenta nuevamente.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -36,6 +53,16 @@ export default function ConteoForm({ onClose, onSave }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Error Alert */}
+          {error && (
+            <Alert type="error" className="mb-4">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={18} />
+                {error}
+              </div>
+            </Alert>
+          )}
+
           {/* Fecha */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -120,11 +147,11 @@ export default function ConteoForm({ onClose, onSave }) {
 
           {/* Botones */}
           <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={onClose} disabled={loading}>
               Cancelar
             </Button>
-            <Button type="submit" variant="primary">
-              Programar Conteo
+            <Button type="submit" variant="primary" loading={loading}>
+              {loading ? 'Programando...' : 'Programar Conteo'}
             </Button>
           </div>
         </form>

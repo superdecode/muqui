@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Inventario App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .success { color: green; }
+        .error { color: red; }
+        button {
+            background: #004AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0039CC;
+        }
+        pre {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Inventario App - Localhost</h1>
+    
+    <div class="test-section">
+        <h2>1. Test Server Connection</h2>
+        <button onclick="testServer()">Test Server</button>
+        <div id="server-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Test Mock Login</h2>
+        <button onclick="testMockLogin()">Test Mock Login</button>
+        <div id="login-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Test React App Load</h2>
+        <button onclick="testReactApp()">Test React App</button>
+        <div id="react-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Open App in Browser</h2>
+        <button onclick="openApp()">Open http://localhost:5174</button>
+    </div>
+
+    <script>
+        async function testServer() {
+            const result = document.getElementById('server-result');
+            result.innerHTML = '<p>Testing...</p>';
+            
+            try {
+                const response = await fetch('http://localhost:5174');
+                const html = await response.text();
+                
+                if (html.includes('Sistema de Control Inventario')) {
+                    result.innerHTML = '<p class="success">✅ Server is running!</p>';
+                } else {
+                    result.innerHTML = '<p class="error">❌ Server responded but HTML is unexpected</p>';
+                }
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Server connection failed: ${error.message}</p>`;
+            }
+        }
+
+        function testMockLogin() {
+            const result = document.getElementById('login-result');
+            result.innerHTML = '<p>Testing mock login logic...</p>';
+            
+            const mockUsers = [
+                {
+                    id: 'USR001',
+                    nombre: 'Admin Global',
+                    email: 'muqui.coo@gmail.com',
+                    password: 'temporal123',
+                    rol: 'ADMIN_GLOBAL',
+                    empresa_id: 'MK001',
+                    ubicaciones_asignadas: ['LM001', 'LM004', 'LM005'],
+                    estado: 'ACTIVO'
+                },
+                {
+                    id: 'USR002',
+                    nombre: 'Gerente Operativo',
+                    email: 'gerente@muqui.com',
+                    password: 'temporal123',
+                    rol: 'GERENTE_OPERATIVO',
+                    empresa_id: 'MK001',
+                    ubicaciones_asignadas: ['LM001', 'LM004', 'LM005'],
+                    estado: 'ACTIVO'
+                }
+            ];
+
+            const testCases = [
+                { email: 'muqui.coo@gmail.com', password: 'temporal123' },
+                { email: 'gerente@muqui.com', password: 'temporal123' },
+                { email: 'admin@muqui.com', password: 'admin123' }
+            ];
+
+            let html = '<div>';
+            
+            testCases.forEach(test => {
+                const user = mockUsers.find(u => u.email === test.email);
+                
+                if (!user) {
+                    html += `<p class="error">❌ ${test.email}: User not found in mockUsers</p>`;
+                } else if (test.password === 'temporal123' || test.password === 'admin123') {
+                    html += `<p class="success">✅ ${test.email}: Login would succeed</p>`;
+                    html += `<pre>${JSON.stringify(user, null, 2)}</pre>`;
+                } else {
+                    html += `<p class="error">❌ ${test.email}: Password incorrect</p>`;
+                }
+            });
+            
+            html += '</div>';
+            result.innerHTML = html;
+        }
+
+        async function testReactApp() {
+            const result = document.getElementById('react-result');
+            result.innerHTML = '<p>Testing React app files...</p>';
+            
+            try {
+                const mainResponse = await fetch('http://localhost:5174/src/main.jsx');
+                const appResponse = await fetch('http://localhost:5174/src/App.jsx');
+                
+                if (mainResponse.ok && appResponse.ok) {
+                    result.innerHTML = '<p class="success">✅ React files are accessible</p>';
+                } else {
+                    result.innerHTML = '<p class="error">❌ React files not accessible</p>';
+                }
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        function openApp() {
+            window.open('http://localhost:5174', '_blank');
+        }
+
+        // Auto-run tests on load
+        window.onload = () => {
+            testServer();
+            setTimeout(testMockLogin, 1000);
+        };
+    </script>
+</body>
+</html>

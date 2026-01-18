@@ -15,7 +15,7 @@ export default function Header() {
           </h2>
           {user && (
             <p className="text-sm text-slate-600">
-              {user.ubicacion_nombre || 'Sistema de Inventario'}
+              {user.ubicacion_nombre || 'Sistema de Control Inventario'}
             </p>
           )}
         </div>

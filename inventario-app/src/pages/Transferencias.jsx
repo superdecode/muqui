@@ -86,13 +86,14 @@ export default function Transferencias() {
     }
   ]
 
-  const handleSaveTransferencia = (nuevaTransferencia) => {
+  const handleSaveTransferencia = async (nuevaTransferencia) => {
     const newTransfer = {
       ...nuevaTransferencia,
       id: transferencias.length + 1,
       total_productos: nuevaTransferencia.productos.reduce((sum, p) => sum + p.cantidad, 0)
     }
     setTransferencias([newTransfer, ...transferencias])
+    setShowForm(false)
   }
 
   const handleCloseForm = () => {
