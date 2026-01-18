@@ -200,7 +200,7 @@ export const getDetalleMovimientos = async () => {
  */
 export const getConteos = async () => {
   try {
-    const data = await getSheetData('Conteo')
+    const data = await getSheetData('Conteos')
     return data.map(conteo => ({
       id: conteo.id,
       ubicacion_id: conteo.ubicacion_id,
@@ -225,7 +225,7 @@ export const getConteos = async () => {
  */
 export const getDetalleConteos = async () => {
   try {
-    const data = await getSheetData('Detalle_conteo')
+    const data = await getSheetData('Detalle_conteos')
     return data.map(det => ({
       id: det.id,
       conteo_id: det.conteo_id,

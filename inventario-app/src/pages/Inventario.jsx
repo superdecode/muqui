@@ -127,7 +127,7 @@ export default function Inventario() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-purple p-6 shadow-card">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-light-blue p-6 shadow-card">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
         <div className="relative z-10">
           <div className="flex items-center justify-between">
