@@ -1,12 +1,13 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './stores/authStore'
+import ToastContainer from './components/common/ToastContainer'
 
 // Pages
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Inventario from './pages/Inventario'
-import Transferencias from './pages/Transferencias'
+import Movimientos from './pages/Movimientos'
 import Conteos from './pages/Conteos'
 import Reportes from './pages/Reportes'
 
@@ -39,6 +40,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <ToastContainer />
         <Routes>
           <Route path="/login" element={<Login />} />
 
@@ -52,7 +54,8 @@ function App() {
           >
             <Route index element={<Dashboard />} />
             <Route path="inventario" element={<Inventario />} />
-            <Route path="transferencias" element={<Transferencias />} />
+            <Route path="movimientos" element={<Movimientos />} />
+            <Route path="transferencias" element={<Navigate to="/movimientos" replace />} />
             <Route path="conteos" element={<Conteos />} />
             <Route path="reportes" element={<Reportes />} />
           </Route>
