@@ -5,17 +5,15 @@ import Modal from '../common/Modal'
 import Alert from '../common/Alert'
 import { Search, Package, ArrowRight, AlertCircle } from 'lucide-react'
 
-export default function TransferenciaForm({ onClose, onSave }) {
+export default function TransferenciaForm({ onClose, onSave, isLoading = false }) {
   const [formData, setFormData] = useState({
-    origen: '',
-    destino: '',
-    productos: [],
+    origen_id: '',
+    destino_id: '',
     observaciones: ''
   })
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedProductos, setSelectedProductos] = useState([])
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
 
   // Mock products for demo
   const mockProducts = [
@@ -49,17 +47,17 @@ export default function TransferenciaForm({ onClose, onSave }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    
+
     // Validaciones
-    if (!formData.origen) {
+    if (!formData.origen_id) {
       setError('Por favor selecciona una ubicación de origen')
       return
     }
-    if (!formData.destino) {
+    if (!formData.destino_id) {
       setError('Por favor selecciona una ubicación de destino')
       return
     }
-    if (formData.origen === formData.destino) {
+    if (formData.origen_id === formData.destino_id) {
       setError('La ubicación de origen y destino no pueden ser la misma')
       return
     }
@@ -67,20 +65,17 @@ export default function TransferenciaForm({ onClose, onSave }) {
       setError('Por favor agrega al menos un producto a la transferencia')
       return
     }
-    
-    setLoading(true)
+
     try {
       await onSave({
         ...formData,
-        productos: selectedProductos,
-        fecha: new Date(),
-        estado: 'PENDIENTE'
+        productos: selectedProductos.map(p => ({
+          producto_id: p.id,
+          cantidad: p.cantidad
+        }))
       })
-      onClose()
     } catch (err) {
       setError('Error al crear la transferencia. Por favor intenta nuevamente.')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -89,7 +84,7 @@ export default function TransferenciaForm({ onClose, onSave }) {
       <div className="bg-white rounded-2xl shadow-card max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="bg-gradient-ocean p-6 rounded-t-2xl">
-          <h2 className="text-2xl font-bold text-white">Nueva Transferencia</h2>
+          <h2 className="text-2xl font-bold text-white">Nuevo Movimiento</h2>
           <p className="text-white/90">Registra el movimiento de productos entre ubicaciones</p>
         </div>
 
@@ -111,16 +106,16 @@ export default function TransferenciaForm({ onClose, onSave }) {
                 Ubicación Origen
               </label>
               <select
-                value={formData.origen}
-                onChange={(e) => setFormData({ ...formData, origen: e.target.value })}
+                value={formData.origen_id}
+                onChange={(e) => setFormData({ ...formData, origen_id: e.target.value })}
                 className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 required
               >
                 <option value="">Seleccionar origen</option>
-                <option value="Bodega Principal">Bodega Principal</option>
-                <option value="Punto de Venta 1">Punto de Venta 1</option>
-                <option value="Punto de Venta 2">Punto de Venta 2</option>
-                <option value="Tienda Centro">Tienda Centro</option>
+                <option value="BOD001">Bodega Principal</option>
+                <option value="PV001">Punto de Venta 1</option>
+                <option value="PV002">Punto de Venta 2</option>
+                <option value="TDA001">Tienda Centro</option>
               </select>
             </div>
 
@@ -129,16 +124,16 @@ export default function TransferenciaForm({ onClose, onSave }) {
                 Ubicación Destino
               </label>
               <select
-                value={formData.destino}
-                onChange={(e) => setFormData({ ...formData, destino: e.target.value })}
+                value={formData.destino_id}
+                onChange={(e) => setFormData({ ...formData, destino_id: e.target.value })}
                 className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 required
               >
                 <option value="">Seleccionar destino</option>
-                <option value="Bodega Principal">Bodega Principal</option>
-                <option value="Punto de Venta 1">Punto de Venta 1</option>
-                <option value="Punto de Venta 2">Punto de Venta 2</option>
-                <option value="Tienda Centro">Tienda Centro</option>
+                <option value="BOD001">Bodega Principal</option>
+                <option value="PV001">Punto de Venta 1</option>
+                <option value="PV002">Punto de Venta 2</option>
+                <option value="TDA001">Tienda Centro</option>
               </select>
             </div>
           </div>
@@ -244,11 +239,11 @@ export default function TransferenciaForm({ onClose, onSave }) {
 
           {/* Botones */}
           <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
-            <Button variant="outline" onClick={onClose} disabled={loading}>
+            <Button variant="outline" onClick={onClose} disabled={isLoading}>
               Cancelar
             </Button>
-            <Button type="submit" variant="primary" loading={loading}>
-              {loading ? 'Creando...' : 'Crear Transferencia'}
+            <Button type="submit" variant="primary" loading={isLoading}>
+              {isLoading ? 'Creando...' : 'Crear Movimiento'}
             </Button>
           </div>
         </form>

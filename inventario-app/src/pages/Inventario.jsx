@@ -127,21 +127,20 @@ export default function Inventario() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-ocean p-4 shadow-card">
-        <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full blur-3xl -mr-24 -mt-24"></div>
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-purple p-6 shadow-card">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
         <div className="relative z-10">
           <div className="flex items-center justify-between">
             <div>
-              <div className="flex items-center gap-3 mb-1">
-                <Package className="text-white" size={24} />
-                <h1 className="text-2xl font-bold text-white">Gestión de Productos</h1>
+              <div className="flex items-center gap-3 mb-2">
+                <Package className="text-white" size={28} />
+                <h1 className="text-3xl font-bold text-white">Gestión de Productos</h1>
               </div>
-              <p className="text-white/90 text-sm">Administra tu catálogo de productos</p>
+              <p className="text-white/90">Administra tu catálogo de productos e inventario</p>
             </div>
             <Button
-              variant="secondary"
+              variant="white"
               onClick={() => setShowForm(true)}
-              className="bg-white/20 hover:bg-white/30 text-white border-0"
             >
               <Plus size={20} className="mr-2" />
               Nuevo Producto

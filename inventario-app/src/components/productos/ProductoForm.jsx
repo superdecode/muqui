@@ -4,24 +4,32 @@ import Input from '../common/Input'
 import { X } from 'lucide-react'
 import { UNIDADES_MEDIDA, CATEGORIAS_PRODUCTOS, FRECUENCIA_INVENTARIO } from '../../utils/constants'
 
-export default function ProductoForm({ producto = null, onClose, onSave }) {
+export default function ProductoForm({ producto = null, onClose, onSave, isLoading = false }) {
   const [formData, setFormData] = useState({
     id: '',
     nombre: '',
     especificacion: '',
     unidad_medida: 'KG',
-    stock_minimo_default: 10,
-    frecuencia_inventario_dias: 30,
+    stock_minimo: 10,
+    frecuencia_inventario_Dias: 30,
     categoria: 'OTROS',
     estado: 'ACTIVO'
   })
 
   const [errors, setErrors] = useState({})
-  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (producto) {
-      setFormData(producto)
+      setFormData({
+        id: producto.id || producto.producto_id || '',
+        nombre: producto.nombre || producto.producto || '',
+        especificacion: producto.especificacion || '',
+        unidad_medida: producto.unidad_medida || 'KG',
+        stock_minimo: producto.stock_minimo || producto.stock_minimo_default || 10,
+        frecuencia_inventario_Dias: producto.frecuencia_inventario_Dias || producto.frecuencia_inventario_dias || 30,
+        categoria: producto.categoria || 'OTROS',
+        estado: producto.estado || 'ACTIVO'
+      })
     }
   }, [producto])
 
@@ -36,8 +44,8 @@ export default function ProductoForm({ producto = null, onClose, onSave }) {
       newErrors.id = 'El ID es requerido'
     }
 
-    if (formData.stock_minimo_default < 0) {
-      newErrors.stock_minimo_default = 'El stock mínimo debe ser mayor o igual a 0'
+    if (formData.stock_minimo < 0) {
+      newErrors.stock_minimo = 'El stock mínimo debe ser mayor o igual a 0'
     }
 
     setErrors(newErrors)
@@ -51,17 +59,10 @@ export default function ProductoForm({ producto = null, onClose, onSave }) {
       return
     }
 
-    setLoading(true)
     try {
-      await onSave({
-        ...formData,
-        fecha_creacion: formData.fecha_creacion || new Date().toISOString().split('T')[0]
-      })
-      onClose()
+      await onSave(formData)
     } catch (error) {
       console.error('Error guardando producto:', error)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -162,13 +163,13 @@ export default function ProductoForm({ producto = null, onClose, onSave }) {
             {/* Stock Mínimo */}
             <div>
               <Input
-                label="Stock Mínimo Default"
-                name="stock_minimo_default"
+                label="Stock Mínimo"
+                name="stock_minimo"
                 type="number"
-                value={formData.stock_minimo_default}
+                value={formData.stock_minimo}
                 onChange={handleChange}
                 min="0"
-                error={errors.stock_minimo_default}
+                error={errors.stock_minimo}
                 required
               />
               <p className="text-xs text-slate-500 mt-1">Cantidad mínima antes de alertar</p>
@@ -180,8 +181,8 @@ export default function ProductoForm({ producto = null, onClose, onSave }) {
                 Frecuencia de Inventario <span className="text-danger-500">*</span>
               </label>
               <select
-                name="frecuencia_inventario_dias"
-                value={formData.frecuencia_inventario_dias}
+                name="frecuencia_inventario_Dias"
+                value={formData.frecuencia_inventario_Dias}
                 onChange={handleChange}
                 className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                 required
@@ -235,13 +236,14 @@ export default function ProductoForm({ producto = null, onClose, onSave }) {
               variant="ghost"
               onClick={onClose}
               className="flex-1"
+              disabled={isLoading}
             >
               Cancelar
             </Button>
             <Button
               type="submit"
               variant="primary"
-              loading={loading}
+              loading={isLoading}
               className="flex-1"
             >
               {producto ? 'Actualizar Producto' : 'Crear Producto'}

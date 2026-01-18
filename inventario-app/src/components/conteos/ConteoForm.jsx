@@ -2,44 +2,33 @@ import { useState } from 'react'
 import Button from '../common/Button'
 import Modal from '../common/Modal'
 import Alert from '../common/Alert'
-import { Calendar, MapPin, User, AlertCircle } from 'lucide-react'
+import { Calendar, MapPin, AlertCircle } from 'lucide-react'
 
-export default function ConteoForm({ onClose, onSave }) {
+export default function ConteoForm({ onClose, onSave, isLoading = false }) {
   const [formData, setFormData] = useState({
     fecha_programada: new Date().toISOString().split('T')[0],
-    ubicacion: '',
+    ubicacion_id: '',
     tipo_conteo: 'DIARIO',
-    responsable: '',
     observaciones: ''
   })
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    
-    if (!formData.ubicacion) {
+
+    if (!formData.ubicacion_id) {
       setError('Por favor selecciona una ubicación')
       return
     }
-    if (!formData.responsable) {
-      setError('Por favor ingresa el nombre del responsable')
-      return
-    }
-    
-    setLoading(true)
+
     try {
       await onSave({
         ...formData,
-        fecha_programada: new Date(formData.fecha_programada),
-        productos: []
+        tipo_ubicacion: 'BODEGA'
       })
-      onClose()
     } catch (err) {
       setError('Error al programar el conteo. Por favor intenta nuevamente.')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -85,16 +74,16 @@ export default function ConteoForm({ onClose, onSave }) {
               Ubicación
             </label>
             <select
-              value={formData.ubicacion}
-              onChange={(e) => setFormData({ ...formData, ubicacion: e.target.value })}
+              value={formData.ubicacion_id}
+              onChange={(e) => setFormData({ ...formData, ubicacion_id: e.target.value })}
               className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               required
             >
               <option value="">Seleccionar ubicación</option>
-              <option value="Bodega Principal">Bodega Principal</option>
-              <option value="Punto de Venta 1">Punto de Venta 1</option>
-              <option value="Punto de Venta 2">Punto de Venta 2</option>
-              <option value="Tienda Centro">Tienda Centro</option>
+              <option value="BOD001">Bodega Principal</option>
+              <option value="PV001">Punto de Venta 1</option>
+              <option value="PV002">Punto de Venta 2</option>
+              <option value="TDA001">Tienda Centro</option>
             </select>
           </div>
 
@@ -115,22 +104,6 @@ export default function ConteoForm({ onClose, onSave }) {
             </select>
           </div>
 
-          {/* Responsable */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              <User size={16} className="inline mr-2" />
-              Responsable
-            </label>
-            <input
-              type="text"
-              value={formData.responsable}
-              onChange={(e) => setFormData({ ...formData, responsable: e.target.value })}
-              placeholder="Nombre del responsable"
-              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              required
-            />
-          </div>
-
           {/* Observaciones */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -147,11 +120,11 @@ export default function ConteoForm({ onClose, onSave }) {
 
           {/* Botones */}
           <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
-            <Button variant="outline" onClick={onClose} disabled={loading}>
+            <Button variant="outline" onClick={onClose} disabled={isLoading}>
               Cancelar
             </Button>
-            <Button type="submit" variant="primary" loading={loading}>
-              {loading ? 'Programando...' : 'Programar Conteo'}
+            <Button type="submit" variant="primary" loading={isLoading}>
+              {isLoading ? 'Programando...' : 'Programar Conteo'}
             </Button>
           </div>
         </form>
