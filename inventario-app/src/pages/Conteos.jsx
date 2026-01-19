@@ -59,7 +59,7 @@ export default function Conteos() {
     },
     {
       header: 'Ubicación',
-      accessor: 'ubicacion_id',
+      accessor: 'ubicacion_nombre',
       render: (value) => (
         <span className="text-sm font-medium">{value}</span>
       )

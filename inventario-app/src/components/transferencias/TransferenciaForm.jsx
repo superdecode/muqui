@@ -82,7 +82,6 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
         stock: inventarioItem?.stock_actual || 0
       }
     })
-    .filter(product => product.stock > 0)
 
   const handleAddProducto = (producto) => {
     if (!selectedProductos.find(p => p.id === producto.id)) {
@@ -119,6 +118,24 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
     }
     if (selectedProductos.length === 0) {
       setError('Por favor agrega al menos un producto a la transferencia')
+      return
+    }
+
+    // Validar que los productos estén asignados a la ubicación destino
+    const productosNoAsignados = selectedProductos.filter(producto => {
+      const productoCompleto = productos.find(p => p.id === producto.id)
+      if (!productoCompleto) return true
+      
+      const productUbicaciones = Array.isArray(productoCompleto.ubicacion_id) 
+        ? productoCompleto.ubicacion_id 
+        : (productoCompleto.ubicacion_id ? productoCompleto.ubicacion_id.split(',').map(id => id.trim()) : [])
+      
+      return !productUbicaciones.includes(formData.destino_id)
+    })
+
+    if (productosNoAsignados.length > 0) {
+      const nombresProductos = productosNoAsignados.map(p => p.nombre).join(', ')
+      setError(`ALERTA: Los siguientes productos no están asignados a la ubicación destino: ${nombresProductos}. No se puede completar la transferencia.`)
       return
     }
 

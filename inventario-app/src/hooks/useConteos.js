@@ -6,15 +6,32 @@ export const useConteos = (ubicacionId) => {
   const queryClient = useQueryClient()
   const toast = useToastStore()
 
-  // Obtener conteos
+  // Obtener ubicaciones
   const {
-    data: conteos = [],
+    data: ubicaciones = []
+  } = useQuery({
+    queryKey: ['ubicaciones'],
+    queryFn: () => dataService.getUbicaciones()
+  })
+
+  // Obtener conteos con nombres de ubicación
+  const {
+    data: conteosConNombres = [],
     isLoading,
     error,
     refetch
   } = useQuery({
     queryKey: ['conteos', ubicacionId],
-    queryFn: () => dataService.getConteos(ubicacionId)
+    queryFn: async () => {
+      const conteos = await dataService.getConteos(ubicacionId)
+      const ubicacionesData = await dataService.getUbicaciones()
+      
+      // Agregar nombres de ubicación
+      return conteos.map(conteo => ({
+        ...conteo,
+        ubicacion_nombre: ubicacionesData.find(u => u.id === conteo.ubicacion_id)?.nombre || conteo.ubicacion_id
+      }))
+    }
   })
 
   // Crear/programar conteo
@@ -83,10 +100,10 @@ export const useConteos = (ubicacionId) => {
 
   // Estadísticas de conteos
   const getEstadisticas = () => {
-    const pendientes = conteos.filter(c => c.estado === 'PENDIENTE').length
-    const enProgreso = conteos.filter(c => c.estado === 'EN_PROGRESO').length
-    const completados = conteos.filter(c => c.estado === 'COMPLETADO').length
-    const total = conteos.length
+    const pendientes = conteosConNombres.filter(c => c.estado === 'PENDIENTE').length
+    const enProgreso = conteosConNombres.filter(c => c.estado === 'EN_PROGRESO').length
+    const completados = conteosConNombres.filter(c => c.estado === 'COMPLETADO').length
+    const total = conteosConNombres.length
 
     return {
       total,
@@ -97,7 +114,8 @@ export const useConteos = (ubicacionId) => {
   }
 
   return {
-    conteos,
+    conteos: conteosConNombres,
+    ubicaciones,
     isLoading,
     error,
     refetch,
