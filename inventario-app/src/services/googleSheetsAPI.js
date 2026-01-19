@@ -196,13 +196,16 @@ export const getMovimientos = async () => {
 export const getDetalleMovimientos = async () => {
   try {
     const data = await getSheetData('Detalle_movimientos')
-    return data.map(det => ({
+    console.log('GoogleSheetsAPI - Detalle_movimientos raw data:', data.slice(0, 2))
+    const mapped = data.map(det => ({
       id: det.id,
       movimiento_id: det.movimiento_id,
-      producto_id: det.producto_id,
+      producto_id: det.id_producto || det.producto_id || det.productoId,
       cantidad: parseInt(det.cantidad) || 0,
       observaciones: det.observaciones || ''
     }))
+    console.log('GoogleSheetsAPI - Detalle_movimientos mapped:', mapped.slice(0, 2))
+    return mapped
   } catch (error) {
     console.error('Error obteniendo detalle movimientos:', error)
     return []
@@ -287,6 +290,7 @@ export const getAlertas = async () => {
 export const getUsuarios = async () => {
   try {
     const data = await getSheetData('Usuarios')
+    console.log('GoogleSheetsAPI - Usuarios raw data (first user):', data[0])
     return data.map(usuario => ({
       id: usuario.id,
       email: usuario.email,
@@ -296,7 +300,8 @@ export const getUsuarios = async () => {
       empresa_id: usuario.empresa_id,
       ubicaciones_asignadas: usuario.ubicaciones_asignadas ? usuario.ubicaciones_asignadas.split(',').map(id => id.trim().replace(/"/g, '')) : [],
       estado: usuario.estado || 'ACTIVO',
-      fecha_creacion: usuario.fecha_creacion
+      fecha_creacion: usuario.fecha_creacion,
+      nivel_permisos: parseInt(usuario.nivel_permisos) || 3
     }))
   } catch (error) {
     console.error('Error obteniendo usuarios:', error)
@@ -343,7 +348,98 @@ export const loginWithSheets = async (email, password) => {
   }
 }
 
+/**
+ * Actualiza un movimiento en Google Sheets (escritura)
+ */
+export const updateMovimiento = async (data) => {
+  try {
+    const APPS_SCRIPT_URL = import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL
+    if (!APPS_SCRIPT_URL) {
+      console.warn('VITE_GOOGLE_APPS_SCRIPT_URL no configurado')
+      return { success: false }
+    }
+
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'updateMovimiento',
+        data: data
+      })
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error actualizando movimiento en Google Sheets:', error)
+    return { success: false, error }
+  }
+}
+
+/**
+ * Elimina un movimiento en Google Sheets
+ */
+export const deleteMovimiento = async (movimientoId) => {
+  try {
+    const APPS_SCRIPT_URL = import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL
+    if (!APPS_SCRIPT_URL) {
+      console.warn('VITE_GOOGLE_APPS_SCRIPT_URL no configurado')
+      return { success: false }
+    }
+
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'deleteMovimiento',
+        id: movimientoId
+      })
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error eliminando movimiento en Google Sheets:', error)
+    return { success: false, error }
+  }
+}
+
+/**
+ * Elimina un conteo en Google Sheets
+ */
+export const deleteConteo = async (conteoId) => {
+  try {
+    const APPS_SCRIPT_URL = import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL
+    if (!APPS_SCRIPT_URL) {
+      console.warn('VITE_GOOGLE_APPS_SCRIPT_URL no configurado')
+      return { success: false }
+    }
+
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'deleteConteo',
+        id: conteoId
+      })
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error eliminando conteo en Google Sheets:', error)
+    return { success: false, error }
+  }
+}
+
 export default {
+  getSheetData,
   getProductos,
   getUbicaciones,
   getInventario,
@@ -354,5 +450,8 @@ export default {
   getAlertas,
   getUsuarios,
   getEmpresas,
-  loginWithSheets
+  loginWithSheets,
+  updateMovimiento,
+  deleteMovimiento,
+  deleteConteo
 }

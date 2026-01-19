@@ -169,7 +169,7 @@ const dataService = {
   },
 
   // Detalle de movimientos
-  getDetalleMovimientos: async () => {
+  getDetalleMovimientos: async (movimientoId) => {
     if (USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 300))
       return []
@@ -178,10 +178,13 @@ const dataService = {
     if (USE_GOOGLE_SHEETS) {
       const detalle = await googleSheetsAPI.getDetalleMovimientos()
       const localDetalle = localStorageService.getDetalleMovimientosLocal()
-      return localDetalle.length > 0 ? [...detalle, ...localDetalle] : detalle
+      const merged = localDetalle.length > 0 ? [...detalle, ...localDetalle] : detalle
+      return movimientoId
+        ? merged.filter(d => d.movimiento_id === movimientoId)
+        : merged
     }
 
-    return await api.getDetalleMovimientos()
+    return await api.getDetalleMovimientos(movimientoId)
   },
 
   // Conteos
@@ -209,7 +212,7 @@ const dataService = {
   },
 
   // Detalle de conteos
-  getDetalleConteos: async () => {
+  getDetalleConteos: async (conteoId) => {
     if (USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 300))
       return []
@@ -218,10 +221,13 @@ const dataService = {
     if (USE_GOOGLE_SHEETS) {
       const detalle = await googleSheetsAPI.getDetalleConteos()
       const localDetalle = localStorageService.getDetalleConteosLocal()
-      return localDetalle.length > 0 ? [...detalle, ...localDetalle] : detalle
+      const merged = localDetalle.length > 0 ? [...detalle, ...localDetalle] : detalle
+      return conteoId
+        ? merged.filter(d => d.conteo_id === conteoId)
+        : merged
     }
 
-    return await api.getDetalleConteos()
+    return await api.getDetalleConteos(conteoId)
   },
 
   // Alertas
@@ -385,15 +391,36 @@ const dataService = {
       await new Promise(resolve => setTimeout(resolve, 500))
 
       if (USE_GOOGLE_SHEETS) {
+        // Actualizar en localStorage
         const localMovimientos = localStorageService.getMovimientosLocal()
-        const movimiento = localMovimientos.find(m => m.id === data.movimiento_id)
+        const movimientoIndex = localMovimientos.findIndex(m => m.id === data.movimiento_id)
 
-        if (movimiento) {
-          movimiento.estado = 'CONFIRMADA'
-          movimiento.fecha_confirmacion = new Date().toISOString().split('T')[0]
-          movimiento.usuario_confirmacion_id = data.usuario_confirmacion_id
-          movimiento.observaciones_confirmacion = data.observaciones || ''
+        if (movimientoIndex >= 0) {
+          localMovimientos[movimientoIndex] = {
+            ...localMovimientos[movimientoIndex],
+            estado: 'CONFIRMADO',
+            fecha_confirmacion: new Date().toISOString().split('T')[0],
+            usuario_confirmacion_id: data.usuario_confirmacion_id,
+            observaciones_confirmacion: data.observaciones || ''
+          }
           localStorageService.saveMovimientosLocal(localMovimientos)
+          console.log('Movimiento confirmado en localStorage:', localMovimientos[movimientoIndex])
+        } else {
+          console.warn('Movimiento no encontrado en localStorage:', data.movimiento_id)
+        }
+
+        // Enviar a Google Sheets para escritura
+        try {
+          await googleSheetsAPI.updateMovimiento({
+            id: data.movimiento_id,
+            estado: 'CONFIRMADO',
+            fecha_confirmacion: new Date().toISOString().split('T')[0],
+            usuario_confirmacion_id: data.usuario_confirmacion_id,
+            observaciones_confirmacion: data.observaciones || ''
+          })
+          console.log('Movimiento confirmado en Google Sheets')
+        } catch (error) {
+          console.error('Error actualizando en Google Sheets:', error)
         }
       }
 
@@ -401,6 +428,58 @@ const dataService = {
     }
 
     return await api.confirmarTransferencia(data)
+  },
+
+  deleteMovimiento: async (movimientoId) => {
+    if (USE_MOCK_DATA || USE_GOOGLE_SHEETS) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      if (USE_GOOGLE_SHEETS) {
+        // Eliminar de localStorage
+        const localMovimientos = localStorageService.getMovimientosLocal()
+        const filteredMovimientos = localMovimientos.filter(m => m.id !== movimientoId)
+        localStorageService.saveMovimientosLocal(filteredMovimientos)
+        console.log('Movimiento eliminado de localStorage:', movimientoId)
+
+        // Enviar a Google Sheets para eliminación
+        try {
+          await googleSheetsAPI.deleteMovimiento(movimientoId)
+          console.log('Movimiento eliminado en Google Sheets')
+        } catch (error) {
+          console.error('Error eliminando en Google Sheets:', error)
+        }
+      }
+
+      return { success: true, message: 'Movimiento eliminado exitosamente' }
+    }
+
+    return await api.deleteMovimiento(movimientoId)
+  },
+
+  deleteConteo: async (conteoId) => {
+    if (USE_MOCK_DATA || USE_GOOGLE_SHEETS) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      if (USE_GOOGLE_SHEETS) {
+        // Eliminar de localStorage
+        const localConteos = localStorageService.getConteosLocal()
+        const filteredConteos = localConteos.filter(c => c.id !== conteoId)
+        localStorageService.saveConteosLocal(filteredConteos)
+        console.log('Conteo eliminado de localStorage:', conteoId)
+
+        // Enviar a Google Sheets para eliminación
+        try {
+          await googleSheetsAPI.deleteConteo(conteoId)
+          console.log('Conteo eliminado en Google Sheets')
+        } catch (error) {
+          console.error('Error eliminando en Google Sheets:', error)
+        }
+      }
+
+      return { success: true, message: 'Conteo eliminado exitosamente' }
+    }
+
+    return await api.deleteConteo(conteoId)
   },
 
   // CONTEOS

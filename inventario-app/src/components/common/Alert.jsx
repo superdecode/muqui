@@ -1,12 +1,24 @@
 import { AlertCircle, CheckCircle, Info, XCircle, X } from 'lucide-react'
+import { useEffect } from 'react'
 
 export default function Alert({
   type = 'info',
   title,
   message,
   onClose,
-  className = ''
+  className = '',
+  autoClose = true,
+  autoCloseDuration = 2000
 }) {
+  useEffect(() => {
+    if (autoClose && onClose) {
+      const timer = setTimeout(() => {
+        onClose()
+      }, autoCloseDuration)
+
+      return () => clearTimeout(timer)
+    }
+  }, [autoClose, autoCloseDuration, onClose])
   const types = {
     success: {
       icon: CheckCircle,

@@ -5,15 +5,24 @@ import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ProductoForm from '../components/productos/ProductoForm'
 import { useToastStore } from '../stores/toastStore'
+import { useAuthStore } from '../stores/authStore'
 import dataService from '../services/dataService'
 
 export default function Productos() {
   const toast = useToastStore()
+  const { user } = useAuthStore()
   const queryClient = useQueryClient()
   const [searchTerm, setSearchTerm] = useState('')
   const [categoriaFilter, setCategoriaFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [selectedProducto, setSelectedProducto] = useState(null)
+
+  // Solo nivel 1 puede eliminar productos
+  const canDeleteProduct = () => {
+    if (!user) return false
+    const nivelPermisos = parseInt(user.nivel_permisos) || 3
+    return nivelPermisos === 1
+  }
 
   // Cargar PRODUCTOS (no inventario)
   const { data: productos = [], isLoading } = useQuery({
@@ -271,14 +280,16 @@ export default function Productos() {
                         >
                           <Edit2 size={18} />
                         </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="p-2 text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
-                          title="Eliminar"
-                          disabled={deleteMutation.isPending}
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                        {canDeleteProduct() && (
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            className="p-2 text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
+                            title="Eliminar (solo nivel 1)"
+                            disabled={deleteMutation.isPending}
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

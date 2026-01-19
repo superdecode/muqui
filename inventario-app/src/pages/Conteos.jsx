@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ClipboardCheck, Plus, Play, Download, CheckCircle, Clock, AlertCircle } from 'lucide-react'
+import { ClipboardCheck, Plus, Play, Download, CheckCircle, Clock, AlertCircle, Trash2 } from 'lucide-react'
 import Card from '../components/common/Card'
 import Table from '../components/common/Table'
 import Button from '../components/common/Button'
@@ -21,7 +21,7 @@ export default function Conteos() {
   const [showDetail, setShowDetail] = useState(false)
   const [selectedConteo, setSelectedConteo] = useState(null)
 
-  const { user } = useAuthStore()
+  const { user, canDelete } = useAuthStore()
   const toast = useToastStore()
   const {
     conteos,
@@ -30,6 +30,8 @@ export default function Conteos() {
     isCreando,
     ejecutarConteo,
     isEjecutando,
+    eliminarConteo,
+    isEliminando,
     estadisticas
   } = useConteos()
 
@@ -118,6 +120,16 @@ export default function Conteos() {
           >
             Ver Detalle
           </Button>
+          {canDelete() && (
+            <button
+              onClick={() => handleEliminar(row)}
+              className="p-2 text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
+              title="Eliminar conteo"
+              disabled={isEliminando}
+            >
+              <Trash2 size={18} />
+            </button>
+          )}
         </div>
       )
     }
@@ -143,6 +155,14 @@ export default function Conteos() {
   const handleEjecutar = (conteo) => {
     setSelectedConteo(conteo)
     setShowExecute(true)
+  }
+
+  const handleEliminar = async (conteo) => {
+    if (!window.confirm('¿Estás seguro de eliminar este conteo? Esta acción no se puede deshacer.')) {
+      return
+    }
+
+    eliminarConteo(conteo.id)
   }
 
   const handleSaveEjecucion = async (datosConteo) => {
@@ -221,7 +241,7 @@ export default function Conteos() {
               </Button>
               <Button variant="white" onClick={handleNuevoConteo}>
                 <Plus size={20} className="mr-2" />
-                Programar Conteo
+                Empezar Conteo
               </Button>
             </div>
           </div>

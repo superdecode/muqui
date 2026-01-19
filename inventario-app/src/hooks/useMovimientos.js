@@ -6,9 +6,17 @@ export const useMovimientos = (ubicacionId) => {
   const queryClient = useQueryClient()
   const toast = useToastStore()
 
-  // Obtener movimientos
+  // Obtener ubicaciones
   const {
-    data: movimientos = [],
+    data: ubicaciones = []
+  } = useQuery({
+    queryKey: ['ubicaciones'],
+    queryFn: () => dataService.getUbicaciones()
+  })
+
+  // Obtener movimientos con nombres de ubicación
+  const {
+    data: movimientosConNombres = [],
     isLoading,
     error,
     refetch
@@ -16,12 +24,21 @@ export const useMovimientos = (ubicacionId) => {
     queryKey: ['movimientos', ubicacionId],
     queryFn: async () => {
       const movimientos = await dataService.getMovimientos(ubicacionId)
+      const ubicacionesData = await dataService.getUbicaciones()
+      
       // Filtrar por ubicación si se especifica
-      return ubicacionId
+      const movimientosFiltrados = ubicacionId
         ? movimientos.filter(
             m => m.origen_id === ubicacionId || m.destino_id === ubicacionId
           )
         : movimientos
+      
+      // Agregar nombres de ubicación
+      return movimientosFiltrados.map(movimiento => ({
+        ...movimiento,
+        origen_nombre: ubicacionesData.find(u => u.id === movimiento.origen_id)?.nombre || movimiento.origen_id,
+        destino_nombre: ubicacionesData.find(u => u.id === movimiento.destino_id)?.nombre || movimiento.destino_id
+      }))
     }
   })
 
@@ -69,12 +86,33 @@ export const useMovimientos = (ubicacionId) => {
     }
   })
 
+  // Eliminar movimiento
+  const eliminarMovimiento = useMutation({
+    mutationFn: async (movimientoId) => {
+      return await dataService.deleteMovimiento(movimientoId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['movimientos'])
+      queryClient.invalidateQueries(['inventario'])
+      toast.success(
+        'Movimiento Eliminado',
+        'El movimiento se ha eliminado exitosamente'
+      )
+    },
+    onError: (error) => {
+      toast.error(
+        'Error al Eliminar',
+        error.message || 'No se pudo eliminar el movimiento. Intenta nuevamente.'
+      )
+    }
+  })
+
   // Estadísticas de movimientos
   const getEstadisticas = () => {
-    const pendientes = movimientos.filter(m => m.estado === 'PENDIENTE').length
-    const confirmadas = movimientos.filter(m => m.estado === 'CONFIRMADA').length
-    const canceladas = movimientos.filter(m => m.estado === 'CANCELADA').length
-    const total = movimientos.length
+    const pendientes = movimientosConNombres.filter(m => m.estado === 'PENDIENTE').length
+    const confirmadas = movimientosConNombres.filter(m => m.estado === 'CONFIRMADA').length
+    const canceladas = movimientosConNombres.filter(m => m.estado === 'CANCELADA').length
+    const total = movimientosConNombres.length
 
     return {
       total,
@@ -85,7 +123,8 @@ export const useMovimientos = (ubicacionId) => {
   }
 
   return {
-    movimientos,
+    movimientos: movimientosConNombres,
+    ubicaciones,
     isLoading,
     error,
     refetch,
@@ -93,6 +132,8 @@ export const useMovimientos = (ubicacionId) => {
     isCreando: crearMovimiento.isPending,
     confirmarMovimiento: confirmarMovimiento.mutate,
     isConfirmando: confirmarMovimiento.isPending,
+    eliminarMovimiento: eliminarMovimiento.mutate,
+    isEliminando: eliminarMovimiento.isPending,
     estadisticas: getEstadisticas()
   }
 }

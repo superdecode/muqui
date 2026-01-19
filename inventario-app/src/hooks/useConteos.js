@@ -60,6 +60,27 @@ export const useConteos = (ubicacionId) => {
     }
   })
 
+  // Eliminar conteo
+  const eliminarConteo = useMutation({
+    mutationFn: async (conteoId) => {
+      return await dataService.deleteConteo(conteoId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['conteos'])
+      queryClient.invalidateQueries(['inventario'])
+      toast.success(
+        'Conteo Eliminado',
+        'El conteo se ha eliminado exitosamente'
+      )
+    },
+    onError: (error) => {
+      toast.error(
+        'Error al Eliminar',
+        error.message || 'No se pudo eliminar el conteo. Intenta nuevamente.'
+      )
+    }
+  })
+
   // Estadísticas de conteos
   const getEstadisticas = () => {
     const pendientes = conteos.filter(c => c.estado === 'PENDIENTE').length
@@ -84,6 +105,8 @@ export const useConteos = (ubicacionId) => {
     isCreando: crearConteo.isPending,
     ejecutarConteo: ejecutarConteo.mutate,
     isEjecutando: ejecutarConteo.isPending,
+    eliminarConteo: eliminarConteo.mutate,
+    isEliminando: eliminarConteo.isPending,
     estadisticas: getEstadisticas()
   }
 }

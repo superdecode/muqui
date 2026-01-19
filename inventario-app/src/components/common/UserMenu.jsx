@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Settings, HelpCircle, LogOut, ChevronDown, Building2, MapPin } from 'lucide-react'
+import { User, Settings, HelpCircle, LogOut, ChevronDown, Building2, MapPin, Info } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
+import UserProfileModal from './UserProfileModal'
 
 const UserMenu = ({ user }) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [showProfileModal, setShowProfileModal] = useState(false)
   const menuRef = useRef(null)
   const navigate = useNavigate()
   const logout = useAuthStore(state => state.logout)
@@ -37,6 +39,22 @@ const UserMenu = ({ user }) => {
       'OPERADOR': 'Operador'
     }
     return roles[rol] || rol
+  }
+
+  const handleViewProfile = () => {
+    setIsOpen(false)
+    setShowProfileModal(true)
+  }
+
+  // Obtener número de empresas asignadas
+  const getEmpresasCount = () => {
+    if (!user?.empresa_id) return 0
+    const empresaIds = typeof user.empresa_id === 'string' 
+      ? user.empresa_id.split(',').map(id => id.trim().replace(/"/g, ''))
+      : Array.isArray(user.empresa_id) 
+      ? user.empresa_id 
+      : [user.empresa_id]
+    return empresaIds.length
   }
 
   return (
@@ -78,7 +96,11 @@ const UserMenu = ({ user }) => {
             <div className="mt-3 space-y-2">
               <div className="flex items-center gap-2 text-xs text-slate-600">
                 <Building2 size={14} className="flex-shrink-0" />
-                <span className="truncate">Empresa: {user?.empresa_id || 'No asignado'}</span>
+                <span className="truncate">
+                  {getEmpresasCount() > 0 
+                    ? `${getEmpresasCount()} empresa(s) asignada(s)` 
+                    : 'No asignado'}
+                </span>
               </div>
               {user?.ubicaciones_asignadas && user.ubicaciones_asignadas.length > 0 && (
                 <div className="flex items-center gap-2 text-xs text-slate-600">
@@ -94,6 +116,15 @@ const UserMenu = ({ user }) => {
                 </span>
               </div>
             </div>
+
+            {/* View Details Button */}
+            <button
+              onClick={handleViewProfile}
+              className="w-full mt-3 flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors"
+            >
+              <Info size={14} />
+              Ver Información Completa
+            </button>
           </div>
 
           {/* Menu Items */}
@@ -144,6 +175,13 @@ const UserMenu = ({ user }) => {
           </div>
         </div>
       )}
+
+      {/* User Profile Modal */}
+      <UserProfileModal 
+        user={user}
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      />
     </div>
   )
 }

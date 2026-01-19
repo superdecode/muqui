@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import Modal from '../common/Modal'
 import Button from '../common/Button'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { Package, MapPin, Calendar, FileText, CheckCircle, User } from 'lucide-react'
+import { Package, MapPin, Calendar, FileText, CheckCircle, User, X } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import dataService from '../../services/dataService'
@@ -14,6 +13,59 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
     queryFn: () => dataService.getDetalleMovimientos(transferencia.id)
   })
 
+  // Cargar productos para obtener información completa
+  const { data: productos = [] } = useQuery({
+    queryKey: ['productos'],
+    queryFn: () => dataService.getProductos()
+  })
+
+  // Cargar usuarios para mostrar nombres reales
+  const { data: usuarios = [] } = useQuery({
+    queryKey: ['usuarios'],
+    queryFn: () => dataService.getUsuarios()
+  })
+
+  // Función para obtener información completa del producto
+  const getProductoInfo = (productoId) => {
+    if (!productoId) {
+      console.log('TransferenciaDetail: productoId es null/undefined')
+      return {
+        id: 'N/A',
+        nombre: 'Producto no especificado',
+        especificacion: '',
+        unidad_medida: ''
+      }
+    }
+    
+    // Convertir ambos IDs a string para comparación (pueden ser numéricos o strings)
+    const productoIdStr = String(productoId)
+    const producto = productos.find(p => String(p.id) === productoIdStr)
+    
+    if (!producto) {
+      console.log('TransferenciaDetail - Producto NO encontrado:', {
+        buscando: productoIdStr,
+        totalProductos: productos.length,
+        primeros5ProductosIDs: productos.slice(0, 5).map(p => ({ id: p.id, tipo: typeof p.id })),
+        detalles: detalles.length,
+        primerDetalle: detalles[0]
+      })
+    }
+    
+    return producto || {
+      id: productoId,
+      nombre: `Producto ${productoId}`,
+      especificacion: 'No disponible',
+      unidad_medida: 'N/A'
+    }
+  }
+
+  // Función para obtener nombre del usuario
+  const getUsuarioNombre = (usuarioId) => {
+    if (!usuarioId) return '-'
+    const usuario = usuarios.find(u => u.id === usuarioId)
+    return usuario ? `${usuario.nombre} - ${usuario.rol}` : usuarioId
+  }
+
   const formatDate = (dateString) => {
     if (!dateString) return '-'
     try {
@@ -24,26 +76,37 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
   }
 
   return (
-    <Modal onClose={onClose}>
-      <div className="max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-3xl shadow-card-hover max-w-6xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-light-blue p-6 rounded-t-2xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-white">Detalle de Transferencia</h2>
-              <p className="text-white/90">ID: #{transferencia.id}</p>
+        <div className="relative overflow-hidden bg-gradient-ocean p-6">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16"></div>
+          <div className="relative z-10">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-white">Detalle de Movimiento</h2>
+                <p className="text-white/90 mt-1">ID: #{transferencia.id}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className={`px-4 py-2 rounded-full text-sm font-semibold ${
+                  transferencia.estado === 'PENDIENTE' 
+                    ? 'bg-yellow-500 text-white' 
+                    : 'bg-green-500 text-white'
+                }`}>
+                  {transferencia.estado}
+                </span>
+                <button
+                  onClick={onClose}
+                  className="p-2 hover:bg-white/20 rounded-xl transition-colors"
+                >
+                  <X className="text-white" size={24} />
+                </button>
+              </div>
             </div>
-            <span className={`px-4 py-2 rounded-full text-sm font-semibold ${
-              transferencia.estado === 'PENDIENTE' 
-                ? 'bg-yellow-500 text-white' 
-                : 'bg-green-500 text-white'
-            }`}>
-              {transferencia.estado}
-            </span>
           </div>
         </div>
 
-        <div className="p-6 space-y-6 bg-white rounded-b-2xl">
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)] space-y-6">
           {/* Info General */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="flex items-start gap-3">
@@ -62,7 +125,7 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
               </div>
               <div>
                 <p className="text-sm text-slate-600">Creado por</p>
-                <p className="font-semibold text-slate-900">{transferencia.usuario_creacion_id || '-'}</p>
+                <p className="font-semibold text-slate-900">{getUsuarioNombre(transferencia.usuario_creacion_id)}</p>
               </div>
             </div>
 
@@ -84,7 +147,7 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
                   </div>
                   <div>
                     <p className="text-sm text-slate-600">Confirmado por</p>
-                    <p className="font-semibold text-slate-900">{transferencia.usuario_confirmacion_id || '-'}</p>
+                    <p className="font-semibold text-slate-900">{getUsuarioNombre(transferencia.usuario_confirmacion_id)}</p>
                   </div>
                 </div>
               </>
@@ -111,49 +174,72 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
 
           {/* Productos */}
           <div>
-            <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              <Package size={20} className="text-primary-600" />
-              Productos {detalles.length > 0 && `(${detalles.length} items)`}
+            <h3 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <Package size={24} className="text-primary-600" />
+              Productos Transferidos {detalles.length > 0 && `(${detalles.length} items)`}
             </h3>
 
             {isLoading ? (
-              <div className="py-8">
+              <div className="py-12">
                 <LoadingSpinner text="Cargando detalles..." />
               </div>
             ) : detalles.length === 0 ? (
-              <div className="text-center py-8 bg-slate-50 rounded-xl">
-                <Package size={48} className="mx-auto text-slate-300 mb-3" />
-                <p className="text-slate-600">No hay productos en este movimiento</p>
+              <div className="text-center py-12 bg-slate-50 rounded-xl">
+                <Package size={64} className="mx-auto text-slate-300 mb-4" />
+                <p className="text-slate-600 text-lg">No hay productos en este movimiento</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {detalles.map((detalle, index) => (
-                  <div key={index} className="p-4 bg-slate-50 rounded-xl">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3 flex-1">
-                        <div className="p-2 bg-primary-100 rounded-lg">
-                          <Package size={18} className="text-primary-600" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-slate-900">{detalle.producto_nombre || detalle.producto_id}</p>
-                          {detalle.producto_especificacion && (
-                            <p className="text-sm text-slate-600">{detalle.producto_especificacion}</p>
-                          )}
-                          <div className="flex gap-4 mt-2">
-                            <span className="text-sm text-slate-600">
-                              Cantidad: <span className="font-semibold text-slate-900">{detalle.cantidad}</span>
-                            </span>
-                            {detalle.unidad_medida && (
-                              <span className="text-sm text-slate-600">
-                                Unidad: <span className="font-semibold text-slate-900">{detalle.unidad_medida}</span>
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">ID Producto</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Nombre</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Especificación</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Unidad de Medida</th>
+                        <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700">Cantidad</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {detalles.map((detalle, index) => {
+                        const productoInfo = getProductoInfo(detalle.producto_id)
+                        return (
+                          <tr key={index} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <div className="p-2 bg-primary-100 rounded-lg">
+                                  <Package size={16} className="text-primary-600" />
+                                </div>
+                                <span className="font-mono text-sm font-medium text-slate-900">
+                                  {productoInfo.id}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <p className="font-semibold text-slate-900">{productoInfo.nombre}</p>
+                            </td>
+                            <td className="px-6 py-4">
+                              <p className="text-slate-700">
+                                {productoInfo.especificacion || <span className="text-slate-400 italic">Sin especificación</span>}
+                              </p>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                                {productoInfo.unidad_medida || 'N/A'}
                               </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <span className="text-lg font-bold text-primary-600">
+                                {detalle.cantidad}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
@@ -182,7 +268,7 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
 
           {/* Botones */}
           <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="ghost" onClick={onClose} className="flex-1">
               Cerrar
             </Button>
             {onConfirmar && transferencia.estado === 'PENDIENTE' && (
@@ -190,6 +276,7 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
                 variant="success"
                 onClick={onConfirmar}
                 loading={isConfirmando}
+                className="flex-1"
               >
                 {isConfirmando ? 'Confirmando...' : 'Confirmar Recepción'}
               </Button>
@@ -197,6 +284,6 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
           </div>
         </div>
       </div>
-    </Modal>
+    </div>
   )
 }

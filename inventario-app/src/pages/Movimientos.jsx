@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Package, Plus, ArrowRightLeft, Download, Filter, CheckCircle, Clock, XCircle } from 'lucide-react'
+import { Package, Plus, ArrowRightLeft, Download, Filter, CheckCircle, Clock, XCircle, Trash2 } from 'lucide-react'
 import Card from '../components/common/Card'
 import Table from '../components/common/Table'
 import Button from '../components/common/Button'
@@ -19,7 +19,7 @@ export default function Movimientos() {
   const [showDetail, setShowDetail] = useState(false)
   const [selectedMovimiento, setSelectedMovimiento] = useState(null)
 
-  const { user } = useAuthStore()
+  const { user, canDelete } = useAuthStore()
   const toast = useToastStore()
   const {
     movimientos,
@@ -28,7 +28,9 @@ export default function Movimientos() {
     isCreando,
     confirmarMovimiento,
     isConfirmando,
-    estadisticas
+    estadisticas,
+    eliminarMovimiento,
+    isEliminando
   } = useMovimientos()
 
   // Filtrar movimientos según el tab activo
@@ -65,14 +67,14 @@ export default function Movimientos() {
     },
     {
       header: 'Origen',
-      accessor: 'origen_id',
+      accessor: 'origen_nombre',
       render: (value) => (
         <span className="text-sm font-medium">{value}</span>
       )
     },
     {
       header: 'Destino',
-      accessor: 'destino_id',
+      accessor: 'destino_nombre',
       render: (value) => (
         <span className="text-sm font-medium">{value}</span>
       )
@@ -118,6 +120,16 @@ export default function Movimientos() {
           >
             Ver Detalle
           </Button>
+          {canDelete() && (
+            <button
+              onClick={() => handleEliminar(row)}
+              className="p-2 text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
+              title="Eliminar movimiento"
+              disabled={isEliminando}
+            >
+              <Trash2 size={18} />
+            </button>
+          )}
         </div>
       )
     }
@@ -155,6 +167,14 @@ export default function Movimientos() {
     }
 
     confirmarMovimiento(dataConfirmacion)
+  }
+
+  const handleEliminar = async (movimiento) => {
+    if (!window.confirm('¿Estás seguro de eliminar este movimiento? Esta acción no se puede deshacer.')) {
+      return
+    }
+
+    eliminarMovimiento(movimiento.id)
   }
 
   const handleVer = (movimiento) => {

@@ -1,11 +1,15 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
 import Input from '../common/Input'
-import Modal from '../common/Modal'
 import Alert from '../common/Alert'
-import { Search, Package, ArrowRight, AlertCircle } from 'lucide-react'
+import LoadingSpinner from '../common/LoadingSpinner'
+import { Search, Package, ArrowRight, AlertCircle, X } from 'lucide-react'
+import dataService from '../../services/dataService'
+import { useAuthStore } from '../../stores/authStore'
 
 export default function TransferenciaForm({ onClose, onSave, isLoading = false }) {
+  const { user } = useAuthStore()
   const [formData, setFormData] = useState({
     origen_id: '',
     destino_id: '',
@@ -15,18 +19,70 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
   const [selectedProductos, setSelectedProductos] = useState([])
   const [error, setError] = useState('')
 
-  // Mock products for demo
-  const mockProducts = [
-    { id: 1, nombre: 'Laptop Dell XPS', stock: 10 },
-    { id: 2, nombre: 'Mouse Logitech', stock: 25 },
-    { id: 3, nombre: 'Teclado Mecánico', stock: 15 },
-    { id: 4, nombre: 'Monitor 24"', stock: 8 },
-    { id: 5, nombre: 'Webcam HD', stock: 30 }
-  ]
+  // Cargar ubicaciones desde la base de datos
+  const { data: todasUbicaciones = [], isLoading: isLoadingUbicaciones } = useQuery({
+    queryKey: ['ubicaciones'],
+    queryFn: () => dataService.getUbicaciones()
+  })
 
-  const filteredProducts = mockProducts.filter(product =>
-    product.nombre.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Filtrar ubicaciones asignadas al usuario
+  const ubicaciones = todasUbicaciones.filter(ubicacion => {
+    if (!user?.ubicaciones_asignadas) return false
+    
+    let ubicacionIds = []
+    if (typeof user.ubicaciones_asignadas === 'string') {
+      try {
+        ubicacionIds = JSON.parse(user.ubicaciones_asignadas)
+      } catch {
+        ubicacionIds = user.ubicaciones_asignadas.split(',').map(id => id.trim().replace(/"/g, ''))
+      }
+    } else if (Array.isArray(user.ubicaciones_asignadas)) {
+      ubicacionIds = user.ubicaciones_asignadas
+    }
+    
+    return ubicacionIds.includes(ubicacion.id)
+  })
+
+  // Cargar productos desde la base de datos
+  const { data: productos = [], isLoading: isLoadingProductos } = useQuery({
+    queryKey: ['productos'],
+    queryFn: () => dataService.getProductos()
+  })
+
+  // Cargar inventario de la ubicación origen para obtener stock disponible
+  const { data: inventarioOrigen = [] } = useQuery({
+    queryKey: ['inventario', formData.origen_id],
+    queryFn: () => dataService.getInventario(formData.origen_id),
+    enabled: !!formData.origen_id
+  })
+
+  // Filtrar productos por búsqueda y agregar stock disponible
+  const filteredProducts = productos
+    .filter(product => {
+      // Verificar que el producto esté asignado a la ubicación de origen
+      if (!formData.origen_id) return false
+      
+      // product.ubicacion_id es un array de ubicaciones
+      const productUbicaciones = Array.isArray(product.ubicacion_id) 
+        ? product.ubicacion_id 
+        : (product.ubicacion_id ? product.ubicacion_id.split(',').map(id => id.trim()) : [])
+      
+      if (!productUbicaciones.includes(formData.origen_id)) return false
+      
+      // Filtrar por búsqueda
+      return product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(product.id).toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (product.especificacion && product.especificacion.toLowerCase().includes(searchTerm.toLowerCase()))
+    })
+    .map(product => {
+      // Convertir IDs a string para comparación
+      const inventarioItem = inventarioOrigen.find(inv => String(inv.producto_id) === String(product.id))
+      return {
+        ...product,
+        stock: inventarioItem?.stock_actual || 0
+      }
+    })
+    .filter(product => product.stock > 0)
 
   const handleAddProducto = (producto) => {
     if (!selectedProductos.find(p => p.id === producto.id)) {
@@ -80,15 +136,26 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
   }
 
   return (
-    <Modal onClose={onClose}>
-      <div className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-3xl shadow-card-hover max-w-4xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-light-blue p-6 rounded-t-2xl">
-          <h2 className="text-2xl font-bold text-white">Nuevo Movimiento</h2>
-          <p className="text-white/90">Registra el movimiento de productos entre ubicaciones</p>
+        <div className="relative overflow-hidden bg-gradient-ocean p-6">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16"></div>
+          <div className="relative z-10 flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-white">Nueva Transferencia</h2>
+              <p className="text-white/90">Crear movimiento entre ubicaciones</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-white/20 rounded-xl transition-colors"
+            >
+              <X className="text-white" size={24} />
+            </button>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 bg-white rounded-b-2xl">
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-200px)] space-y-6">
           {/* Error Alert */}
           {error && (
             <Alert type="error" className="mb-4">
@@ -100,43 +167,54 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
           )}
 
           {/* Ubicaciones */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Ubicación Origen
-              </label>
-              <select
-                value={formData.origen_id}
-                onChange={(e) => setFormData({ ...formData, origen_id: e.target.value })}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                required
-              >
-                <option value="">Seleccionar origen</option>
-                <option value="BOD001">Bodega Principal</option>
-                <option value="PV001">Punto de Venta 1</option>
-                <option value="PV002">Punto de Venta 2</option>
-                <option value="TDA001">Tienda Centro</option>
-              </select>
+          {isLoadingUbicaciones ? (
+            <div className="py-8">
+              <LoadingSpinner text="Cargando ubicaciones..." />
             </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Ubicación Origen
+                </label>
+                <select
+                  value={formData.origen_id}
+                  onChange={(e) => {
+                    setFormData({ ...formData, origen_id: e.target.value })
+                    setSelectedProductos([]) // Limpiar productos seleccionados al cambiar origen
+                  }}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  required
+                >
+                  <option value="">Seleccionar origen</option>
+                  {ubicaciones.map(ubicacion => (
+                    <option key={ubicacion.id} value={ubicacion.id}>
+                      {ubicacion.nombre} ({ubicacion.tipo})
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Ubicación Destino
-              </label>
-              <select
-                value={formData.destino_id}
-                onChange={(e) => setFormData({ ...formData, destino_id: e.target.value })}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                required
-              >
-                <option value="">Seleccionar destino</option>
-                <option value="BOD001">Bodega Principal</option>
-                <option value="PV001">Punto de Venta 1</option>
-                <option value="PV002">Punto de Venta 2</option>
-                <option value="TDA001">Tienda Centro</option>
-              </select>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Ubicación Destino
+                </label>
+                <select
+                  value={formData.destino_id}
+                  onChange={(e) => setFormData({ ...formData, destino_id: e.target.value })}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  required
+                >
+                  <option value="">Seleccionar destino</option>
+                  {ubicaciones.map(ubicacion => (
+                    <option key={ubicacion.id} value={ubicacion.id}>
+                      {ubicacion.nombre} ({ubicacion.tipo})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Buscar productos */}
           <div>
@@ -156,25 +234,44 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
 
             {/* Lista de productos */}
             {searchTerm && (
-              <div className="mt-3 max-h-40 overflow-y-auto border border-slate-200 rounded-xl">
-                {filteredProducts.map(product => (
-                  <div
-                    key={product.id}
-                    className="flex items-center justify-between p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-b-0"
-                    onClick={() => handleAddProducto(product)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Package size={20} className="text-primary-600" />
-                      <div>
-                        <p className="font-medium text-slate-900">{product.nombre}</p>
-                        <p className="text-sm text-slate-500">Stock: {product.stock}</p>
-                      </div>
-                    </div>
-                    <Button size="sm" variant="outline">
-                      Agregar
-                    </Button>
+              <div className="mt-3 max-h-60 overflow-y-auto border border-slate-200 rounded-xl">
+                {!formData.origen_id ? (
+                  <div className="p-4 text-center text-slate-600">
+                    <AlertCircle size={20} className="mx-auto mb-2" />
+                    <p className="text-sm">Selecciona una ubicación de origen primero</p>
                   </div>
-                ))}
+                ) : isLoadingProductos ? (
+                  <div className="p-4">
+                    <LoadingSpinner text="Cargando productos..." />
+                  </div>
+                ) : filteredProducts.length === 0 ? (
+                  <div className="p-4 text-center text-slate-600">
+                    <Package size={20} className="mx-auto mb-2" />
+                    <p className="text-sm">No se encontraron productos con stock disponible</p>
+                  </div>
+                ) : (
+                  filteredProducts.map(product => (
+                    <div
+                      key={product.id}
+                      className="flex items-center justify-between p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-b-0"
+                      onClick={() => handleAddProducto(product)}
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <Package size={20} className="text-primary-600 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-slate-900 truncate">{product.nombre}</p>
+                          <p className="text-xs text-slate-500 truncate">
+                            ID: {product.id} | {product.especificacion || 'Sin especificación'}
+                          </p>
+                          <p className="text-sm text-slate-600">Stock: {product.stock} {product.unidad_medida}</p>
+                        </div>
+                      </div>
+                      <Button size="sm" variant="outline" className="flex-shrink-0">
+                        Agregar
+                      </Button>
+                    </div>
+                  ))
+                )}
               </div>
             )}
           </div>
@@ -197,7 +294,8 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
                     <Package size={20} className="text-primary-600" />
                     <div className="flex-1">
                       <p className="font-medium text-slate-900">{producto.nombre}</p>
-                      <p className="text-sm text-slate-500">Stock disponible: {producto.stock}</p>
+                      <p className="text-xs text-slate-500">ID: {producto.id} | {producto.especificacion || 'Sin especificación'}</p>
+                      <p className="text-sm text-slate-600">Stock disponible: {producto.stock} {producto.unidad_medida}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <label className="text-sm text-slate-600">Cantidad:</label>
@@ -238,16 +336,27 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
           </div>
 
           {/* Botones */}
-          <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
-            <Button variant="outline" onClick={onClose} disabled={isLoading}>
+          <div className="flex gap-4 mt-8">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onClose}
+              className="flex-1"
+              disabled={isLoading}
+            >
               Cancelar
             </Button>
-            <Button type="submit" variant="primary" loading={isLoading}>
-              {isLoading ? 'Creando...' : 'Crear Movimiento'}
+            <Button
+              type="submit"
+              variant="primary"
+              loading={isLoading}
+              className="flex-1"
+            >
+              {isLoading ? 'Creando...' : 'Crear Transferencia'}
             </Button>
           </div>
         </form>
       </div>
-    </Modal>
+    </div>
   )
 }

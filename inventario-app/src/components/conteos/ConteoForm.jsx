@@ -1,10 +1,14 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
-import Modal from '../common/Modal'
 import Alert from '../common/Alert'
-import { Calendar, MapPin, AlertCircle } from 'lucide-react'
+import LoadingSpinner from '../common/LoadingSpinner'
+import { Calendar, MapPin, AlertCircle, X } from 'lucide-react'
+import dataService from '../../services/dataService'
+import { useAuthStore } from '../../stores/authStore'
 
 export default function ConteoForm({ onClose, onSave, isLoading = false }) {
+  const { user } = useAuthStore()
   const [formData, setFormData] = useState({
     fecha_programada: new Date().toISOString().split('T')[0],
     ubicacion_id: '',
@@ -12,6 +16,30 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
     observaciones: ''
   })
   const [error, setError] = useState('')
+
+  // Cargar ubicaciones desde la base de datos
+  const { data: todasUbicaciones = [], isLoading: isLoadingUbicaciones } = useQuery({
+    queryKey: ['ubicaciones'],
+    queryFn: () => dataService.getUbicaciones()
+  })
+
+  // Filtrar ubicaciones asignadas al usuario
+  const ubicaciones = todasUbicaciones.filter(ubicacion => {
+    if (!user?.ubicaciones_asignadas) return false
+    
+    let ubicacionIds = []
+    if (typeof user.ubicaciones_asignadas === 'string') {
+      try {
+        ubicacionIds = JSON.parse(user.ubicaciones_asignadas)
+      } catch {
+        ubicacionIds = user.ubicaciones_asignadas.split(',').map(id => id.trim().replace(/"/g, ''))
+      }
+    } else if (Array.isArray(user.ubicaciones_asignadas)) {
+      ubicacionIds = user.ubicaciones_asignadas
+    }
+    
+    return ubicacionIds.includes(ubicacion.id)
+  })
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -33,15 +61,26 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
   }
 
   return (
-    <Modal onClose={onClose}>
-      <div className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-3xl shadow-card-hover max-w-2xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-light-blue p-6 rounded-t-2xl">
-          <h2 className="text-2xl font-bold text-white">Programar Conteo</h2>
-          <p className="text-white/90">Crea un nuevo conteo de inventario</p>
+        <div className="relative overflow-hidden bg-gradient-ocean p-6">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16"></div>
+          <div className="relative z-10 flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-white">Programar Conteo</h2>
+              <p className="text-white/90">Crea un nuevo conteo de inventario</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-white/20 rounded-xl transition-colors"
+            >
+              <X className="text-white" size={24} />
+            </button>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 bg-white rounded-b-2xl">
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-200px)] space-y-6">
           {/* Error Alert */}
           {error && (
             <Alert type="error" className="mb-4">
@@ -73,18 +112,25 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
               <MapPin size={16} className="inline mr-2" />
               Ubicación
             </label>
-            <select
-              value={formData.ubicacion_id}
-              onChange={(e) => setFormData({ ...formData, ubicacion_id: e.target.value })}
-              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              required
-            >
-              <option value="">Seleccionar ubicación</option>
-              <option value="BOD001">Bodega Principal</option>
-              <option value="PV001">Punto de Venta 1</option>
-              <option value="PV002">Punto de Venta 2</option>
-              <option value="TDA001">Tienda Centro</option>
-            </select>
+            {isLoadingUbicaciones ? (
+              <div className="py-4">
+                <LoadingSpinner text="Cargando ubicaciones..." />
+              </div>
+            ) : (
+              <select
+                value={formData.ubicacion_id}
+                onChange={(e) => setFormData({ ...formData, ubicacion_id: e.target.value })}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                required
+              >
+                <option value="">Seleccionar ubicación</option>
+                {ubicaciones.map(ubicacion => (
+                  <option key={ubicacion.id} value={ubicacion.id}>
+                    {ubicacion.nombre} ({ubicacion.tipo})
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Tipo de Conteo */}
@@ -119,16 +165,27 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
           </div>
 
           {/* Botones */}
-          <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
-            <Button variant="outline" onClick={onClose} disabled={isLoading}>
+          <div className="flex gap-4 mt-8">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onClose}
+              className="flex-1"
+              disabled={isLoading}
+            >
               Cancelar
             </Button>
-            <Button type="submit" variant="primary" loading={isLoading}>
+            <Button
+              type="submit"
+              variant="primary"
+              loading={isLoading}
+              className="flex-1"
+            >
               {isLoading ? 'Programando...' : 'Programar Conteo'}
             </Button>
           </div>
         </form>
       </div>
-    </Modal>
+    </div>
   )
 }
