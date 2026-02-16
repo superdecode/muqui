@@ -1,0 +1,3 @@
+id,conteo_id,producto_id,cantidad_sistema,cantidad_fisica,diferencia,observaciones,contado
+DC001,CONT001,PROD002,8,10,2,Excedente,SI
+DC002,CONT001,PROD003,5,5,0,,SI

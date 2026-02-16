@@ -1,0 +1,9 @@
+id,nombre,empresa_id,direccion,responsable_id,tipo_ubicacion,estado,fecha_creacion
+LM001,Bodega Principal Corporativa,MK001,Dirección Bodega 1,USR001,BODEGA,ACTIVO,2025-01-01
+LM002,Bodega MK040,MK040,Dirección Bodega 2,USR006,BODEGA,ACTIVO,2025-01-01
+LM003,Bodega MK050,MK050,Dirección Bodega 3,USR007,BODEGA,ACTIVO,2025-01-01
+LM004,San Pedro Plaza,"MK010, MK001","Neiva, Huila",USR002,PUNTO_VENTA,ACTIVO,2025-01-01
+LM005,Santa Lucia,MK001,"Neiva, Huila",USR003,PUNTO_VENTA,ACTIVO,2025-01-01
+LM006,Unico,"MK010, MK001","Neiva, Huila",USR004,PUNTO_VENTA,ACTIVO,2025-01-01
+LM007,Megamall,MK040,"Bucaramanga, Stder",USR005,PUNTO_VENTA,ACTIVO,2025-01-01
+LM008,Cañaveral,MK050,"Floridablanca, Stder",USR006,PUNTO_VENTA,ACTIVO,2025-01-01

@@ -1,0 +1,2 @@
+id,tipo_movimiento,origen_id,destino_id,estado,usuario_creacion_id,usuario_confirmacion_id,fecha_creacion,fecha_confirmacion,fecha_limite_edicion,observaciones_creacion,observaciones_confirmacion
+MV001,TRANSFERENCIA,LM001,LM005,PENDIENTE,USR002,USR001,2025-01-15 09:00:00,2025-01-15 10:00:00,2025-01-15 23:59:59,Pedido semanal,

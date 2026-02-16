@@ -29,3 +29,6 @@ dist-ssr
 .env.production
 .vercel
 .env*.local
+
+# Firebase credentials
+serviceAccountKey.json

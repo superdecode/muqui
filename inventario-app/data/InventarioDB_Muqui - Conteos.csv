@@ -1,0 +1,2 @@
+id,ubicacion_id,tipo_ubicacion,tipo_conteo,estado,usuario_responsable_id,usuario_ejecutor_id,fecha_programada,fecha_inicio,fecha_completado,observaciones
+CONT001,LM004,PUNTO_VENTA,SEMANAL,PENDIENTE,USR003,USR001,2026-01-18,2026-01-18,2026-01-18,Conteo semanal rutinario

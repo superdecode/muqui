@@ -1,16 +1,63 @@
-// Firebase configuration (FASE 2 - Preparado para futuro)
+// Firebase configuration para Firestore
+import { initializeApp } from 'firebase/app'
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore'
+import { getAuth } from 'firebase/auth'
+
+// Configuración de Firebase (obtener desde Firebase Console)
 export const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "control-inventario-41bcd.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "control-inventario-41bcd",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "control-inventario-41bcd.appspot.com",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || ""
 }
 
-// Por ahora no se usa, preparado para FASE 2
+// Inicializar Firebase
+let app = null
+let db = null
+let auth = null
+
 export const initializeFirebase = () => {
-  // TODO: Implementar cuando se migre a Firebase
-  console.log('Firebase not configured yet')
-  return null
+  if (!app) {
+    try {
+      app = initializeApp(firebaseConfig)
+      db = getFirestore(app)
+      auth = getAuth(app)
+
+      // Usar emulador en desarrollo si está configurado
+      if (import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
+        connectFirestoreEmulator(db, 'localhost', 8080)
+        console.log('🔧 Firestore Emulator conectado')
+      }
+
+      console.log('✅ Firebase inicializado correctamente')
+    } catch (error) {
+      console.error('❌ Error inicializando Firebase:', error)
+      throw error
+    }
+  }
+  return { app, db, auth }
+}
+
+// Exportar instancias
+export const getFirebaseApp = () => {
+  if (!app) {
+    initializeFirebase()
+  }
+  return app
+}
+
+export const getDB = () => {
+  if (!db) {
+    initializeFirebase()
+  }
+  return db
+}
+
+export const getFirebaseAuth = () => {
+  if (!auth) {
+    initializeFirebase()
+  }
+  return auth
 }

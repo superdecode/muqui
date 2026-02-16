@@ -1,0 +1,10 @@
+id,email,password,nombre,rol,empresa_id,ubicaciones_asignadas,estado,fecha_creacion,nivel_permisos
+USR001,muqui.coo@gmail.com,temporal123,Administrador,ADMIN,"""MK001"", ""MK010""","LM001, LM002, LM003, LM004, LM005",ACTIVO,2025-01-01,1
+USR002,hola@muqui.co,temporal123,Gerente,GERENTE_OPERATIVO,EMP001,"LM001, LM002, LM003, LM004, LM005",ACTIVO,2025-01-01,2
+USR003,mk040@muqui.co,temporal123,Admin Franquicia MK040,ADMIN_EMPRESA,MK040,"""BOD002"",""PV004""",ACTIVO,2025-01-01,2
+USR004,mk050@muqui.co,temporal123,Admin Franquicia MK050,ADMIN_EMPRESA,MK050,"""BOD003"",""PV005""",ACTIVO,2025-01-01,2
+USR005,muquisanpedro@gmail.com,temporal123,Jefe Punto MK010,JEFE_PUNTO,MK010,"""PV001""",ACTIVO,2025-01-01,3
+USR006,muquisantalucia@gmail.com,temporal123,Jefe Punto MK020,JEFE_PUNTO,MK001,"""PV002""",ACTIVO,2025-01-01,3
+USR007,muquiunico@gmail.com,temporal123,Jefe Punto MK030,JEFE_PUNTO,MK010,"""PV003""",ACTIVO,2025-01-01,3
+USR008,,temporal123,Jefe Punto MK040,JEFE_PUNTO,MK040,"""PV004""",ACTIVO,2025-01-01,3
+USR009,,temporal123,Jefe Punto MK050,JEFE_PUNTO,MK050,"""PV005""",ACTIVO,2025-01-01,3

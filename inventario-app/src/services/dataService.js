@@ -6,6 +6,7 @@
 import api from './api'
 import * as googleSheetsAPI from './googleSheetsAPI'
 import localStorageService from './localStorageService'
+import firestoreService from './firestoreService'
 import {
   mockProductos,
   mockInventario,
@@ -19,6 +20,7 @@ import {
 
 const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true'
 const USE_GOOGLE_SHEETS = import.meta.env.VITE_USE_GOOGLE_SHEETS === 'true'
+const USE_FIRESTORE = import.meta.env.VITE_ENABLE_FIREBASE === 'true'
 
 /**
  * Genera un ID único
@@ -42,6 +44,10 @@ const dataService = {
       return mockEmpresas
     }
 
+    if (USE_FIRESTORE) {
+      return await firestoreService.getEmpresas()
+    }
+
     if (USE_GOOGLE_SHEETS) {
       return await googleSheetsAPI.getEmpresas()
     }
@@ -56,6 +62,10 @@ const dataService = {
       return mockUsers
     }
 
+    if (USE_FIRESTORE) {
+      return await firestoreService.getUsuarios()
+    }
+
     if (USE_GOOGLE_SHEETS) {
       return await googleSheetsAPI.getUsuarios()
     }
@@ -68,6 +78,10 @@ const dataService = {
     if (USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 300))
       return mockProductos
+    }
+
+    if (USE_FIRESTORE) {
+      return await firestoreService.getProductos()
     }
 
     if (USE_GOOGLE_SHEETS) {
@@ -105,6 +119,10 @@ const dataService = {
       return mockUbicaciones
     }
 
+    if (USE_FIRESTORE) {
+      return await firestoreService.getUbicaciones()
+    }
+
     if (USE_GOOGLE_SHEETS) {
       return await googleSheetsAPI.getUbicaciones()
     }
@@ -119,6 +137,10 @@ const dataService = {
       return ubicacionId
         ? mockInventario.filter(item => item.ubicacion_id === ubicacionId)
         : mockInventario
+    }
+
+    if (USE_FIRESTORE) {
+      return await firestoreService.getInventario(ubicacionId, tipoUbicacion)
     }
 
     if (USE_GOOGLE_SHEETS) {
@@ -154,6 +176,10 @@ const dataService = {
       return mockTransferencias
     }
 
+    if (USE_FIRESTORE) {
+      return await firestoreService.getMovimientos(ubicacionId)
+    }
+
     if (USE_GOOGLE_SHEETS) {
       const movimientos = await googleSheetsAPI.getMovimientos()
       const localMovimientos = localStorageService.getMovimientosLocal()
@@ -175,6 +201,10 @@ const dataService = {
       return []
     }
 
+    if (USE_FIRESTORE) {
+      return await firestoreService.getDetalleMovimientos(movimientoId)
+    }
+
     if (USE_GOOGLE_SHEETS) {
       const detalle = await googleSheetsAPI.getDetalleMovimientos()
       const localDetalle = localStorageService.getDetalleMovimientosLocal()
@@ -192,6 +222,10 @@ const dataService = {
     if (USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 400))
       return mockConteos
+    }
+
+    if (USE_FIRESTORE) {
+      return await firestoreService.getConteos(ubicacionId)
     }
 
     if (USE_GOOGLE_SHEETS) {
@@ -218,6 +252,10 @@ const dataService = {
       return []
     }
 
+    if (USE_FIRESTORE) {
+      return await firestoreService.getDetalleConteos(conteoId)
+    }
+
     if (USE_GOOGLE_SHEETS) {
       const detalle = await googleSheetsAPI.getDetalleConteos()
       const localDetalle = localStorageService.getDetalleConteosLocal()
@@ -237,6 +275,10 @@ const dataService = {
       return mockAlertas
     }
 
+    if (USE_FIRESTORE) {
+      return await firestoreService.getAlertas(usuarioId)
+    }
+
     if (USE_GOOGLE_SHEETS) {
       const alertas = await googleSheetsAPI.getAlertas()
       return usuarioId
@@ -251,9 +293,23 @@ const dataService = {
 
   // PRODUCTOS
   createProducto: async (productoData) => {
-    if (USE_MOCK_DATA || USE_GOOGLE_SHEETS) {
+    if (USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 500))
+      const nuevoProducto = {
+        id: generateId('PROD'),
+        ...productoData,
+        concatenado: `${productoData.nombre} ${productoData.especificacion || ''}`.trim(),
+        estado: productoData.estado || 'ACTIVO'
+      }
+      return { success: true, message: 'Producto creado exitosamente', data: nuevoProducto }
+    }
 
+    if (USE_FIRESTORE) {
+      return await firestoreService.createProducto(productoData)
+    }
+
+    if (USE_GOOGLE_SHEETS) {
+      await new Promise(resolve => setTimeout(resolve, 500))
       const nuevoProducto = {
         id: generateId('PROD'),
         nombre: productoData.nombre,
@@ -267,12 +323,10 @@ const dataService = {
         ubicacion_id: productoData.ubicacion_id || []
       }
 
-      if (USE_GOOGLE_SHEETS) {
-        // Guardar en localStorage
-        const localProductos = localStorageService.getProductosLocal()
-        localProductos.push(nuevoProducto)
-        localStorageService.saveProductosLocal(localProductos)
-      }
+      // Guardar en localStorage
+      const localProductos = localStorageService.getProductosLocal()
+      localProductos.push(nuevoProducto)
+      localStorageService.saveProductosLocal(localProductos)
 
       return { success: true, message: 'Producto creado exitosamente', data: nuevoProducto }
     }
@@ -281,57 +335,66 @@ const dataService = {
   },
 
   updateProducto: async (productoId, productoData) => {
-    if (USE_MOCK_DATA || USE_GOOGLE_SHEETS) {
+    if (USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 500))
+      return { success: true, message: 'Producto actualizado exitosamente' }
+    }
 
-      if (USE_GOOGLE_SHEETS) {
-        const localProductos = localStorageService.getProductosLocal()
-        const index = localProductos.findIndex(p => p.id === productoId)
+    if (USE_FIRESTORE) {
+      return await firestoreService.updateProducto(productoId, productoData)
+    }
 
-        const updatedProducto = {
-          ...productoData,
-          id: productoId,
-          concatenado: `${productoData.nombre} ${productoData.especificacion || ''}`.trim()
-        }
+    if (USE_GOOGLE_SHEETS) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      const localProductos = localStorageService.getProductosLocal()
+      const index = localProductos.findIndex(p => p.id === productoId)
 
-        if (index >= 0) {
-          localProductos[index] = updatedProducto
-        } else {
-          localProductos.push(updatedProducto)
-        }
-
-        localStorageService.saveProductosLocal(localProductos)
-        return { success: true, message: 'Producto actualizado exitosamente', data: updatedProducto }
+      const updatedProducto = {
+        ...productoData,
+        id: productoId,
+        concatenado: `${productoData.nombre} ${productoData.especificacion || ''}`.trim()
       }
 
-      return { success: true, message: 'Producto actualizado exitosamente' }
+      if (index >= 0) {
+        localProductos[index] = updatedProducto
+      } else {
+        localProductos.push(updatedProducto)
+      }
+
+      localStorageService.saveProductosLocal(localProductos)
+      return { success: true, message: 'Producto actualizado exitosamente', data: updatedProducto }
     }
 
     return await api.updateProducto(productoId, productoData)
   },
 
   deleteProducto: async (productoId) => {
-    if (USE_MOCK_DATA || USE_GOOGLE_SHEETS) {
+    if (USE_MOCK_DATA) {
       await new Promise(resolve => setTimeout(resolve, 500))
+      return { success: true, message: 'Producto eliminado exitosamente' }
+    }
 
-      if (USE_GOOGLE_SHEETS) {
-        const localProductos = localStorageService.getProductosLocal()
-        const sheetProductos = await googleSheetsAPI.getProductos()
-        const producto = sheetProductos.find(p => p.id === productoId)
+    if (USE_FIRESTORE) {
+      return await firestoreService.deleteProducto(productoId)
+    }
 
-        if (producto) {
-          // Marcar como eliminado
-          localProductos.push({ ...producto, estado: 'ELIMINADO' })
-        } else {
-          // Remover de locales
-          const filtered = localProductos.filter(p => p.id !== productoId)
-          localStorageService.saveProductosLocal(filtered)
-          return { success: true, message: 'Producto eliminado exitosamente' }
-        }
+    if (USE_GOOGLE_SHEETS) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      const localProductos = localStorageService.getProductosLocal()
+      const sheetProductos = await googleSheetsAPI.getProductos()
+      const producto = sheetProductos.find(p => p.id === productoId)
 
-        localStorageService.saveProductosLocal(localProductos)
+      if (producto) {
+        // Marcar como eliminado
+        localProductos.push({ ...producto, estado: 'ELIMINADO' })
+      } else {
+        // Remover de locales
+        const filtered = localProductos.filter(p => p.id !== productoId)
+        localStorageService.saveProductosLocal(filtered)
+        return { success: true, message: 'Producto eliminado exitosamente' }
       }
 
+      localStorageService.saveProductosLocal(localProductos)
       return { success: true, message: 'Producto eliminado exitosamente' }
     }
 
@@ -340,7 +403,22 @@ const dataService = {
 
   // TRANSFERENCIAS/MOVIMIENTOS
   createTransferencia: async (data) => {
-    if (USE_MOCK_DATA || USE_GOOGLE_SHEETS) {
+    if (USE_MOCK_DATA) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      const nuevoMovimiento = {
+        id: generateId('MV'),
+        ...data,
+        estado: 'PENDIENTE',
+        fecha_creacion: new Date().toISOString().split('T')[0]
+      }
+      return { success: true, message: 'Transferencia creada exitosamente', data: nuevoMovimiento }
+    }
+
+    if (USE_FIRESTORE) {
+      return await firestoreService.createTransferencia(data)
+    }
+
+    if (USE_GOOGLE_SHEETS) {
       await new Promise(resolve => setTimeout(resolve, 500))
 
       const nuevoMovimiento = {
@@ -359,25 +437,23 @@ const dataService = {
         productos: data.productos || []
       }
 
-      if (USE_GOOGLE_SHEETS) {
-        const localMovimientos = localStorageService.getMovimientosLocal()
-        localMovimientos.push(nuevoMovimiento)
-        localStorageService.saveMovimientosLocal(localMovimientos)
+      const localMovimientos = localStorageService.getMovimientosLocal()
+      localMovimientos.push(nuevoMovimiento)
+      localStorageService.saveMovimientosLocal(localMovimientos)
 
-        // Guardar detalles
-        if (data.productos && data.productos.length > 0) {
-          const localDetalle = localStorageService.getDetalleMovimientosLocal()
-          data.productos.forEach(prod => {
-            localDetalle.push({
-              id: generateId('DM'),
-              movimiento_id: nuevoMovimiento.id,
-              producto_id: prod.producto_id,
-              cantidad: prod.cantidad,
-              observaciones: prod.observaciones || ''
-            })
+      // Guardar detalles
+      if (data.productos && data.productos.length > 0) {
+        const localDetalle = localStorageService.getDetalleMovimientosLocal()
+        data.productos.forEach(prod => {
+          localDetalle.push({
+            id: generateId('DM'),
+            movimiento_id: nuevoMovimiento.id,
+            producto_id: prod.producto_id,
+            cantidad: prod.cantidad,
+            observaciones: prod.observaciones || ''
           })
-          localStorageService.saveDetalleMovimientosLocal(localDetalle)
-        }
+        })
+        localStorageService.saveDetalleMovimientosLocal(localDetalle)
       }
 
       return { success: true, message: 'Transferencia creada exitosamente', data: nuevoMovimiento }
@@ -387,41 +463,48 @@ const dataService = {
   },
 
   confirmarTransferencia: async (data) => {
-    if (USE_MOCK_DATA || USE_GOOGLE_SHEETS) {
+    if (USE_MOCK_DATA) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      return { success: true, message: 'Transferencia confirmada exitosamente' }
+    }
+
+    if (USE_FIRESTORE) {
+      return await firestoreService.confirmarTransferencia(data)
+    }
+
+    if (USE_GOOGLE_SHEETS) {
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      if (USE_GOOGLE_SHEETS) {
-        // Actualizar en localStorage
-        const localMovimientos = localStorageService.getMovimientosLocal()
-        const movimientoIndex = localMovimientos.findIndex(m => m.id === data.movimiento_id)
+      // Actualizar en localStorage
+      const localMovimientos = localStorageService.getMovimientosLocal()
+      const movimientoIndex = localMovimientos.findIndex(m => m.id === data.movimiento_id)
 
-        if (movimientoIndex >= 0) {
-          localMovimientos[movimientoIndex] = {
-            ...localMovimientos[movimientoIndex],
-            estado: 'CONFIRMADO',
-            fecha_confirmacion: new Date().toISOString().split('T')[0],
-            usuario_confirmacion_id: data.usuario_confirmacion_id,
-            observaciones_confirmacion: data.observaciones || ''
-          }
-          localStorageService.saveMovimientosLocal(localMovimientos)
-          console.log('Movimiento confirmado en localStorage:', localMovimientos[movimientoIndex])
-        } else {
-          console.warn('Movimiento no encontrado en localStorage:', data.movimiento_id)
+      if (movimientoIndex >= 0) {
+        localMovimientos[movimientoIndex] = {
+          ...localMovimientos[movimientoIndex],
+          estado: 'CONFIRMADO',
+          fecha_confirmacion: new Date().toISOString().split('T')[0],
+          usuario_confirmacion_id: data.usuario_confirmacion_id,
+          observaciones_confirmacion: data.observaciones || ''
         }
+        localStorageService.saveMovimientosLocal(localMovimientos)
+        console.log('Movimiento confirmado en localStorage:', localMovimientos[movimientoIndex])
+      } else {
+        console.warn('Movimiento no encontrado en localStorage:', data.movimiento_id)
+      }
 
-        // Enviar a Google Sheets para escritura
-        try {
-          await googleSheetsAPI.updateMovimiento({
-            id: data.movimiento_id,
-            estado: 'CONFIRMADO',
-            fecha_confirmacion: new Date().toISOString().split('T')[0],
-            usuario_confirmacion_id: data.usuario_confirmacion_id,
-            observaciones_confirmacion: data.observaciones || ''
-          })
-          console.log('Movimiento confirmado en Google Sheets')
-        } catch (error) {
-          console.error('Error actualizando en Google Sheets:', error)
-        }
+      // Enviar a Google Sheets para escritura
+      try {
+        await googleSheetsAPI.updateMovimiento({
+          id: data.movimiento_id,
+          estado: 'CONFIRMADO',
+          fecha_confirmacion: new Date().toISOString().split('T')[0],
+          usuario_confirmacion_id: data.usuario_confirmacion_id,
+          observaciones_confirmacion: data.observaciones || ''
+        })
+        console.log('Movimiento confirmado en Google Sheets')
+      } catch (error) {
+        console.error('Error actualizando en Google Sheets:', error)
       }
 
       return { success: true, message: 'Transferencia confirmada exitosamente' }
@@ -431,23 +514,30 @@ const dataService = {
   },
 
   deleteMovimiento: async (movimientoId) => {
-    if (USE_MOCK_DATA || USE_GOOGLE_SHEETS) {
+    if (USE_MOCK_DATA) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      return { success: true, message: 'Movimiento eliminado exitosamente' }
+    }
+
+    if (USE_FIRESTORE) {
+      return await firestoreService.deleteMovimiento(movimientoId)
+    }
+
+    if (USE_GOOGLE_SHEETS) {
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      if (USE_GOOGLE_SHEETS) {
-        // Eliminar de localStorage
-        const localMovimientos = localStorageService.getMovimientosLocal()
-        const filteredMovimientos = localMovimientos.filter(m => m.id !== movimientoId)
-        localStorageService.saveMovimientosLocal(filteredMovimientos)
-        console.log('Movimiento eliminado de localStorage:', movimientoId)
+      // Eliminar de localStorage
+      const localMovimientos = localStorageService.getMovimientosLocal()
+      const filteredMovimientos = localMovimientos.filter(m => m.id !== movimientoId)
+      localStorageService.saveMovimientosLocal(filteredMovimientos)
+      console.log('Movimiento eliminado de localStorage:', movimientoId)
 
-        // Enviar a Google Sheets para eliminación
-        try {
-          await googleSheetsAPI.deleteMovimiento(movimientoId)
-          console.log('Movimiento eliminado en Google Sheets')
-        } catch (error) {
-          console.error('Error eliminando en Google Sheets:', error)
-        }
+      // Enviar a Google Sheets para eliminación
+      try {
+        await googleSheetsAPI.deleteMovimiento(movimientoId)
+        console.log('Movimiento eliminado en Google Sheets')
+      } catch (error) {
+        console.error('Error eliminando en Google Sheets:', error)
       }
 
       return { success: true, message: 'Movimiento eliminado exitosamente' }
@@ -457,23 +547,30 @@ const dataService = {
   },
 
   deleteConteo: async (conteoId) => {
-    if (USE_MOCK_DATA || USE_GOOGLE_SHEETS) {
+    if (USE_MOCK_DATA) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      return { success: true, message: 'Conteo eliminado exitosamente' }
+    }
+
+    if (USE_FIRESTORE) {
+      return await firestoreService.deleteConteo(conteoId)
+    }
+
+    if (USE_GOOGLE_SHEETS) {
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      if (USE_GOOGLE_SHEETS) {
-        // Eliminar de localStorage
-        const localConteos = localStorageService.getConteosLocal()
-        const filteredConteos = localConteos.filter(c => c.id !== conteoId)
-        localStorageService.saveConteosLocal(filteredConteos)
-        console.log('Conteo eliminado de localStorage:', conteoId)
+      // Eliminar de localStorage
+      const localConteos = localStorageService.getConteosLocal()
+      const filteredConteos = localConteos.filter(c => c.id !== conteoId)
+      localStorageService.saveConteosLocal(filteredConteos)
+      console.log('Conteo eliminado de localStorage:', conteoId)
 
-        // Enviar a Google Sheets para eliminación
-        try {
-          await googleSheetsAPI.deleteConteo(conteoId)
-          console.log('Conteo eliminado en Google Sheets')
-        } catch (error) {
-          console.error('Error eliminando en Google Sheets:', error)
-        }
+      // Enviar a Google Sheets para eliminación
+      try {
+        await googleSheetsAPI.deleteConteo(conteoId)
+        console.log('Conteo eliminado en Google Sheets')
+      } catch (error) {
+        console.error('Error eliminando en Google Sheets:', error)
       }
 
       return { success: true, message: 'Conteo eliminado exitosamente' }
@@ -484,7 +581,21 @@ const dataService = {
 
   // CONTEOS
   createConteo: async (data) => {
-    if (USE_MOCK_DATA || USE_GOOGLE_SHEETS) {
+    if (USE_MOCK_DATA) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      const nuevoConteo = {
+        id: generateId('CONT'),
+        ...data,
+        estado: 'PENDIENTE'
+      }
+      return { success: true, message: 'Conteo programado exitosamente', data: nuevoConteo }
+    }
+
+    if (USE_FIRESTORE) {
+      return await firestoreService.createConteo(data)
+    }
+
+    if (USE_GOOGLE_SHEETS) {
       await new Promise(resolve => setTimeout(resolve, 500))
 
       const nuevoConteo = {
@@ -501,11 +612,9 @@ const dataService = {
         observaciones: data.observaciones || ''
       }
 
-      if (USE_GOOGLE_SHEETS) {
-        const localConteos = localStorageService.getConteosLocal()
-        localConteos.push(nuevoConteo)
-        localStorageService.saveConteosLocal(localConteos)
-      }
+      const localConteos = localStorageService.getConteosLocal()
+      localConteos.push(nuevoConteo)
+      localStorageService.saveConteosLocal(localConteos)
 
       return { success: true, message: 'Conteo programado exitosamente', data: nuevoConteo }
     }
@@ -514,37 +623,44 @@ const dataService = {
   },
 
   ejecutarConteo: async (data) => {
-    if (USE_MOCK_DATA || USE_GOOGLE_SHEETS) {
+    if (USE_MOCK_DATA) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      return { success: true, message: 'Conteo ejecutado exitosamente' }
+    }
+
+    if (USE_FIRESTORE) {
+      return await firestoreService.ejecutarConteo(data)
+    }
+
+    if (USE_GOOGLE_SHEETS) {
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      if (USE_GOOGLE_SHEETS) {
-        const localConteos = localStorageService.getConteosLocal()
-        const conteo = localConteos.find(c => c.id === data.conteo_id)
+      const localConteos = localStorageService.getConteosLocal()
+      const conteo = localConteos.find(c => c.id === data.conteo_id)
 
-        if (conteo) {
-          conteo.estado = 'COMPLETADO'
-          conteo.fecha_completado = new Date().toISOString().split('T')[0]
-          conteo.usuario_ejecutor_id = data.usuario_ejecutor_id
-          localStorageService.saveConteosLocal(localConteos)
-        }
+      if (conteo) {
+        conteo.estado = 'COMPLETADO'
+        conteo.fecha_completado = new Date().toISOString().split('T')[0]
+        conteo.usuario_ejecutor_id = data.usuario_ejecutor_id
+        localStorageService.saveConteosLocal(localConteos)
+      }
 
-        // Guardar detalles del conteo
-        if (data.productos && data.productos.length > 0) {
-          const localDetalle = localStorageService.getDetalleConteosLocal()
-          data.productos.forEach(prod => {
-            localDetalle.push({
-              id: generateId('DC'),
-              conteo_id: data.conteo_id,
-              producto_id: prod.producto_id,
-              cantidad_sistema: prod.cantidad_sistema,
-              cantidad_fisica: prod.cantidad_fisica,
-              diferencia: prod.cantidad_fisica - prod.cantidad_sistema,
-              observaciones: prod.observaciones || '',
-              contado: true
-            })
+      // Guardar detalles del conteo
+      if (data.productos && data.productos.length > 0) {
+        const localDetalle = localStorageService.getDetalleConteosLocal()
+        data.productos.forEach(prod => {
+          localDetalle.push({
+            id: generateId('DC'),
+            conteo_id: data.conteo_id,
+            producto_id: prod.producto_id,
+            cantidad_sistema: prod.cantidad_sistema,
+            cantidad_fisica: prod.cantidad_fisica,
+            diferencia: prod.cantidad_fisica - prod.cantidad_sistema,
+            observaciones: prod.observaciones || '',
+            contado: true
           })
-          localStorageService.saveDetalleConteosLocal(localDetalle)
-        }
+        })
+        localStorageService.saveDetalleConteosLocal(localDetalle)
       }
 
       return { success: true, message: 'Conteo ejecutado exitosamente' }
@@ -555,30 +671,37 @@ const dataService = {
 
   // INVENTARIO
   ajustarInventario: async (data) => {
-    if (USE_MOCK_DATA || USE_GOOGLE_SHEETS) {
+    if (USE_MOCK_DATA) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      return { success: true, message: 'Inventario ajustado exitosamente' }
+    }
+
+    if (USE_FIRESTORE) {
+      return await firestoreService.ajustarInventario(data)
+    }
+
+    if (USE_GOOGLE_SHEETS) {
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      if (USE_GOOGLE_SHEETS) {
-        const localInventario = localStorageService.getInventarioLocal()
-        const item = localInventario.find(i =>
-          i.producto_id === data.producto_id && i.ubicacion_id === data.ubicacion_id
-        )
+      const localInventario = localStorageService.getInventarioLocal()
+      const item = localInventario.find(i =>
+        i.producto_id === data.producto_id && i.ubicacion_id === data.ubicacion_id
+      )
 
-        if (item) {
-          item.stock_actual = data.nuevo_stock
-          item.ultima_actualizacion = new Date().toISOString()
-        } else {
-          localInventario.push({
-            id: generateId('INV'),
-            producto_id: data.producto_id,
-            ubicacion_id: data.ubicacion_id,
-            stock_actual: data.nuevo_stock,
-            ultima_actualizacion: new Date().toISOString()
-          })
-        }
-
-        localStorageService.saveInventarioLocal(localInventario)
+      if (item) {
+        item.stock_actual = data.nuevo_stock
+        item.ultima_actualizacion = new Date().toISOString()
+      } else {
+        localInventario.push({
+          id: generateId('INV'),
+          producto_id: data.producto_id,
+          ubicacion_id: data.ubicacion_id,
+          stock_actual: data.nuevo_stock,
+          ultima_actualizacion: new Date().toISOString()
+        })
       }
+
+      localStorageService.saveInventarioLocal(localInventario)
 
       return { success: true, message: 'Inventario ajustado exitosamente' }
     }

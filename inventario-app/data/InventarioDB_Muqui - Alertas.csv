@@ -1,0 +1,2 @@
+id,tipo,prioridad,entidad_relacionada_id,tipo_entidad,ubicacion_id,mensaje,estado,usuarios_notificados,fecha_creacion,fecha_resolucion
+ALERT001,TRANSFERENCIA_SIN_CONFIRMAR,MEDIA,TRANS001,TRANSFERENCIA,PV001,Transferencia TRANS001 pendiente de confirmación,ACTIVA,"[""USR003""]",2025-01-15 09:00:00,

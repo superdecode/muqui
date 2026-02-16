@@ -1,0 +1,3 @@
+id,movimiento_id,id_producto,cantidad,estado,fecha_creacion,observacion
+DT001,MV001,PROD001,10,PENDIENTE,2026-01-15 9:00:00,Pedido semanal
+DT002,MV001,PROD002,10,PENDIENTE,2026-01-15 9:00:00,Pedido semanal
