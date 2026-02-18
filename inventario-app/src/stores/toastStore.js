@@ -1,65 +1,69 @@
 import { create } from 'zustand'
 
-/**
- * Store para manejar notificaciones toast
- */
-export const useToastStore = create((set, get) => ({
+let toastCounter = 0
+
+export const useToastStore = create((set) => ({
   toasts: [],
 
-  // Agregar un toast
   addToast: (toast) => {
-    const id = Date.now() + Math.random()
+    const id = ++toastCounter
+    const duration = toast.duration ?? (toast.type === 'error' ? 5000 : toast.type === 'warning' ? 4000 : 3000)
+
     const newToast = {
       id,
-      type: toast.type || 'info', // success, error, warning, info
+      type: toast.type || 'info',
       title: toast.title,
       message: toast.message,
-      duration: toast.duration || 5000,
-      ...toast
+      duration,
+      isClosing: false
     }
 
-    set((state) => ({
-      toasts: [...state.toasts, newToast]
-    }))
+    set((state) => ({ toasts: [...state.toasts, newToast] }))
 
-    // Auto-remove después del duration
-    if (newToast.duration > 0) {
+    if (duration > 0) {
       setTimeout(() => {
-        get().removeToast(id)
-      }, newToast.duration)
+        set((state) => ({
+          toasts: state.toasts.map((t) => t.id === id ? { ...t, isClosing: true } : t)
+        }))
+        setTimeout(() => {
+          set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }))
+        }, 300)
+      }, duration)
     }
 
     return id
   },
 
-  // Remover un toast
   removeToast: (id) => {
     set((state) => ({
-      toasts: state.toasts.filter((toast) => toast.id !== id)
+      toasts: state.toasts.map((t) => t.id === id ? { ...t, isClosing: true } : t)
     }))
+    setTimeout(() => {
+      set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }))
+    }, 300)
   },
 
-  // Atajos para tipos comunes
   success: (title, message, duration) => {
-    return get().addToast({ type: 'success', title, message, duration })
+    const store = useToastStore.getState()
+    return store.addToast({ type: 'success', title, message, duration })
   },
 
   error: (title, message, duration) => {
-    return get().addToast({ type: 'error', title, message, duration })
+    const store = useToastStore.getState()
+    return store.addToast({ type: 'error', title, message, duration })
   },
 
   warning: (title, message, duration) => {
-    return get().addToast({ type: 'warning', title, message, duration })
+    const store = useToastStore.getState()
+    return store.addToast({ type: 'warning', title, message, duration })
   },
 
   info: (title, message, duration) => {
-    return get().addToast({ type: 'info', title, message, duration })
+    const store = useToastStore.getState()
+    return store.addToast({ type: 'info', title, message, duration })
   },
 
-  // Limpiar todos
-  clearAll: () => {
-    set({ toasts: [] })
-  }
+  clearAll: () => set({ toasts: [] })
 }))
 
 export default useToastStore

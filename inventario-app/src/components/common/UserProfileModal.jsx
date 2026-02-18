@@ -1,9 +1,11 @@
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import LoadingSpinner from './LoadingSpinner'
 import { Building2, MapPin, User, Shield, Calendar, X } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import dataService from '../../services/dataService'
+import { getUserAllowedUbicacionIds, getUserAllowedEmpresaIds } from '../../utils/userFilters'
 
 export default function UserProfileModal({ user, isOpen, onClose }) {
   // Cargar empresas desde la base de datos
@@ -20,58 +22,21 @@ export default function UserProfileModal({ user, isOpen, onClose }) {
     enabled: isOpen
   })
 
-  // Obtener empresas asignadas al usuario
-  const getEmpresasAsignadas = () => {
-    if (!user?.empresa_id) return []
-    
-    // Parsear empresa_id que puede ser un string con múltiples IDs separados por comas
-    const empresaIds = typeof user.empresa_id === 'string' 
-      ? user.empresa_id.split(',').map(id => id.trim().replace(/"/g, ''))
-      : Array.isArray(user.empresa_id) 
-      ? user.empresa_id 
-      : [user.empresa_id]
-    
+  // Obtener empresas asignadas usando utilidad con memoización
+  const empresasAsignadas = useMemo(() => {
+    if (!empresas || empresas.length === 0) return []
+    if (user?.rol === 'ADMIN_GLOBAL') return empresas
+    const empresaIds = getUserAllowedEmpresaIds(user)
     return empresas.filter(empresa => empresaIds.includes(empresa.id))
-  }
+  }, [user, empresas])
 
-  // Obtener ubicaciones asignadas al usuario
-  const getUbicacionesAsignadas = () => {
-    console.log('UserProfileModal - Datos del usuario:', {
-      user,
-      ubicaciones_asignadas: user?.ubicaciones_asignadas,
-      tipo: typeof user?.ubicaciones_asignadas,
-      totalUbicaciones: ubicaciones.length,
-      primeras3Ubicaciones: ubicaciones.slice(0, 3).map(u => u.id)
-    })
-
-    if (!user?.ubicaciones_asignadas) {
-      console.log('UserProfileModal: No hay ubicaciones_asignadas en user')
-      return []
-    }
-    
-    // Parsear ubicaciones_asignadas que puede ser string o array
-    let ubicacionIds = []
-    if (typeof user.ubicaciones_asignadas === 'string') {
-      // Puede ser "UB001, UB002" o '["UB001", "UB002"]'
-      try {
-        ubicacionIds = JSON.parse(user.ubicaciones_asignadas)
-      } catch {
-        ubicacionIds = user.ubicaciones_asignadas.split(',').map(id => id.trim().replace(/"/g, ''))
-      }
-    } else if (Array.isArray(user.ubicaciones_asignadas)) {
-      ubicacionIds = user.ubicaciones_asignadas
-    }
-    
-    console.log('UserProfileModal - IDs parseados:', ubicacionIds)
-    
-    const ubicacionesEncontradas = ubicaciones.filter(ubicacion => 
-      ubicacionIds.includes(ubicacion.id)
-    )
-    
-    console.log('UserProfileModal - Ubicaciones encontradas:', ubicacionesEncontradas.length)
-    
-    return ubicacionesEncontradas
-  }
+  // Obtener ubicaciones asignadas usando utilidad con memoización
+  const ubicacionesAsignadas = useMemo(() => {
+    if (!ubicaciones || ubicaciones.length === 0) return []
+    if (user?.rol === 'ADMIN_GLOBAL') return ubicaciones
+    const ubicacionIds = getUserAllowedUbicacionIds(user, ubicaciones, empresas)
+    return ubicaciones.filter(ubicacion => ubicacionIds.includes(ubicacion.id))
+  }, [user, ubicaciones, empresas])
 
   const getRoleLabel = (rol) => {
     const roles = {
@@ -92,9 +57,6 @@ export default function UserProfileModal({ user, isOpen, onClose }) {
       return '-'
     }
   }
-
-  const empresasAsignadas = getEmpresasAsignadas()
-  const ubicacionesAsignadas = getUbicacionesAsignadas()
 
   if (!isOpen) return null
 

@@ -23,7 +23,8 @@ export const useConteos = (ubicacionId) => {
   } = useQuery({
     queryKey: ['conteos', ubicacionId],
     queryFn: async () => {
-      const conteos = await dataService.getConteos(ubicacionId)
+      // Convertir undefined a null para evitar errores en Firestore
+      const conteos = await dataService.getConteos(ubicacionId || null)
       const ubicacionesData = await dataService.getUbicaciones()
       
       // Agregar nombres de ubicación
@@ -40,8 +41,8 @@ export const useConteos = (ubicacionId) => {
       return await dataService.createConteo(data)
     },
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['conteos'])
-      queryClient.invalidateQueries(['alertas'])
+      queryClient.invalidateQueries({ queryKey: ['conteos'] })
+      queryClient.invalidateQueries({ queryKey: ['alertas'] })
       toast.success(
         'Conteo Programado',
         response.message || 'El conteo se ha programado exitosamente'
@@ -55,15 +56,29 @@ export const useConteos = (ubicacionId) => {
     }
   })
 
+  // Iniciar conteo (PENDIENTE -> EN_PROGRESO)
+  const iniciarConteo = useMutation({
+    mutationFn: async ({ conteoId, usuarioId }) => {
+      return await dataService.iniciarConteo(conteoId, usuarioId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conteos'] })
+      toast.success('Conteo Iniciado', 'El conteo está ahora en progreso')
+    },
+    onError: (error) => {
+      toast.error('Error al Iniciar Conteo', error.message || 'No se pudo iniciar el conteo.')
+    }
+  })
+
   // Ejecutar conteo (completar)
   const ejecutarConteo = useMutation({
     mutationFn: async (data) => {
       return await dataService.ejecutarConteo(data)
     },
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['conteos'])
-      queryClient.invalidateQueries(['inventario'])
-      queryClient.invalidateQueries(['alertas'])
+      queryClient.invalidateQueries({ queryKey: ['conteos'] })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
+      queryClient.invalidateQueries({ queryKey: ['alertas'] })
       toast.success(
         'Conteo Completado',
         response.message || 'El conteo se ha ejecutado exitosamente'
@@ -83,8 +98,8 @@ export const useConteos = (ubicacionId) => {
       return await dataService.deleteConteo(conteoId)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['conteos'])
-      queryClient.invalidateQueries(['inventario'])
+      queryClient.invalidateQueries({ queryKey: ['conteos'] })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
       toast.success(
         'Conteo Eliminado',
         'El conteo se ha eliminado exitosamente'
@@ -102,7 +117,7 @@ export const useConteos = (ubicacionId) => {
   const getEstadisticas = () => {
     const pendientes = conteosConNombres.filter(c => c.estado === 'PENDIENTE').length
     const enProgreso = conteosConNombres.filter(c => c.estado === 'EN_PROGRESO').length
-    const completados = conteosConNombres.filter(c => c.estado === 'COMPLETADO').length
+    const completados = conteosConNombres.filter(c => c.estado === 'COMPLETADO' || c.estado === 'PARCIALMENTE_COMPLETADO').length
     const total = conteosConNombres.length
 
     return {
@@ -121,6 +136,8 @@ export const useConteos = (ubicacionId) => {
     refetch,
     crearConteo: crearConteo.mutate,
     isCreando: crearConteo.isPending,
+    iniciarConteo: iniciarConteo.mutate,
+    isIniciando: iniciarConteo.isPending,
     ejecutarConteo: ejecutarConteo.mutate,
     isEjecutando: ejecutarConteo.isPending,
     eliminarConteo: eliminarConteo.mutate,

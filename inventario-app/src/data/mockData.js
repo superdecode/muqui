@@ -315,6 +315,36 @@ export const mockTransferencias = [
     productos: [
       { nombre: 'NATA DE COCO', cantidad: 5 }
     ]
+  },
+  {
+    id: 'MV003',
+    tipo_movimiento: 'TRANSFERENCIA',
+    origen_id: 'LM001',
+    destino_id: 'LM006',
+    estado: 'CANCELADA',
+    usuario_creacion_id: 'USR002',
+    fecha_creacion: new Date(Date.now() - 172800000).toISOString(),
+    observaciones_creacion: 'Transferencia cancelada por falta de inventario',
+    total_productos: 1,
+    productos: [
+      { nombre: 'CAFÉ', cantidad: 8 }
+    ]
+  },
+  {
+    id: 'MV004',
+    tipo_movimiento: 'TRANSFERENCIA',
+    origen_id: 'LM001',
+    destino_id: 'LM007',
+    estado: 'PENDIENTE',
+    usuario_creacion_id: 'USR001',
+    fecha_creacion: new Date(Date.now() - 259200000).toISOString(),
+    observaciones_creacion: 'Pedido especial',
+    total_productos: 3,
+    productos: [
+      { nombre: 'LÁCTEOS', cantidad: 12 },
+      { nombre: 'TOPPINGS', cantidad: 6 },
+      { nombre: 'OTROS', cantidad: 4 }
+    ]
   }
 ]
 

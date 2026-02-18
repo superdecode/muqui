@@ -5,7 +5,7 @@ import authService from '../services/authService'
 import Button from '../components/common/Button'
 import Input from '../components/common/Input'
 import Alert from '../components/common/Alert'
-import { Sparkles, Package, Lock } from 'lucide-react'
+import { Sparkles, Package, Lock, Eye, EyeOff } from 'lucide-react'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -17,7 +17,7 @@ export default function Login() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-
+  const [showPassword, setShowPassword] = useState(false)
   const handleChange = (e) => {
     setFormData({
       ...formData,
@@ -32,15 +32,20 @@ export default function Login() {
     setError('')
 
     try {
+      console.log('Intentando login con:', formData.email)
       const result = await authService.login(formData.email, formData.password)
 
+      console.log('Resultado del login:', { success: result.success, message: result.message })
+
       if (result.success) {
-        login(result.user, result.token)
+        login(result.user, result.token, result.role || null)
         navigate('/')
       } else {
+        console.log('Login fallido, mostrando error:', result.message)
         setError(result.message || 'Error al iniciar sesión')
       }
     } catch (err) {
+      console.error('Error inesperado en login:', err)
       setError('Error de conexión. Por favor intenta nuevamente.')
     } finally {
       setLoading(false)
@@ -58,7 +63,7 @@ export default function Login() {
 
       <div className="w-full max-w-md relative z-10">
         {/* Card */}
-        <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-card-hover p-8 border border-white/20">
+        <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl rounded-3xl shadow-card-hover p-8 border border-white/20 dark:border-slate-700/50">
           {/* Logo and title */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-ocean rounded-2xl shadow-glow mb-4">
@@ -67,7 +72,7 @@ export default function Login() {
             <h1 className="text-3xl font-bold bg-gradient-ocean bg-clip-text text-transparent mb-2">
               Sistema de Control Inventario
             </h1>
-            <p className="text-slate-600 flex items-center justify-center gap-2">
+            <p className="text-slate-600 dark:text-slate-400 flex items-center justify-center gap-2">
               <Sparkles size={16} className="text-primary-500" />
               Multi-tienda Muqui
             </p>
@@ -75,7 +80,7 @@ export default function Login() {
 
           {/* Error Alert */}
           {error && (
-            <Alert type="error" className="mb-6">
+            <Alert type="error" className="mb-6" autoClose={false}>
               {error}
             </Alert>
           )}
@@ -96,13 +101,21 @@ export default function Login() {
             <div className="relative">
               <Input
                 label="Contraseña"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
                 placeholder="••••••••"
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-[38px] p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
 
             <Button
@@ -116,27 +129,6 @@ export default function Login() {
             </Button>
           </form>
 
-          {/* Demo Credentials */}
-          <div className="mt-8 p-4 bg-gradient-to-r from-primary-50 to-secondary-50 rounded-2xl border border-primary-100">
-            <p className="text-xs font-semibold text-primary-700 mb-3 flex items-center gap-2">
-              <Sparkles size={14} />
-              Credenciales de Prueba
-            </p>
-            <div className="space-y-2 text-xs text-slate-600">
-              <div className="flex justify-between items-center p-2 bg-white/50 rounded-lg">
-                <span className="font-medium">Admin:</span>
-                <code className="bg-primary-100 px-2 py-1 rounded text-primary-700">muqui.coo@gmail.com</code>
-              </div>
-              <div className="flex justify-between items-center p-2 bg-white/50 rounded-lg">
-                <span className="font-medium">Gerente:</span>
-                <code className="bg-secondary-100 px-2 py-1 rounded text-secondary-700">gerente@muqui.com</code>
-              </div>
-              <div className="flex justify-between items-center p-2 bg-white/50 rounded-lg">
-                <span className="font-medium">Contraseña:</span>
-                <code className="bg-accent-100 px-2 py-1 rounded text-accent-700">temporal123</code>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Footer */}

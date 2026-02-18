@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -107,6 +108,8 @@ export default {
         'gradient': 'gradient 8s linear infinite',
         'shimmer': 'shimmer 2s linear infinite',
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'slide-in-right': 'slideInRight 0.3s ease-out forwards',
+        'slide-out-right': 'slideOutRight 0.3s ease-in forwards',
       },
       keyframes: {
         float: {
@@ -120,6 +123,14 @@ export default {
         shimmer: {
           '0%': { 'background-position': '-1000px 0' },
           '100%': { 'background-position': '1000px 0' },
+        },
+        slideInRight: {
+          '0%': { transform: 'translateX(100%)', opacity: '0' },
+          '100%': { transform: 'translateX(0)', opacity: '1' },
+        },
+        slideOutRight: {
+          '0%': { transform: 'translateX(0)', opacity: '1' },
+          '100%': { transform: 'translateX(100%)', opacity: '0' },
         },
       },
       borderRadius: {

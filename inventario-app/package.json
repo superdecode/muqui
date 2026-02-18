@@ -10,7 +10,9 @@
     "deploy": "npm run build && gh-pages -d dist",
     "deploy:prod": "npm run build:prod && gh-pages -d dist",
     "deploy:vercel": "vercel --prod",
-    "deploy:netlify": "netlify deploy --prod --dir=dist"
+    "deploy:netlify": "netlify deploy --prod --dir=dist",
+    "migrate:data": "node scripts/migrateData.js",
+    "migrate:especificaciones": "node scripts/migrateEspecificaciones.js"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.14.0",

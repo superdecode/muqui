@@ -1,24 +1,34 @@
 import { AlertCircle, CheckCircle, Info, XCircle, X } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 export default function Alert({
   type = 'info',
   title,
   message,
+  children,
   onClose,
   className = '',
   autoClose = true,
-  autoCloseDuration = 2000
+  autoCloseDuration = 3000
 }) {
+  const [isVisible, setIsVisible] = useState(true)
+
   useEffect(() => {
-    if (autoClose && onClose) {
+    if (autoClose) {
       const timer = setTimeout(() => {
-        onClose()
+        if (onClose) {
+          onClose()
+        } else {
+          // Si no hay onClose, simplemente ocultar el componente
+          setIsVisible(false)
+        }
       }, autoCloseDuration)
 
       return () => clearTimeout(timer)
     }
   }, [autoClose, autoCloseDuration, onClose])
+
+  if (!isVisible) return null
   const types = {
     success: {
       icon: CheckCircle,
@@ -75,9 +85,9 @@ export default function Alert({
               {title}
             </h3>
           )}
-          {message && (
+          {(message || children) && (
             <div className={`text-sm ${title ? 'mt-1' : ''} ${config.messageColor}`}>
-              {message}
+              {message || children}
             </div>
           )}
         </div>

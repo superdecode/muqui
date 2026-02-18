@@ -28,7 +28,7 @@ export const useInventario = (ubicacionId, tipoUbicacion) => {
   const ajustarInventario = useMutation({
     mutationFn: (data) => dataService.ajustarInventario(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['inventario'])
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
     }
   })
 

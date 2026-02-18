@@ -7,7 +7,7 @@ export const useAuth = () => {
   const handleLogin = async (email, password) => {
     const result = await authService.login(email, password)
     if (result.success) {
-      login(result.user, result.token)
+      login(result.user, result.token, result.role)
     }
     return result
   }

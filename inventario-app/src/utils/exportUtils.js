@@ -49,6 +49,18 @@ export const downloadFile = (content, filename, type = 'text/csv') => {
 }
 
 /**
+ * Exporta un array de objetos a CSV (función genérica)
+ */
+export const exportToCSV = (data, filename) => {
+  if (!data || data.length === 0) {
+    throw new Error('No hay datos para exportar')
+  }
+
+  const csv = arrayToCSV(data)
+  downloadFile(csv, `${filename}.csv`)
+}
+
+/**
  * Exporta inventario a CSV
  */
 export const exportInventarioToCSV = (inventario) => {
@@ -280,6 +292,83 @@ export const createPrintableTable = (data, columns, title) => {
   printWindow.document.close()
 }
 
+/**
+ * Genera contenido HTML-table para exportar como .xls (Excel compatible)
+ */
+const buildExcelHTML = (title, headers, rows) => {
+  return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>${title}</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+<body><table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:11px">
+<tr style="background:#0ea5e9;color:white;font-weight:bold">${headers.map(h => `<td>${h}</td>`).join('')}</tr>
+${rows.map(r => `<tr>${r.map(c => `<td>${c ?? ''}</td>`).join('')}</tr>`).join('\n')}
+</table></body></html>`
+}
+
+/**
+ * Exporta un conteo confirmado con sus detalles a Excel
+ */
+export const exportConteoToExcel = (conteo, detalles, productos, ubicaciones) => {
+  const ubicacion = (ubicaciones || []).find(u => u.id === conteo.ubicacion_id)
+  const headers = ['Producto', 'Especificación', 'Cant. Sistema', 'Cant. Física', 'Diferencia', 'Observaciones']
+  const rows = (detalles || []).map(d => {
+    const prod = (productos || []).find(p => p.id === d.producto_id)
+    return [
+      prod?.nombre || d.producto_id,
+      prod?.especificacion || '',
+      d.cantidad_sistema ?? '',
+      d.cantidad_fisica ?? '',
+      d.diferencia ?? (d.cantidad_fisica - d.cantidad_sistema),
+      d.observaciones || ''
+    ]
+  })
+
+  const title = `Conteo ${conteo.codigo_legible || conteo.id}`
+  const infoRows = [
+    ['Código', conteo.codigo_legible || conteo.id, '', '', '', ''],
+    ['Ubicación', ubicacion?.nombre || conteo.ubicacion_id, '', '', '', ''],
+    ['Tipo', conteo.tipo_conteo || '', '', '', '', ''],
+    ['Estado', conteo.estado, '', '', '', ''],
+    ['Fecha Programada', conteo.fecha_programada || '', '', '', '', ''],
+    ['', '', '', '', '', '']
+  ]
+
+  const html = buildExcelHTML(title, headers, [...infoRows, ...rows])
+  const fecha = new Date().toISOString().split('T')[0]
+  downloadFile(html, `conteo_${conteo.codigo_legible || conteo.id}_${fecha}.xls`, 'application/vnd.ms-excel')
+}
+
+/**
+ * Exporta una transferencia confirmada con sus detalles a Excel
+ */
+export const exportTransferenciaToExcel = (movimiento, detalles, productos, ubicaciones) => {
+  const origen = (ubicaciones || []).find(u => u.id === movimiento.origen_id)
+  const destino = (ubicaciones || []).find(u => u.id === movimiento.destino_id)
+  const headers = ['Producto', 'Especificación', 'Cantidad', 'Observaciones']
+  const rows = (detalles || []).map(d => {
+    const prod = (productos || []).find(p => p.id === d.producto_id)
+    return [
+      prod?.nombre || d.producto_id,
+      prod?.especificacion || '',
+      d.cantidad ?? '',
+      d.observaciones || ''
+    ]
+  })
+
+  const title = `Transferencia ${movimiento.codigo_legible || movimiento.id}`
+  const infoRows = [
+    ['Código', movimiento.codigo_legible || movimiento.id, '', ''],
+    ['Origen', origen?.nombre || movimiento.origen_id, '', ''],
+    ['Destino', destino?.nombre || movimiento.destino_id, '', ''],
+    ['Estado', movimiento.estado, '', ''],
+    ['Tipo', movimiento.tipo_movimiento || 'TRANSFERENCIA', '', ''],
+    ['', '', '', '']
+  ]
+
+  const html = buildExcelHTML(title, headers, [...infoRows, ...rows])
+  const fecha = new Date().toISOString().split('T')[0]
+  downloadFile(html, `transferencia_${movimiento.codigo_legible || movimiento.id}_${fecha}.xls`, 'application/vnd.ms-excel')
+}
+
 export default {
   arrayToCSV,
   downloadFile,
@@ -288,5 +377,7 @@ export default {
   exportMovimientosToCSV,
   exportConteosToCSV,
   exportReporteStockBajoToCSV,
-  createPrintableTable
+  createPrintableTable,
+  exportConteoToExcel,
+  exportTransferenciaToExcel
 }

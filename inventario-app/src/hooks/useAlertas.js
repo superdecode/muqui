@@ -1,72 +1,113 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useAlertasStore } from '../stores/alertasStore'
-import dataService from '../services/dataService'
-
-const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true'
+import {
+  subscribeToNotifications,
+  markAsRead,
+  resolveNotification,
+  markAllAsRead as markAllAsReadFB,
+  playNotificationSound,
+  sendBrowserNotification
+} from '../services/notificationService'
 
 export const useAlertas = (usuarioId) => {
-  const queryClient = useQueryClient()
-  const { setAlertas, marcarComoLeida, marcarComoResuelta } = useAlertasStore()
-
-  // Obtener alertas
   const {
-    data: alertas = [],
-    isLoading,
-    error,
-    refetch
-  } = useQuery({
-    queryKey: ['alertas', usuarioId],
-    queryFn: () => dataService.getAlertas(usuarioId),
-    refetchInterval: 60000 // Refetch cada minuto
-  })
+    alertas, alertasNoLeidas, loading, error,
+    setAlertas, setUserId, setUnsubscribe, setLoading,
+    marcarComoLeida, marcarComoResuelta,
+    setPopupNotifications
+  } = useAlertasStore()
+  const initialLoadDoneRef = useRef(false) // Flag to skip popups on initial load
+  const seenIdsRef = useRef(new Set()) // Track which notification IDs we've already shown as popups
 
-  // Actualizar store cuando cambien las alertas
+  // Set user ID and subscribe to real-time notifications
   useEffect(() => {
-    if (alertas.length > 0) {
-      setAlertas(alertas)
-    }
-  }, [alertas, setAlertas])
+    if (!usuarioId) return
 
-  // Marcar como leída
-  const marcarLeida = useMutation({
-    mutationFn: async (alertaId) => {
-      if (USE_MOCK_DATA) {
-        await new Promise(resolve => setTimeout(resolve, 200))
-        return { success: true }
-      }
-      // TODO: Implementar cuando tengamos backend de escritura
-      throw new Error('Función no implementada para Google Sheets API')
-    },
-    onSuccess: (_, alertaId) => {
-      marcarComoLeida(alertaId)
-      queryClient.invalidateQueries(['alertas'])
-    }
-  })
+    setUserId(usuarioId)
+    setLoading(true)
+    initialLoadDoneRef.current = false
+    seenIdsRef.current.clear()
 
-  // Marcar como resuelta
-  const marcarResuelta = useMutation({
-    mutationFn: async (alertaId) => {
-      if (USE_MOCK_DATA) {
-        await new Promise(resolve => setTimeout(resolve, 200))
-        return { success: true }
+    const unsub = subscribeToNotifications(usuarioId, (notifs) => {
+      // Filter active unread notifications
+      const activeUnread = notifs.filter(n => {
+        if (!n.activa) return false
+        const leidoPor = Array.isArray(n.leido_por) ? n.leido_por : []
+        return !leidoPor.includes(usuarioId)
+      })
+
+      // Detect truly NEW notifications (not seen before in this session)
+      const newNotifications = activeUnread.filter(n => !seenIdsRef.current.has(n.id))
+
+      // Show popup for new notifications (only AFTER initial load is complete)
+      if (newNotifications.length > 0 && initialLoadDoneRef.current) {
+        console.log('🔔 New notifications detected:', newNotifications.length)
+        setPopupNotifications(newNotifications)
+
+        // Play sound and browser notification for critical ones
+        const newest = newNotifications[0]
+        if (newest) {
+          const isCritical = newest.prioridad === 'alta' ||
+            newest.tipo === 'stock_bajo' ||
+            newest.tipo === 'transferencia_recibida' ||
+            newest.tipo === 'transferencia_pendiente'
+
+          if (isCritical) {
+            playNotificationSound('critical')
+            sendBrowserNotification(newest.titulo || 'Nueva alerta', newest.mensaje || '', {
+              tag: `notif-${newest.tipo}-${Date.now()}`
+            })
+          }
+        }
       }
-      // TODO: Implementar cuando tengamos backend de escritura
-      throw new Error('Función no implementada para Google Sheets API')
-    },
-    onSuccess: (_, alertaId) => {
-      marcarComoResuelta(alertaId)
-      queryClient.invalidateQueries(['alertas'])
+
+      // Mark all current notification IDs as seen
+      activeUnread.forEach(n => seenIdsRef.current.add(n.id))
+
+      // Mark initial load as complete after first callback
+      if (!initialLoadDoneRef.current) {
+        initialLoadDoneRef.current = true
+        console.log('🔔 Initial notification load complete, seen IDs:', seenIdsRef.current.size)
+      }
+
+      setAlertas(notifs)
+      setLoading(false)
+    })
+
+    setUnsubscribe(() => unsub)
+
+    return () => {
+      if (typeof unsub === 'function') unsub()
     }
-  })
+  }, [usuarioId])
+
+  // Mark as read in Firebase + local store
+  const marcarLeida = async (alertaId) => {
+    marcarComoLeida(alertaId)
+    await markAsRead(alertaId, usuarioId)
+  }
+
+  // Mark as resolved in Firebase + local store
+  const marcarResuelta = async (alertaId) => {
+    marcarComoResuelta(alertaId)
+    await resolveNotification(alertaId)
+  }
+
+  // Mark all as read
+  const marcarTodasLeidas = async () => {
+    const activas = alertas.filter(a => a.activa)
+    activas.forEach(a => marcarComoLeida(a.id))
+    await markAllAsReadFB(usuarioId)
+  }
 
   return {
     alertas,
-    isLoading,
+    alertasNoLeidas,
+    isLoading: loading,
     error,
-    refetch,
-    marcarLeida: marcarLeida.mutate,
-    marcarResuelta: marcarResuelta.mutate
+    marcarLeida,
+    marcarResuelta,
+    marcarTodasLeidas
   }
 }
 

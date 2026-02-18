@@ -1,66 +1,111 @@
-import api from './api'
-import { mockLogin } from '../data/mockData'
-import { loginWithSheets } from './googleSheetsAPI'
+import firestoreService from './firestoreService'
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore'
+import { getDB } from '../config/firebase.config'
 
-const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true'
-const USE_GOOGLE_SHEETS = import.meta.env.VITE_USE_GOOGLE_SHEETS === 'true'
+/**
+ * Load role data from Firestore by rol_id or rol value
+ */
+async function loadUserRole(usuario) {
+  try {
+    const db = getDB()
+    let roleDoc = null
+
+    // Try to load by rol_id first (new system)
+    if (usuario.rol_id) {
+      const roleRef = doc(db, 'roles', usuario.rol_id)
+      const roleSnap = await getDoc(roleRef)
+      if (roleSnap.exists()) {
+        roleDoc = { id: roleSnap.id, ...roleSnap.data() }
+      }
+    }
+
+    // Fallback: try to find by rol name
+    if (!roleDoc && usuario.rol) {
+      const rolesQuery = query(
+        collection(db, 'roles'),
+        where('nombre', '==', usuario.rol)
+      )
+      const rolesSnap = await getDocs(rolesQuery)
+      if (!rolesSnap.empty) {
+        const firstRole = rolesSnap.docs[0]
+        roleDoc = { id: firstRole.id, ...firstRole.data() }
+      }
+    }
+
+    return roleDoc
+  } catch (error) {
+    console.error('Error loading user role:', error)
+    return null
+  }
+}
 
 export const authService = {
-  // Login básico con Google Sheets o Mock Data
   login: async (email, password) => {
     try {
-      // Si estamos en modo desarrollo, usar datos mock
-      if (USE_MOCK_DATA) {
-        // Simular delay de red
-        await new Promise(resolve => setTimeout(resolve, 800))
-        const response = mockLogin(email, password)
+      if (!email || !password) {
+        return { success: false, message: 'Email y contraseña son requeridos' }
+      }
 
-        if (response.success) {
-          localStorage.setItem('authToken', response.token)
-          localStorage.setItem('user', JSON.stringify(response.user))
-          return response
+      let usuario
+      try {
+        usuario = await firestoreService.getUsuarioByEmail(email)
+      } catch (fetchError) {
+        console.error('Error fetching user from Firestore:', fetchError)
+        return { success: false, message: 'Error de conexión con la base de datos. Intenta nuevamente.' }
+      }
+
+      if (!usuario) {
+        return { success: false, message: 'Usuario no encontrado' }
+      }
+
+      // Validar estado del usuario (más robusto)
+      const userEstado = usuario.estado || 'ACTIVO' // Por defecto ACTIVO si no está definido
+      if (userEstado.toString().toUpperCase() !== 'ACTIVO') {
+        console.log('Usuario con estado no activo:', { email: usuario.email, estado: userEstado })
+        return { success: false, message: `Usuario inactivo (${userEstado}). Contacta al administrador.` }
+      }
+
+      if (usuario.password !== password) {
+        return { success: false, message: 'Contraseña incorrecta' }
+      }
+
+      // Load role permissions from Firestore (non-blocking - login succeeds even if role lookup fails)
+      let roleData = null
+      try {
+        roleData = await loadUserRole(usuario)
+        if (roleData) {
+          usuario.roleData = roleData
+          usuario.permisos = roleData.permisos || usuario.permisos || {}
+          // Always normalize user.rol to the readable nombre from Firestore role document
+          if (roleData.nombre) {
+            usuario.rol = roleData.nombre
+          }
         }
-
-        return response
+      } catch (roleError) {
+        console.warn('Could not load role data, continuing with user-level permisos:', roleError)
       }
 
-      // Si usamos Google Sheets directamente
-      if (USE_GOOGLE_SHEETS) {
-        const response = await loginWithSheets(email, password)
-
-        if (response.success) {
-          localStorage.setItem('authToken', response.token)
-          localStorage.setItem('user', JSON.stringify(response.user))
-          return response
-        }
-
-        return response
+      // Ensure permisos is always at least an empty object (never undefined/null)
+      if (!usuario.permisos || typeof usuario.permisos !== 'object') {
+        usuario.permisos = {}
       }
 
-      // Modo producción: usar API real (Google Apps Script)
-      const response = await api.login(email, password)
-
-      if (response.success) {
-        // Guardar token y datos de usuario
-        localStorage.setItem('authToken', response.token)
-        localStorage.setItem('user', JSON.stringify(response.user))
-        return {
-          success: true,
-          user: response.user,
-          token: response.token
-        }
+      // Use codigo as primary user ID, but keep Firestore ID for document queries
+      const userId = usuario.codigo || usuario.id
+      const usuarioWithId = { 
+        ...usuario, 
+        id: userId,           // Primary ID for app logic (codigo)
+        firestoreId: usuario.id  // Keep Firestore document ID for queries
       }
+      
+      const token = `token_${userId}_${Date.now()}`
+      localStorage.setItem('authToken', token)
+      localStorage.setItem('user', JSON.stringify(usuarioWithId))
 
-      return {
-        success: false,
-        message: response.message || 'Credenciales inválidas'
-      }
+      return { success: true, user: usuarioWithId, token, role: roleData }
     } catch (error) {
       console.error('Login error:', error)
-      return {
-        success: false,
-        message: 'Error al iniciar sesión'
-      }
+      return { success: false, message: `Error al iniciar sesión: ${error.message || 'Error desconocido'}` }
     }
   },
 
@@ -73,7 +118,19 @@ export const authService = {
   // Obtener usuario actual
   getCurrentUser: () => {
     const userStr = localStorage.getItem('user')
-    return userStr ? JSON.parse(userStr) : null
+    if (!userStr) return null
+    
+    const user = JSON.parse(userStr)
+    // Ensure consistency: if user has codigo field but id doesn't match, update id
+    if (user.codigo && user.id !== user.codigo) {
+      user.id = user.codigo
+      // Ensure firestoreId is preserved
+      if (!user.firestoreId && user.codigo !== user.id) {
+        user.firestoreId = user.id
+      }
+      localStorage.setItem('user', JSON.stringify(user))
+    }
+    return user
   },
 
   // Verificar si está autenticado

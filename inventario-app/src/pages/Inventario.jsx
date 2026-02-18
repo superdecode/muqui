@@ -6,6 +6,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner'
 import ProductoForm from '../components/productos/ProductoForm'
 import useInventario from '../hooks/useInventario'
 import { useToastStore } from '../stores/toastStore'
+import { usePermissions } from '../hooks/usePermissions'
 import { useQueryClient } from '@tanstack/react-query'
 import dataService from '../services/dataService'
 import { exportInventarioToCSV } from '../utils/exportUtils'
@@ -13,6 +14,9 @@ import { exportInventarioToCSV } from '../utils/exportUtils'
 export default function Inventario() {
   const { inventario, isLoading } = useInventario()
   const toast = useToastStore()
+  const { canEdit, canDelete: canDeletePerm } = usePermissions()
+  const canWriteInventario = canEdit('productos')
+  const canDeleteInventario = canDeletePerm('productos')
   const queryClient = useQueryClient()
   const [searchTerm, setSearchTerm] = useState('')
   const [categoriaFilter, setCategoriaFilter] = useState('')
@@ -40,8 +44,8 @@ export default function Inventario() {
 
         if (response.success) {
           toast.success('Producto Eliminado', response.message || 'El producto se ha eliminado correctamente')
-          queryClient.invalidateQueries(['inventario'])
-          queryClient.invalidateQueries(['productos'])
+          queryClient.invalidateQueries({ queryKey: ['inventario'] })
+          queryClient.invalidateQueries({ queryKey: ['productos'] })
         } else {
           toast.error('Error al Eliminar', response.message || 'No se pudo eliminar el producto')
         }
@@ -73,8 +77,8 @@ export default function Inventario() {
       }
 
       if (response.success) {
-        queryClient.invalidateQueries(['inventario'])
-        queryClient.invalidateQueries(['productos'])
+        queryClient.invalidateQueries({ queryKey: ['inventario'] })
+        queryClient.invalidateQueries({ queryKey: ['productos'] })
         handleCloseForm()
       } else {
         toast.error('Error al Guardar', response.message || 'No se pudo guardar el producto')
@@ -141,6 +145,8 @@ export default function Inventario() {
             <Button
               variant="white"
               onClick={() => setShowForm(true)}
+              disabled={!canWriteInventario}
+              title={!canWriteInventario ? 'Sin permisos de escritura' : undefined}
             >
               <Plus size={20} className="mr-2" />
               Nuevo Producto
@@ -210,10 +216,12 @@ export default function Inventario() {
               ? 'No se encontraron productos con los filtros seleccionados'
               : 'Comienza agregando tu primer producto'}
           </p>
-          <Button variant="primary" onClick={() => setShowForm(true)}>
-            <Plus size={20} className="mr-2" />
-            Agregar Producto
-          </Button>
+          {canWriteInventario && (
+            <Button variant="primary" onClick={() => setShowForm(true)}>
+              <Plus size={20} className="mr-2" />
+              Agregar Producto
+            </Button>
+          )}
         </div>
       ) : (
         <div className="bg-white rounded-2xl shadow-card border border-slate-100 overflow-hidden">
@@ -288,18 +296,21 @@ export default function Inventario() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => handleEdit(item)}
-                          className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                          title="Editar"
+                          className={`p-2 rounded-lg transition-colors ${canWriteInventario ? 'text-primary-600 hover:bg-primary-50' : 'text-slate-300 cursor-not-allowed opacity-50'}`}
+                          title={canWriteInventario ? 'Editar' : 'Sin permisos de escritura'}
+                          disabled={!canWriteInventario}
                         >
                           <Edit2 size={18} />
                         </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="p-2 text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
-                          title="Eliminar"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                        {canDeleteInventario && (
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            className="p-2 text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

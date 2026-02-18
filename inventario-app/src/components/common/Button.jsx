@@ -17,8 +17,8 @@ export default function Button({
     success: 'bg-gradient-success text-white hover:shadow-card-hover focus:ring-success-500 shadow-soft',
     danger: 'bg-gradient-danger text-white hover:shadow-card-hover focus:ring-danger-500 shadow-soft',
     warning: 'bg-gradient-warning text-white hover:shadow-card-hover focus:ring-warning-500 shadow-soft',
-    outline: 'border-2 border-primary-500 text-primary-600 hover:bg-primary-50 focus:ring-primary-500 hover:border-primary-600',
-    ghost: 'text-slate-600 hover:bg-slate-100 focus:ring-slate-500 hover:shadow-soft',
+    outline: 'border-2 border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 focus:ring-primary-500 hover:border-primary-600',
+    ghost: 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 focus:ring-slate-500 hover:shadow-soft',
     gradient: 'bg-gradient-rainbow text-white hover:shadow-glow-lg focus:ring-secondary-500 shadow-card animate-gradient bg-[length:200%_200%]'
   }
 

@@ -1,25 +1,70 @@
 import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
 import Input from '../common/Input'
-import { X } from 'lucide-react'
-import { UNIDADES_MEDIDA, CATEGORIAS_PRODUCTOS, FRECUENCIA_INVENTARIO } from '../../utils/constants'
+import { X, RefreshCw } from 'lucide-react'
+import { FRECUENCIA_INVENTARIO } from '../../utils/constants'
+import dataService from '../../services/dataService'
+
 
 export default function ProductoForm({ producto = null, onClose, onSave, isLoading = false }) {
   const [formData, setFormData] = useState({
     id: '',
     nombre: '',
     especificacion: '',
-    unidad_medida: 'KG',
+    unidad_medida: '',
     stock_minimo: 10,
     frecuencia_inventario_Dias: 30,
-    categoria: 'OTROS',
+    categoria: '',
     estado: 'ACTIVO'
   })
 
   const [errors, setErrors] = useState({})
 
+  // Cargar productos existentes para generar ID automático
+  const { data: productosExistentes = [] } = useQuery({
+    queryKey: ['productos'],
+    queryFn: () => dataService.getProductos(),
+    enabled: !producto // Solo cargar si es un nuevo producto
+  })
+
+  // Cargar categorías y unidades desde Firestore
+  const { data: categoriasDB = [] } = useQuery({
+    queryKey: ['config-categorias'],
+    queryFn: () => dataService.getCategorias()
+  })
+  const { data: unidadesDB = [] } = useQuery({
+    queryKey: ['config-unidades'],
+    queryFn: () => dataService.getUnidadesMedida()
+  })
+
+  const categoriasOptions = (categoriasDB || []).filter(i => i.estado !== 'INACTIVO' && i.estado !== 'ELIMINADO').map(i => i.nombre).filter(Boolean)
+  const unidadesOptions = (unidadesDB || []).filter(i => i.estado !== 'INACTIVO' && i.estado !== 'ELIMINADO').map(i => i.nombre).filter(Boolean)
+
+  // Función para generar el siguiente ID disponible
+  const generarNuevoID = () => {
+    if (productosExistentes.length === 0) {
+      return 'PROD-0001'
+    }
+
+    // Extraer números de IDs con formato PROD-XXXX
+    const numeros = productosExistentes
+      .map(p => p.id)
+      .filter(id => /^PROD-\d+$/.test(id))
+      .map(id => parseInt(id.split('-')[1]))
+      .filter(num => !isNaN(num))
+
+    // Encontrar el número máximo y sumar 1
+    const maxNumero = numeros.length > 0 ? Math.max(...numeros) : 0
+    const nuevoNumero = maxNumero + 1
+
+    // Formatear con ceros a la izquierda (4 dígitos)
+    return `PROD-${nuevoNumero.toString().padStart(4, '0')}`
+  }
+
   useEffect(() => {
     if (producto) {
+      // Modo edición: cargar datos del producto existente
       setFormData({
         id: producto.id || producto.producto_id || '',
         nombre: producto.nombre || producto.producto || '',
@@ -30,8 +75,14 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
         categoria: producto.categoria || 'OTROS',
         estado: producto.estado || 'ACTIVO'
       })
+    } else if (productosExistentes.length > 0 && !formData.id) {
+      // Modo creación: generar ID automáticamente solo si aún no tiene uno
+      setFormData(prev => ({
+        ...prev,
+        id: generarNuevoID()
+      }))
     }
-  }, [producto])
+  }, [producto, productosExistentes])
 
   const validate = () => {
     const newErrors = {}
@@ -41,7 +92,7 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
     }
 
     if (!formData.id.trim()) {
-      newErrors.id = 'El ID es requerido'
+      newErrors.id = 'Error generando el ID. Por favor intenta nuevamente'
     }
 
     if (formData.stock_minimo < 0) {
@@ -80,7 +131,7 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-3xl shadow-card-hover max-w-2xl w-full max-h-[90vh] overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-card-hover max-w-2xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="relative overflow-hidden bg-gradient-ocean p-6">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16"></div>
@@ -102,19 +153,33 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* ID */}
             <div>
-              <Input
-                label="ID del Producto"
-                name="id"
-                value={formData.id}
-                onChange={handleChange}
-                placeholder="Ej: PROD001"
-                disabled={!!producto}
-                error={errors.id}
-                required
-              />
-              {producto && (
-                <p className="text-xs text-slate-500 mt-1">El ID no se puede modificar</p>
-              )}
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                ID del Producto <span className="text-danger-500">*</span>
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  name="id"
+                  value={formData.id}
+                  onChange={handleChange}
+                  placeholder="Generando..."
+                  disabled
+                  error={errors.id}
+                  className="flex-1"
+                />
+                {!producto && formData.id && (
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, id: generarNuevoID() }))}
+                    className="px-3 py-2 bg-primary-100 hover:bg-primary-200 text-primary-700 rounded-xl transition-colors"
+                    title="Regenerar ID"
+                  >
+                    <RefreshCw size={18} />
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                {producto ? 'El ID no se puede modificar' : 'ID generado automáticamente'}
+              </p>
             </div>
 
             {/* Nombre */}
@@ -139,22 +204,23 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
                 onChange={handleChange}
                 placeholder="Ej: 3 KG, 900 ML"
               />
-              <p className="text-xs text-slate-500 mt-1">Tamaño, peso o presentación</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Tamaño, peso o presentación</p>
             </div>
 
             {/* Unidad de Medida */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Unidad de Medida <span className="text-danger-500">*</span>
               </label>
               <select
                 name="unidad_medida"
                 value={formData.unidad_medida}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                 required
               >
-                {UNIDADES_MEDIDA.map(unidad => (
+                <option value="">Seleccionar unidad...</option>
+                {unidadesOptions.map(unidad => (
                   <option key={unidad} value={unidad}>{unidad}</option>
                 ))}
               </select>
@@ -172,19 +238,19 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
                 error={errors.stock_minimo}
                 required
               />
-              <p className="text-xs text-slate-500 mt-1">Cantidad mínima antes de alertar</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Cantidad mínima antes de alertar</p>
             </div>
 
             {/* Frecuencia de Inventario */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Frecuencia de Inventario <span className="text-danger-500">*</span>
               </label>
               <select
                 name="frecuencia_inventario_Dias"
                 value={formData.frecuencia_inventario_Dias}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                 required
               >
                 {Object.entries(FRECUENCIA_INVENTARIO).map(([key, { valor, label }]) => (
@@ -195,17 +261,18 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
 
             {/* Categoría */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Categoría <span className="text-danger-500">*</span>
               </label>
               <select
                 name="categoria"
                 value={formData.categoria}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                 required
               >
-                {CATEGORIAS_PRODUCTOS.map(categoria => (
+                <option value="">Seleccionar categoría...</option>
+                {categoriasOptions.map(categoria => (
                   <option key={categoria} value={categoria}>{categoria}</option>
                 ))}
               </select>
@@ -213,14 +280,14 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
 
             {/* Estado */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Estado <span className="text-danger-500">*</span>
               </label>
               <select
                 name="estado"
                 value={formData.estado}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                 required
               >
                 <option value="ACTIVO">ACTIVO</option>

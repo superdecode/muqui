@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import { Package, Plus, Edit2, Trash2, Search, Download } from 'lucide-react'
+import { Package, Plus, Edit2, Trash2, Search, Download, ChevronUp, ChevronDown, X } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ProductoForm from '../components/productos/ProductoForm'
 import { useToastStore } from '../stores/toastStore'
 import { useAuthStore } from '../stores/authStore'
+import { usePermissions } from '../hooks/usePermissions'
 import dataService from '../services/dataService'
+import { formatLabel } from '../utils/formatters'
 
 export default function Productos() {
   const toast = useToastStore()
@@ -14,15 +16,18 @@ export default function Productos() {
   const queryClient = useQueryClient()
   const [searchTerm, setSearchTerm] = useState('')
   const [categoriaFilter, setCategoriaFilter] = useState('')
+  const [unidadFilter, setUnidadFilter] = useState('')
+  const [estadoFilter, setEstadoFilter] = useState('')
+  const [especificacionFilter, setEspecificacionFilter] = useState('')
+  const [sortColumn, setSortColumn] = useState('')
+  const [sortDirection, setSortDirection] = useState('asc')
   const [showForm, setShowForm] = useState(false)
   const [selectedProducto, setSelectedProducto] = useState(null)
 
-  // Solo nivel 1 puede eliminar productos
-  const canDeleteProduct = () => {
-    if (!user) return false
-    const nivelPermisos = parseInt(user.nivel_permisos) || 3
-    return nivelPermisos === 1
-  }
+  const { hasPermission } = useAuthStore()
+  const { canEdit } = usePermissions()
+  const canDeleteProduct = () => hasPermission('productos.eliminar')
+  const canWriteProductos = canEdit('productos')
 
   // Cargar PRODUCTOS (no inventario)
   const { data: productos = [], isLoading } = useQuery({
@@ -32,35 +37,54 @@ export default function Productos() {
 
   // Filtrar productos
   const filteredProductos = productos.filter(item => {
-    const matchesSearch = item.nombre?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = !searchTerm || item.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || (item.especificacion || '').toLowerCase().includes(searchTerm.toLowerCase()) || (item.id || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesCategory = !categoriaFilter || item.categoria === categoriaFilter
-    return matchesSearch && matchesCategory
+    const matchesUnidad = !unidadFilter || item.unidad_medida === unidadFilter
+    const matchesEstado = !estadoFilter || item.estado === estadoFilter
+    const matchesEspec = !especificacionFilter || item.especificacion === especificacionFilter
+    return matchesSearch && matchesCategory && matchesUnidad && matchesEstado && matchesEspec
+  }).sort((a, b) => {
+    if (!sortColumn) return 0
+    const valA = a[sortColumn] ?? ''
+    const valB = b[sortColumn] ?? ''
+    const cmp = typeof valA === 'number' ? valA - valB : String(valA).localeCompare(String(valB))
+    return sortDirection === 'asc' ? cmp : -cmp
   })
 
   // Mutation para crear producto
   const createMutation = useMutation({
-    mutationFn: (data) => dataService.createProducto(data),
+    mutationFn: (data) => {
+      console.log('🔍 Creando producto con datos:', data)
+      return dataService.createProducto(data)
+    },
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['productos'])
-      queryClient.invalidateQueries(['inventario'])
+      console.log('✅ Respuesta de creación:', response)
+      queryClient.invalidateQueries({ queryKey: ['productos'] })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
       toast.success('Producto Creado', response.message || 'El producto se ha creado correctamente')
       handleCloseForm()
     },
     onError: (error) => {
+      console.error('❌ Error creando producto:', error)
       toast.error('Error al Crear', error.message || 'No se pudo crear el producto')
     }
   })
 
   // Mutation para actualizar producto
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => dataService.updateProducto(id, data),
+    mutationFn: ({ id, data }) => {
+      console.log('🔍 Actualizando producto:', { id, data })
+      return dataService.updateProducto(id, data)
+    },
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['productos'])
-      queryClient.invalidateQueries(['inventario'])
+      console.log('✅ Respuesta de actualización:', response)
+      queryClient.invalidateQueries({ queryKey: ['productos'] })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
       toast.success('Producto Actualizado', response.message || 'El producto se ha actualizado correctamente')
       handleCloseForm()
     },
     onError: (error) => {
+      console.error('❌ Error actualizando producto:', error)
       toast.error('Error al Actualizar', error.message || 'No se pudo actualizar el producto')
     }
   })
@@ -69,8 +93,8 @@ export default function Productos() {
   const deleteMutation = useMutation({
     mutationFn: (id) => dataService.deleteProducto(id),
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['productos'])
-      queryClient.invalidateQueries(['inventario'])
+      queryClient.invalidateQueries({ queryKey: ['productos'] })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
       toast.success('Producto Eliminado', response.message || 'El producto se ha eliminado correctamente')
     },
     onError: (error) => {
@@ -107,7 +131,28 @@ export default function Productos() {
     setSelectedProducto(null)
   }
 
-  const categorias = [...new Set(productos.map(item => item.categoria))]
+  const categorias = [...new Set(productos.map(item => item.categoria).filter(Boolean))]
+  const unidades = [...new Set(productos.map(item => item.unidad_medida).filter(Boolean))]
+  const especificaciones = [...new Set(productos.map(item => item.especificacion).filter(Boolean))]
+  const estados = [...new Set(productos.map(item => item.estado).filter(Boolean))]
+
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const SortIcon = ({ column }) => (
+    <span className="inline-flex flex-col ml-1 -space-y-1">
+      <ChevronUp size={12} className={sortColumn === column && sortDirection === 'asc' ? 'text-primary-600' : 'text-slate-300'} />
+      <ChevronDown size={12} className={sortColumn === column && sortDirection === 'desc' ? 'text-primary-600' : 'text-slate-300'} />
+    </span>
+  )
+
+  const activeFilters = [categoriaFilter, unidadFilter, estadoFilter, especificacionFilter].filter(Boolean).length
 
   const isSaving = createMutation.isPending || updateMutation.isPending
 
@@ -128,6 +173,8 @@ export default function Productos() {
             <Button
               variant="white"
               onClick={() => setShowForm(true)}
+              disabled={!canWriteProductos}
+              title={!canWriteProductos ? 'Sin permisos de escritura' : undefined}
             >
               <Plus size={20} className="mr-2" />
               Nuevo Producto
@@ -137,7 +184,7 @@ export default function Productos() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl shadow-card p-6 border border-slate-100">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-card p-6 border border-slate-100 dark:border-slate-700">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1">
             <div className="relative">
@@ -147,7 +194,7 @@ export default function Productos() {
                 placeholder="Buscar productos..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                className="w-full pl-12 pr-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
               />
             </div>
           </div>
@@ -156,7 +203,7 @@ export default function Productos() {
             <select
               value={categoriaFilter}
               onChange={(e) => setCategoriaFilter(e.target.value)}
-              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
             >
               <option value="">Todas las categorías</option>
               {categorias.map(cat => (
@@ -176,107 +223,136 @@ export default function Productos() {
           </Button>
         </div>
 
-        <div className="mt-4 flex items-center gap-4 text-sm text-slate-600">
-          <span className="font-medium">{filteredProductos.length} productos</span>
-          {searchTerm && <span>• Búsqueda: "{searchTerm}"</span>}
-          {categoriaFilter && <span>• Categoría: {categoriaFilter}</span>}
+        {/* Filter Chips */}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-slate-600 dark:text-slate-400">{filteredProductos.length} productos</span>
+          {/* Especificación chips */}
+          <div className="flex flex-wrap gap-1.5 ml-2">
+            {especificaciones.length > 0 && (
+              <select value={especificacionFilter} onChange={e => setEspecificacionFilter(e.target.value)}
+                className="px-3 py-1.5 text-xs font-medium rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary-500 cursor-pointer">
+                <option value="">Especificación</option>
+                {especificaciones.map(e => <option key={e} value={e}>{e}</option>)}
+              </select>
+            )}
+            <select value={unidadFilter} onChange={e => setUnidadFilter(e.target.value)}
+              className="px-3 py-1.5 text-xs font-medium rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary-500 cursor-pointer">
+              <option value="">Unidad</option>
+              {unidades.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+            <select value={estadoFilter} onChange={e => setEstadoFilter(e.target.value)}
+              className="px-3 py-1.5 text-xs font-medium rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary-500 cursor-pointer">
+              <option value="">Estado</option>
+              {estados.map(e => <option key={e} value={e}>{e}</option>)}
+            </select>
+          </div>
+          {/* Active filter badges */}
+          {activeFilters > 0 && (
+            <button onClick={() => { setCategoriaFilter(''); setUnidadFilter(''); setEstadoFilter(''); setEspecificacionFilter('') }}
+              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-full transition-colors">
+              <X size={12} /> Limpiar filtros ({activeFilters})
+            </button>
+          )}
         </div>
       </div>
 
       {/* Products Table */}
       {isLoading ? (
-        <div className="bg-white rounded-2xl shadow-card p-12">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-card p-12">
           <LoadingSpinner text="Cargando productos..." />
         </div>
       ) : filteredProductos.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-card p-12 text-center">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-card p-12 text-center">
           <Package size={64} className="mx-auto text-slate-300 mb-4" />
-          <h3 className="text-xl font-semibold text-slate-900 mb-2">No hay productos</h3>
-          <p className="text-slate-600 mb-6">
+          <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">No hay productos</h3>
+          <p className="text-slate-600 dark:text-slate-400 mb-6">
             {searchTerm || categoriaFilter
               ? 'No se encontraron productos con los filtros seleccionados'
               : 'Comienza agregando tu primer producto'}
           </p>
-          <Button variant="primary" onClick={() => setShowForm(true)}>
-            <Plus size={20} className="mr-2" />
-            Agregar Producto
-          </Button>
+          {canWriteProductos && (
+            <Button variant="primary" onClick={() => setShowForm(true)}>
+              <Plus size={20} className="mr-2" />
+              Agregar Producto
+            </Button>
+          )}
         </div>
       ) : (
-        <div className="bg-white rounded-2xl shadow-card border border-slate-100 overflow-hidden">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-card border border-slate-100 dark:border-slate-700 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gradient-to-r from-slate-50 to-slate-100">
+              <thead className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-700">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                    Producto
+                  <th onClick={() => handleSort('nombre')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                    <span className="inline-flex items-center">Producto<SortIcon column="nombre" /></span>
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                    Especificación
+                  <th onClick={() => handleSort('especificacion')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                    <span className="inline-flex items-center">Especificación<SortIcon column="especificacion" /></span>
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                    Unidad
+                  <th onClick={() => handleSort('unidad_medida')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                    <span className="inline-flex items-center">Unidad<SortIcon column="unidad_medida" /></span>
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                    Stock Mínimo
+                  <th onClick={() => handleSort('stock_minimo')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                    <span className="inline-flex items-center">Stock Mínimo<SortIcon column="stock_minimo" /></span>
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                    Categoría
+                  <th onClick={() => handleSort('categoria')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                    <span className="inline-flex items-center">Categoría<SortIcon column="categoria" /></span>
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                    Estado
+                  <th onClick={() => handleSort('estado')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                    <span className="inline-flex items-center">Estado<SortIcon column="estado" /></span>
                   </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                     Acciones
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {filteredProductos.map((item, index) => (
                   <tr
                     key={item.id || index}
-                    className="hover:bg-gradient-to-r hover:from-slate-50 hover:to-transparent transition-colors"
+                    className="hover:bg-gradient-to-r hover:from-slate-50 dark:hover:from-slate-700/50 hover:to-transparent transition-colors"
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-gradient-ocean rounded-lg">
-                          <Package className="text-white" size={20} />
+                        <div className="p-2 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
+                          <Package className="text-blue-600" size={20} />
                         </div>
                         <div>
-                          <p className="font-semibold text-slate-900">{item.nombre}</p>
-                          <p className="text-xs text-slate-500">{item.id}</p>
+                          <p className="font-semibold text-slate-900 dark:text-slate-100">{item.nombre}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{item.id}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm text-slate-600">{item.especificacion || '-'}</span>
+                      <span className="text-sm text-slate-600 dark:text-slate-400">{item.especificacion || '-'}</span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm text-slate-600">{item.unidad_medida}</span>
+                      <span className="text-sm text-slate-600 dark:text-slate-400">{item.unidad_medida}</span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm font-medium text-slate-900">{item.stock_minimo || 0}</span>
+                      <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{item.stock_minimo || 0}</span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-medium">
+                      <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full text-xs font-medium">
                         {item.categoria}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
                         item.estado === 'ACTIVO'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-700'
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                          : 'bg-gray-100 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300'
                       }`}>
-                        {item.estado}
+                        {formatLabel(item.estado)}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => handleEdit(item)}
-                          className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                          title="Editar"
+                          className={`p-2 rounded-lg transition-colors ${canWriteProductos ? 'text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30' : 'text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-50'}`}
+                          title={canWriteProductos ? 'Editar' : 'Sin permisos de escritura'}
+                          disabled={!canWriteProductos}
                         >
                           <Edit2 size={18} />
                         </button>
@@ -284,7 +360,7 @@ export default function Productos() {
                           <button
                             onClick={() => handleDelete(item.id)}
                             className="p-2 text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
-                            title="Eliminar (solo nivel 1)"
+                            title="Eliminar"
                             disabled={deleteMutation.isPending}
                           >
                             <Trash2 size={18} />

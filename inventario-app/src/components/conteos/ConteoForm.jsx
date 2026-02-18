@@ -62,7 +62,7 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-3xl shadow-card-hover max-w-2xl w-full max-h-[90vh] overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-card-hover max-w-2xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="relative overflow-hidden bg-gradient-ocean p-6">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16"></div>
@@ -93,7 +93,7 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
 
           {/* Fecha */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               <Calendar size={16} className="inline mr-2" />
               Fecha Programada
             </label>
@@ -101,14 +101,14 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
               type="date"
               value={formData.fecha_programada}
               onChange={(e) => setFormData({ ...formData, fecha_programada: e.target.value })}
-              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               required
             />
           </div>
 
           {/* Ubicación */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               <MapPin size={16} className="inline mr-2" />
               Ubicación
             </label>
@@ -120,7 +120,7 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
               <select
                 value={formData.ubicacion_id}
                 onChange={(e) => setFormData({ ...formData, ubicacion_id: e.target.value })}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 required
               >
                 <option value="">Seleccionar ubicación</option>
@@ -135,13 +135,13 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
 
           {/* Tipo de Conteo */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Tipo de Conteo
             </label>
             <select
               value={formData.tipo_conteo}
               onChange={(e) => setFormData({ ...formData, tipo_conteo: e.target.value })}
-              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             >
               <option value="DIARIO">Diario</option>
               <option value="SEMANAL">Semanal</option>
@@ -152,7 +152,7 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
 
           {/* Observaciones */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Observaciones (Opcional)
             </label>
             <textarea
@@ -160,7 +160,7 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
               onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
               placeholder="Notas adicionales..."
               rows={3}
-              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
 

@@ -9,23 +9,47 @@ import {
   Menu,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Shield,
+  Settings
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
+import { formatLabel } from '../../utils/formatters'
 import { useState } from 'react'
 
+// Helper function to get role label with proper priority
+const getRoleLabel = (rol, cachedRole, user) => {
+  // Priority: cached role name from Firestore > user.roleData > legacy constant map
+  if (cachedRole?.nombre) return cachedRole.nombre
+  if (user?.roleData?.nombre) return user.roleData.nombre
+  const legacyMap = {
+    'ADMIN_GLOBAL': 'Administrador Global',
+    'ADMIN_EMPRESA': 'Administrador de Empresa',
+    'GERENTE_OPERATIVO': 'Gerente Operativo',
+    'JEFE_PUNTO': 'Jefe de Punto',
+    'OPERADOR': 'Operador'
+  }
+  return legacyMap[rol] || rol || '-'
+}
+
 export default function Sidebar() {
-  const { user, logout } = useAuthStore()
+  const { user, logout, cachedRole } = useAuthStore()
   const [isOpen, setIsOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
 
-  const menuItems = [
+  const { hasPermission } = useAuthStore()
+
+  const allMenuItems = [
     { to: '/', icon: Home, label: 'Dashboard' },
-    { to: '/productos', icon: Package, label: 'Productos', permission: 'inventario.ver' },
-    { to: '/movimientos', icon: ArrowRightLeft, label: 'Movimientos', permission: 'transferencias.confirmar' },
-    { to: '/conteos', icon: ClipboardCheck, label: 'Conteos', permission: 'conteos.ejecutar' },
-    { to: '/reportes', icon: FileBarChart, label: 'Reportes', permission: 'reportes.ver' }
+    { to: '/productos', icon: Package, label: 'Productos', permission: 'productos.ver' },
+    { to: '/movimientos', icon: ArrowRightLeft, label: 'Movimientos', permission: 'movimientos.ver' },
+    { to: '/conteos', icon: ClipboardCheck, label: 'Conteos', permission: 'conteos.ver' },
+    { to: '/reportes', icon: FileBarChart, label: 'Reportes', permission: 'reportes.ver' },
+    { to: '/configuraciones', icon: Settings, label: 'Configuraciones', permission: 'configuracion.ver' },
+    { to: '/admin', icon: Shield, label: 'Administración', permission: 'administracion.ver' }
   ]
+
+  const menuItems = allMenuItems.filter(item => !item.permission || hasPermission(item.permission))
 
   const handleLogout = () => {
     logout()
@@ -122,7 +146,7 @@ export default function Sidebar() {
             {user && !isCollapsed && (
               <div className="mb-3 px-4">
                 <p className="text-xs text-white/60">Rol</p>
-                <p className="text-sm font-medium">{user.rol}</p>
+                <p className="text-sm font-medium">{getRoleLabel(user.rol, cachedRole, user)}</p>
               </div>
             )}
             <button

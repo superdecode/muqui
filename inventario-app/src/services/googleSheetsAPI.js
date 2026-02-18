@@ -301,7 +301,7 @@ export const getUsuarios = async () => {
       ubicaciones_asignadas: usuario.ubicaciones_asignadas ? usuario.ubicaciones_asignadas.split(',').map(id => id.trim().replace(/"/g, '')) : [],
       estado: usuario.estado || 'ACTIVO',
       fecha_creacion: usuario.fecha_creacion,
-      nivel_permisos: parseInt(usuario.nivel_permisos) || 3
+      // nivel_permisos removed - using role-based permisos system
     }))
   } catch (error) {
     console.error('Error obteniendo usuarios:', error)

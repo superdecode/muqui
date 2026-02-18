@@ -27,7 +27,7 @@ export const useTransferencias = (ubicacionId) => {
   const crearTransferencia = useMutation({
     mutationFn: (data) => dataService.createTransferencia(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['transferencias'])
+      queryClient.invalidateQueries({ queryKey: ['transferencias'] })
     }
   })
 
@@ -35,9 +35,9 @@ export const useTransferencias = (ubicacionId) => {
   const confirmarTransferencia = useMutation({
     mutationFn: (data) => dataService.confirmarTransferencia(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['transferencias'])
-      queryClient.invalidateQueries(['inventario'])
-      queryClient.invalidateQueries(['alertas'])
+      queryClient.invalidateQueries({ queryKey: ['transferencias'] })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
+      queryClient.invalidateQueries({ queryKey: ['alertas'] })
     }
   })
 

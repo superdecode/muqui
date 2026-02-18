@@ -1,7 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Bell } from 'lucide-react'
 import { useAlertasStore } from '../../stores/alertasStore'
 import { useAuthStore } from '../../stores/authStore'
+import { useThemeStore } from '../../stores/themeStore'
+import { useAlertas } from '../../hooks/useAlertas'
 import AlertsPanel from '../common/AlertsPanel'
 import UserMenu from '../common/UserMenu'
 
@@ -10,16 +12,20 @@ export default function Header() {
   const bellRef = useRef(null)
   const { alertasNoLeidas } = useAlertasStore()
   const { user } = useAuthStore()
+  const { timezone } = useThemeStore()
+
+  // Initialize alerts subscription for real-time notifications
+  useAlertas(user?.id)
 
   return (
-    <header className="bg-white border-b border-slate-200 px-6 py-3">
+    <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-3">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">
-            {getGreeting()}
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+            {getGreeting(timezone)}
           </h2>
           {user && (
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
               {user.ubicacion_nombre || 'Sistema de Control Inventario'}
             </p>
           )}
@@ -31,7 +37,7 @@ export default function Header() {
             <button
               ref={bellRef}
               onClick={() => setShowAlertsPanel(!showAlertsPanel)}
-              className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+              className="relative p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
             >
               <Bell size={24} />
               {alertasNoLeidas > 0 && (
@@ -57,9 +63,16 @@ export default function Header() {
   )
 }
 
-function getGreeting() {
-  const hour = new Date().getHours()
-  if (hour < 12) return 'Buenos días'
-  if (hour < 18) return 'Buenas tardes'
+function getGreeting(timezone = 'America/Lima') {
+  // Obtener la hora en la zona horaria del usuario
+  const now = new Date()
+  const hour = parseInt(now.toLocaleString('en-US', { 
+    timeZone: timezone, 
+    hour: 'numeric', 
+    hour12: false 
+  }))
+  
+  if (hour >= 6 && hour < 12) return 'Buenos días'
+  if (hour >= 12 && hour < 19) return 'Buenas tardes'
   return 'Buenas noches'
 }

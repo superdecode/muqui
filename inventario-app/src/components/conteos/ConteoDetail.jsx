@@ -1,12 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { Package, MapPin, Calendar, User, CheckCircle, AlertCircle, X } from 'lucide-react'
+import { Package, MapPin, Calendar, User, CheckCircle, AlertCircle, X, Download } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import dataService from '../../services/dataService'
+import { useToastStore } from '../../stores/toastStore'
+import { exportConteoToExcel } from '../../utils/exportUtils'
+import { formatDisplayId } from '../../utils/formatters'
 
 export default function ConteoDetail({ conteo, onClose }) {
+  const toast = useToastStore()
+
   // Cargar detalles del conteo
   const { data: detalles = [], isLoading } = useQuery({
     queryKey: ['conteo-detalle', conteo.id],
@@ -24,6 +29,21 @@ export default function ConteoDetail({ conteo, onClose }) {
     queryKey: ['usuarios'],
     queryFn: () => dataService.getUsuarios()
   })
+
+  // Cargar ubicaciones para export
+  const { data: ubicaciones = [] } = useQuery({
+    queryKey: ['ubicaciones'],
+    queryFn: () => dataService.getUbicaciones()
+  })
+
+  const handleExportExcel = () => {
+    try {
+      exportConteoToExcel(conteo, detalles, productos, ubicaciones)
+      toast.success('Exportado', 'Conteo exportado a Excel')
+    } catch (err) {
+      toast.error('Error', err.message || 'No se pudo exportar')
+    }
+  }
 
   // Función para obtener información completa del producto
   const getProductoInfo = (productoId) => {
@@ -55,6 +75,13 @@ export default function ConteoDetail({ conteo, onClose }) {
     return usuario ? `${usuario.nombre} - ${usuario.rol}` : usuarioId
   }
 
+  // Función para obtener nombre de la ubicación
+  const getUbicacionNombre = (ubicacionId) => {
+    if (!ubicacionId) return '-'
+    const ubicacion = ubicaciones.find(u => u.id === ubicacionId)
+    return ubicacion ? ubicacion.nombre : ubicacionId
+  }
+
   const formatDate = (dateString) => {
     if (!dateString) return '-'
     try {
@@ -79,9 +106,9 @@ export default function ConteoDetail({ conteo, onClose }) {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-white">Detalle de Conteo</h2>
-                <p className="text-white/90 mt-1">ID: #{conteo.id}</p>
+                <p className="text-white/90 mt-1">Código: {formatDisplayId(conteo, 'CT')}</p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <span className={`px-4 py-2 rounded-full text-sm font-semibold ${
                   conteo.estado === 'PROGRAMADO' 
                     ? 'bg-blue-500 text-white' 
@@ -91,6 +118,15 @@ export default function ConteoDetail({ conteo, onClose }) {
                 }`}>
                   {conteo.estado}
                 </span>
+                {(conteo.estado === 'COMPLETADO' || conteo.estado === 'PARCIALMENTE_COMPLETADO') && detalles.length > 0 && (
+                  <button
+                    onClick={handleExportExcel}
+                    className="p-2 hover:bg-white/20 rounded-xl transition-colors"
+                    title="Exportar a Excel"
+                  >
+                    <Download className="text-white" size={20} />
+                  </button>
+                )}
                 <button
                   onClick={onClose}
                   className="p-2 hover:bg-white/20 rounded-xl transition-colors"
@@ -110,8 +146,8 @@ export default function ConteoDetail({ conteo, onClose }) {
                 <Calendar className="text-primary-600" size={20} />
               </div>
               <div>
-                <p className="text-sm text-slate-600">Fecha Programada</p>
-                <p className="font-semibold text-slate-900">{formatDate(conteo.fecha_programada)}</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Fecha Programada</p>
+                <p className="font-semibold text-slate-900 dark:text-slate-100">{formatDate(conteo.fecha_programada)}</p>
               </div>
             </div>
 
@@ -120,8 +156,8 @@ export default function ConteoDetail({ conteo, onClose }) {
                 <MapPin className="text-purple-600" size={20} />
               </div>
               <div>
-                <p className="text-sm text-slate-600">Ubicación</p>
-                <p className="font-semibold text-slate-900">{conteo.ubicacion_id}</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Ubicación</p>
+                <p className="font-semibold text-slate-900 dark:text-slate-100">{getUbicacionNombre(conteo.ubicacion_id)}</p>
               </div>
             </div>
 
@@ -130,8 +166,8 @@ export default function ConteoDetail({ conteo, onClose }) {
                 <Package className="text-blue-600" size={20} />
               </div>
               <div>
-                <p className="text-sm text-slate-600">Tipo de Conteo</p>
-                <p className="font-semibold text-slate-900">{conteo.tipo_conteo}</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Tipo de Conteo</p>
+                <p className="font-semibold text-slate-900 dark:text-slate-100">{conteo.tipo_conteo}</p>
               </div>
             </div>
 
@@ -140,8 +176,8 @@ export default function ConteoDetail({ conteo, onClose }) {
                 <User className="text-green-600" size={20} />
               </div>
               <div>
-                <p className="text-sm text-slate-600">Responsable</p>
-                <p className="font-semibold text-slate-900">{conteo.usuario_responsable_id || '-'}</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Responsable</p>
+                <p className="font-semibold text-slate-900 dark:text-slate-100">{getUsuarioNombre(conteo.usuario_responsable_id)}</p>
               </div>
             </div>
 
@@ -151,8 +187,8 @@ export default function ConteoDetail({ conteo, onClose }) {
                   <User className="text-blue-600" size={20} />
                 </div>
                 <div>
-                  <p className="text-sm text-slate-600">Ejecutado por</p>
-                  <p className="font-semibold text-slate-900">{conteo.usuario_ejecutor_id}</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">Ejecutado por</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{getUsuarioNombre(conteo.usuario_ejecutor_id)}</p>
                 </div>
               </div>
             )}
@@ -160,7 +196,7 @@ export default function ConteoDetail({ conteo, onClose }) {
 
           {/* Productos */}
           <div>
-            <h3 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
               <Package size={24} className="text-primary-600" />
               Productos Contados {detalles.length > 0 && `(${detalles.length} items)`}
             </h3>
@@ -170,46 +206,46 @@ export default function ConteoDetail({ conteo, onClose }) {
                 <LoadingSpinner text="Cargando detalles..." />
               </div>
             ) : detalles.length === 0 ? (
-              <div className="text-center py-12 bg-slate-50 rounded-xl">
+              <div className="text-center py-12 bg-slate-50 dark:bg-slate-700/50 rounded-xl">
                 <Package size={64} className="mx-auto text-slate-300 mb-4" />
-                <p className="text-slate-600 text-lg">No hay productos contados en este conteo</p>
+                <p className="text-slate-600 dark:text-slate-400 text-lg">No hay productos contados en este conteo</p>
               </div>
             ) : (
-              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead className="bg-slate-50 border-b border-slate-200">
+                    <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
                       <tr>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">ID Producto</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Nombre</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Especificación</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Unidad de Medida</th>
-                        <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700">Stock Sistema</th>
-                        <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700">Stock Físico</th>
-                        <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700">Diferencia</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">ID Producto</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Nombre</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Especificación</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Unidad de Medida</th>
+                        <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Sistema</th>
+                        <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Físico</th>
+                        <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">Diferencia</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200">
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                       {detalles.map((detalle, index) => {
                         const productoInfo = getProductoInfo(detalle.producto_id)
                         const diferencia = getDiferencia(detalle.cantidad_fisica, detalle.cantidad_sistema)
                         return (
-                          <tr key={index} className="hover:bg-slate-50 transition-colors">
+                          <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-2">
                                 <div className="p-2 bg-primary-100 rounded-lg">
                                   <Package size={16} className="text-primary-600" />
                                 </div>
-                                <span className="font-mono text-sm font-medium text-slate-900">
+                                <span className="font-mono text-sm font-medium text-slate-900 dark:text-slate-100">
                                   {productoInfo.id}
                                 </span>
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <p className="font-semibold text-slate-900">{productoInfo.nombre}</p>
+                              <p className="font-semibold text-slate-900 dark:text-slate-100">{productoInfo.nombre}</p>
                             </td>
                             <td className="px-6 py-4">
-                              <p className="text-slate-700">
+                              <p className="text-slate-700 dark:text-slate-300">
                                 {productoInfo.especificacion || <span className="text-slate-400 italic">Sin especificación</span>}
                               </p>
                             </td>
@@ -219,12 +255,12 @@ export default function ConteoDetail({ conteo, onClose }) {
                               </span>
                             </td>
                             <td className="px-6 py-4 text-center">
-                              <span className="text-lg font-bold text-slate-900">
+                              <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
                                 {detalle.cantidad_sistema || 0}
                               </span>
                             </td>
                             <td className="px-6 py-4 text-center">
-                              <span className="text-lg font-bold text-slate-900">
+                              <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
                                 {detalle.cantidad_fisica !== null && detalle.cantidad_fisica !== undefined
                                   ? detalle.cantidad_fisica
                                   : '-'}
@@ -261,15 +297,15 @@ export default function ConteoDetail({ conteo, onClose }) {
 
           {/* Observaciones */}
           {conteo.observaciones && (
-            <div className="bg-slate-50 rounded-xl p-4">
-              <h4 className="font-semibold text-slate-900 mb-2">Observaciones</h4>
-              <p className="text-slate-700">{conteo.observaciones}</p>
+            <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4">
+              <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Observaciones</h4>
+              <p className="text-slate-700 dark:text-slate-300">{conteo.observaciones}</p>
             </div>
           )}
 
           {/* Botones */}
-          <div className="flex justify-end gap-4 pt-4 border-t border-slate-200">
-            <Button variant="ghost" onClick={onClose} className="flex-1">
+          <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <Button variant="ghost" onClick={onClose}>
               Cerrar
             </Button>
           </div>
