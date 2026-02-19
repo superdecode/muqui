@@ -14,6 +14,7 @@ export const getUserAllowedUbicacionIds = (user, allUbicaciones, allEmpresas) =>
   // Si es admin global, puede ver todo
   if (user.rol === 'ADMIN_GLOBAL') return []
 
+  
   // Obtener ubicaciones asignadas directamente
   let ubicacionIds = []
   if (Array.isArray(user.ubicaciones_asignadas)) {
@@ -60,6 +61,7 @@ export const getUserAllowedUbicacionIds = (user, allUbicaciones, allEmpresas) =>
       .filter(ub => empresaIds.includes(ub.empresa_id))
       .map(ub => ub.id)
 
+    
     return empresaUbicaciones
   }
 

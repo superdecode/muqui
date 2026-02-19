@@ -230,7 +230,7 @@ export const useAuthStore = create(
        * Get list of all modules the user can view (for route guard)
        */
       getViewableModules: () => {
-        const allModules = ['dashboard', 'inventario', 'productos', 'movimientos', 'conteos', 'reportes', 'configuracion', 'administracion']
+        const allModules = ['dashboard', 'inventario', 'productos', 'stock', 'movimientos', 'conteos', 'reportes', 'configuracion', 'administracion']
         const user = get().user
         if (!user) return []
 
@@ -284,6 +284,7 @@ export const useAuthStore = create(
           'dashboard': '/',
           'inventario': '/inventario',
           'productos': '/productos',
+          'stock': '/stock',
           'movimientos': '/movimientos',
           'conteos': '/conteos',
           'reportes': '/reportes',

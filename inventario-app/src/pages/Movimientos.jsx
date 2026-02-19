@@ -555,7 +555,7 @@ export default function Movimientos() {
             </div>
           )}
         </div>
-        {/* Recepciones Pendientes */}
+        {/* Entradas Pendientes */}
         <div
           onClick={() => handleCardClick('recepcion', 'recibiendo')}
           className={`bg-gradient-to-br from-orange-50 to-white dark:from-orange-900/20 dark:to-slate-800 border border-orange-100 dark:border-orange-900/30 rounded-xl p-4 cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.02] relative overflow-hidden ${
@@ -566,7 +566,7 @@ export default function Movimientos() {
             <div>
               <p className="text-sm text-slate-600 dark:text-slate-400 mb-1 flex items-center gap-2">
                 <ArrowDownLeft size={16} />
-                Recepciones Pendientes
+                Entradas Pendientes
               </p>
               <p className="text-3xl font-bold text-orange-600">{allStats.recepcionesPorRecibir}</p>
             </div>
@@ -633,7 +633,7 @@ export default function Movimientos() {
       <div className="flex gap-2">
         {[
           { id: 'salida', label: 'Salidas', icon: ArrowUpRight },
-          { id: 'recepcion', label: 'Recepciones', icon: ArrowDownLeft }
+          { id: 'recepcion', label: 'Entradas', icon: ArrowDownLeft }
         ].map(tab => {
           const Icon = tab.icon
           const isActive = directionTab === tab.id

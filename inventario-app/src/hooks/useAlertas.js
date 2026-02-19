@@ -71,7 +71,6 @@ export const useAlertas = (usuarioId) => {
       })
 
       if (newNotifications.length > 0) {
-        console.log('🔔 New notifications detected:', newNotifications.length)
         setPopupNotifications(newNotifications)
 
         // Play sound and browser notification for critical ones
@@ -80,7 +79,8 @@ export const useAlertas = (usuarioId) => {
           const isCritical = newest.prioridad === 'alta' ||
             newest.tipo === 'stock_bajo' ||
             newest.tipo === 'transferencia_recibida' ||
-            newest.tipo === 'transferencia_pendiente'
+            newest.tipo === 'transferencia_pendiente' ||
+            newest.tipo === 'solicitud_recibida'
 
           if (isCritical) {
             playNotificationSound('critical')

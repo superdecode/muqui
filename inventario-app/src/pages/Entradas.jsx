@@ -12,13 +12,15 @@ import {
   Eye,
   Loader,
   PackageCheck,
-  XCircle
+  XCircle,
+  Plus
 } from 'lucide-react'
 import Card from '../components/common/Card'
 import DataTable from '../components/common/DataTable'
 import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import TransferenciaDetail from '../components/transferencias/TransferenciaDetail'
+import EntradaForm from '../components/entradas/EntradaForm'
 import useMovimientos from '../hooks/useMovimientos'
 import { useAuthStore } from '../stores/authStore'
 import { usePermissions } from '../hooks/usePermissions'
@@ -27,12 +29,13 @@ import { safeFormatDate, formatDisplayId } from '../utils/formatters'
 import { getUserAllowedUbicacionIds } from '../utils/userFilters'
 import dataService from '../services/dataService'
 
-export default function Recepciones() {
+export default function Entradas() {
   const location = useLocation()
   const [statusTab, setStatusTab] = useState('todos')
   const [searchTerm, setSearchTerm] = useState('')
   const [sedeFilter, setSedeFilter] = useState('')
   const [showDetail, setShowDetail] = useState(false)
+  const [showForm, setShowForm] = useState(false)
   const [selectedMovimiento, setSelectedMovimiento] = useState(null)
 
   const { user } = useAuthStore()
@@ -310,6 +313,44 @@ export default function Recepciones() {
     eliminarMovimiento(movimiento.id)
   }
 
+  const handleSaveEntrada = async (data) => {
+    try {
+      let response
+      if (data.tipo_entrada === 'TRANSFERENCIA') {
+        // Crear transferencia (salida + entrada)
+        response = await dataService.createMovimiento({
+          tipo_movimiento: 'TRANSFERENCIA',
+          origen_id: data.origen_id,
+          destino_id: data.destino_id,
+          usuario_creacion_id: data.usuario_creacion_id,
+          observaciones_creacion: data.observaciones,
+          productos: data.productos,
+          estado: 'PENDIENTE'
+        })
+      } else {
+        // Crear entrada directa por compra
+        response = await dataService.createEntradaCompra({
+          destino_id: data.destino_id,
+          proveedor: data.proveedor,
+          numero_documento: data.numero_documento,
+          usuario_creacion_id: data.usuario_creacion_id,
+          observaciones: data.observaciones,
+          productos: data.productos
+        })
+      }
+
+      if (response.success) {
+        toast.success('Entrada Registrada', response.message || 'La entrada se ha registrado correctamente')
+        setShowForm(false)
+        refetch()
+      } else {
+        toast.error('Error al Registrar', response.message || 'No se pudo registrar la entrada')
+      }
+    } catch (error) {
+      toast.error('Error al Registrar', error.message || 'No se pudo registrar la entrada')
+    }
+  }
+
   const handleCloseDetail = () => { setShowDetail(false); setSelectedMovimiento(null) }
 
   const handleCancelarMovimiento = async (motivo) => {
@@ -339,9 +380,9 @@ export default function Recepciones() {
     return (
       <div className="flex flex-col items-center justify-center h-96 gap-4">
         <AlertTriangle className="text-red-500" size={48} />
-        <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200">Error al cargar recepciones</h2>
+        <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200">Error al cargar entradas</h2>
         <p className="text-slate-600 dark:text-slate-400 text-center max-w-md">
-          {error.message || 'No se pudieron cargar las recepciones.'}
+          {error.message || 'No se pudieron cargar las entradas.'}
         </p>
         <Button variant="primary" onClick={() => refetch()}>
           <RefreshCw size={18} className="mr-2" />
@@ -361,10 +402,16 @@ export default function Recepciones() {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <ArrowDownLeft className="text-white" size={28} />
-                <h1 className="text-3xl font-bold text-white">Recepciones</h1>
+                <h1 className="text-3xl font-bold text-white">Entradas</h1>
               </div>
-              <p className="text-white/90">Transferencias pendientes de recibir</p>
+              <p className="text-white/90">Transferencias y compras de inventario</p>
             </div>
+            {canWriteMovimientos && (
+              <Button variant="white" onClick={() => setShowForm(true)}>
+                <Plus size={20} className="mr-2" />
+                Nueva Entrada
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -477,7 +524,7 @@ export default function Recepciones() {
             <div className="text-center py-12">
               <ArrowDownLeft className="mx-auto text-slate-300 dark:text-slate-600 mb-4" size={48} />
               <p className="text-slate-600 dark:text-slate-400 font-medium">
-                No tienes recepciones pendientes
+                No tienes entradas pendientes
               </p>
               <p className="text-sm text-slate-500 dark:text-slate-500 mt-1">
                 Las transferencias hacia tu ubicación aparecerán aquí
@@ -523,6 +570,15 @@ export default function Recepciones() {
           isConfirmando={isConfirmando}
           canCancel={canWriteMovimientos && normalizeEstado(selectedMovimiento.estado) === 'PENDIENTE'}
           onCancelar={handleCancelarMovimiento}
+        />
+      )}
+
+      {/* Formulario de Nueva Entrada */}
+      {showForm && (
+        <EntradaForm
+          onClose={() => setShowForm(false)}
+          onSave={handleSaveEntrada}
+          isLoading={false}
         />
       )}
     </div>

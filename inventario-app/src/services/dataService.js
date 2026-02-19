@@ -103,6 +103,14 @@ const dataService = {
     return await firestoreService.iniciarRecepcion(data)
   },
 
+  createMovimiento: async (data) => {
+    return await firestoreService.createTransferencia(uppercaseStrings(data))
+  },
+
+  createEntradaCompra: async (data) => {
+    return await firestoreService.createEntradaCompra(uppercaseStrings(data))
+  },
+
   cancelarMovimiento: async (data) => {
     return await firestoreService.cancelarMovimiento(data)
   },
@@ -299,6 +307,9 @@ const dataService = {
   },
   deleteSolicitud: async (solicitudId) => {
     return await firestoreService.deleteSolicitud(solicitudId)
+  },
+  actualizarSolicitudesProcesadasSinCodigo: async () => {
+    return await firestoreService.actualizarSolicitudesProcesadasSinCodigo()
   }
 }
 

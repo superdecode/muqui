@@ -452,7 +452,7 @@ export async function triggerTransferenciaRecibida({ transferencia, productos, o
   const datosAdicionales = {
     transferencia_id: transferencia?.id || '',
     codigo: transferencia?.codigo_legible || '',
-    accionUrl: `/movimientos?tab=recepcion&filtro=pendiente&id=${transferencia?.id || ''}` // Navigate to recepciones tab
+    accionUrl: `/movimientos/entradas?filtro=pendiente&id=${transferencia?.id || ''}`
   }
 
   // Solo agregar campos si tienen valores definidos
@@ -492,7 +492,7 @@ export async function triggerTransferenciaPendiente({ transferencia, ubicacion, 
       codigo: transferencia.codigo_legible,
       ubicacion_id: ubicacion?.id,
       ubicacion_nombre: ubicacion?.nombre,
-      accionUrl: `/movimientos?id=${transferencia.id}` // Navigate to movimiento details
+      accionUrl: `/movimientos/salidas?filtro=pendiente&id=${transferencia.id}`
     },
     usuarios_destino: usuariosDestino || []
   })
@@ -502,10 +502,19 @@ export async function triggerTransferenciaPendiente({ transferencia, ubicacion, 
  * Trigger solicitud_recibida notification when a transfer request is submitted
  */
 export async function triggerSolicitudRecibida({ solicitud, productos, origen, destino, usuarioCreador, usuariosDestino }) {
+  console.log('🔔 triggerSolicitudRecibida llamado con:', {
+    solicitud,
+    productos: productos?.length,
+    origen,
+    destino,
+    usuarioCreador,
+    usuariosDestino: usuariosDestino?.length
+  })
+
   const datosAdicionales = {
     solicitud_id: solicitud?.id || '',
     codigo: solicitud?.codigo_legible || '',
-    accionUrl: `/movimientos/solicitudes?tab=recibidas&id=${solicitud?.id || ''}`
+    accionUrl: `/movimientos/solicitudes?tab=recibidas&filtro=recibida&id=${solicitud?.id || ''}`
   }
 
   if (origen?.id) datosAdicionales.origen_id = origen.id
@@ -514,7 +523,7 @@ export async function triggerSolicitudRecibida({ solicitud, productos, origen, d
   if (destino?.nombre) datosAdicionales.destino_nombre = destino.nombre
   if (usuarioCreador?.nombre) datosAdicionales.usuario_creador = usuarioCreador.nombre
 
-  return createOrUpdateNotification({
+  const notificationData = {
     tipo: NOTIFICATION_TYPES.SOLICITUD_RECIBIDA,
     prioridad: PRIORITY.ALTA,
     titulo: `Nueva solicitud: ${solicitud?.codigo_legible || 'N/A'}`,
@@ -527,7 +536,18 @@ export async function triggerSolicitudRecibida({ solicitud, productos, origen, d
       cantidad: p.cantidad_solicitada || p.cantidad || 0
     })),
     cantidad_items: (productos || []).length
-  })
+  }
+
+  console.log('🔔 Creando notificación de solicitud:', notificationData)
+
+  try {
+    const result = await createOrUpdateNotification(notificationData)
+    console.log('🔔 Notificación de solicitud creada exitosamente:', result)
+    return result
+  } catch (error) {
+    console.error('🔔 Error creando notificación de solicitud:', error)
+    throw error
+  }
 }
 
 /**

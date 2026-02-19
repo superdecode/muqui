@@ -183,8 +183,8 @@ export default function ConteoDetail({ conteo, onClose }) {
                   <Calendar className="text-primary-600" size={20} />
                 </div>
                 <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Fecha Programada</p>
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">{formatDate(conteo.fecha_programada)}</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">Fecha Creación</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{conteo.fecha_creacion ? formatDate(conteo.fecha_creacion.toDate ? conteo.fecha_creacion.toDate() : new Date(conteo.fecha_creacion)) : '-'}</p>
                 </div>
               </div>
 

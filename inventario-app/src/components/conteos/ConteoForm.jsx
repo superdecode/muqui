@@ -3,14 +3,13 @@ import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
 import Alert from '../common/Alert'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { Calendar, MapPin, AlertCircle, X, Package } from 'lucide-react'
+import { MapPin, AlertCircle, X, Package } from 'lucide-react'
 import dataService from '../../services/dataService'
 import { useAuthStore } from '../../stores/authStore'
 
 export default function ConteoForm({ onClose, onSave, isLoading = false }) {
   const { user } = useAuthStore()
   const [formData, setFormData] = useState({
-    fecha_programada: new Date().toISOString().split('T')[0],
     ubicacion_id: '',
     tipo_conteo: 'diario',
     observaciones: ''
@@ -145,21 +144,6 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
               </div>
             </Alert>
           )}
-
-          {/* Fecha */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              <Calendar size={16} className="inline mr-2" />
-              Fecha Programada
-            </label>
-            <input
-              type="date"
-              value={formData.fecha_programada}
-              onChange={(e) => setFormData({ ...formData, fecha_programada: e.target.value })}
-              className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              required
-            />
-          </div>
 
           {/* Ubicación */}
           <div>

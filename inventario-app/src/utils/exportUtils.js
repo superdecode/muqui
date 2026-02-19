@@ -328,7 +328,7 @@ export const exportConteoToExcel = (conteo, detalles, productos, ubicaciones) =>
     ['Ubicación', ubicacion?.nombre || conteo.ubicacion_id, '', '', '', ''],
     ['Tipo', conteo.tipo_conteo || '', '', '', '', ''],
     ['Estado', conteo.estado, '', '', '', ''],
-    ['Fecha Programada', conteo.fecha_programada || '', '', '', '', ''],
+    ['Fecha Creación', conteo.fecha_creacion ? (conteo.fecha_creacion.toDate ? conteo.fecha_creacion.toDate().toISOString().split('T')[0] : new Date(conteo.fecha_creacion).toISOString().split('T')[0]) : '', '', '', '', ''],
     ['', '', '', '', '', '']
   ]
 

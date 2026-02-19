@@ -6,7 +6,7 @@
  * - 5+ notifications: Consolidated "You have X new notifications"
  */
 import { useState, useEffect } from 'react'
-import { X, Bell, ExternalLink, AlertTriangle, Package, ArrowRightLeft, ClipboardList } from 'lucide-react'
+import { X, Bell, ExternalLink, AlertTriangle, Package, ArrowRightLeft, ClipboardList, Inbox } from 'lucide-react'
 import { useAlertasStore } from '../../stores/alertasStore'
 import { useNavigate } from 'react-router-dom'
 import { markAsRead } from '../../services/notificationService'
@@ -23,6 +23,8 @@ function getNotificationIcon(tipo) {
     case NOTIFICATION_TYPES.TRANSFERENCIA_RECIBIDA:
     case NOTIFICATION_TYPES.TRANSFERENCIA_PENDIENTE:
       return <ArrowRightLeft className="text-blue-500" size={20} />
+    case NOTIFICATION_TYPES.SOLICITUD_RECIBIDA:
+      return <Inbox className="text-orange-500" size={20} />
     case NOTIFICATION_TYPES.CONTEO_RECORDATORIO:
     case NOTIFICATION_TYPES.CONTEO_INVENTARIO:
       return <ClipboardList className="text-purple-500" size={20} />
@@ -119,8 +121,11 @@ export default function NotificationPopups() {
 
       // Navigate to action URL if available
       const accionUrl = popup.accionUrl || popup.datos_adicionales?.accionUrl
+      
       if (accionUrl) {
         navigate(accionUrl)
+      } else {
+        setShowPanel(true)
       }
       handleClose(popup.id)
     }

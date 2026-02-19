@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
 import Alert from '../common/Alert'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { X, Package, ArrowRight, CheckCircle, AlertTriangle, MapPin } from 'lucide-react'
+import { X, Package, ArrowRight, CheckCircle, AlertTriangle, MapPin, Trash2, Plus, Search } from 'lucide-react'
 import dataService from '../../services/dataService'
 
 export default function ProcesarSolicitudModal({ solicitud, onClose, onProcesar, isLoading = false }) {
@@ -11,6 +11,9 @@ export default function ProcesarSolicitudModal({ solicitud, onClose, onProcesar,
   const [observaciones, setObservaciones] = useState('')
   const [error, setError] = useState('')
   const [loadingDetalles, setLoadingDetalles] = useState(true)
+  const [mostrarAgregar, setMostrarAgregar] = useState(false)
+  const [busquedaProducto, setBusquedaProducto] = useState('')
+  const [productosOriginales, setProductosOriginales] = useState([])
 
   // Cargar productos para nombres
   const { data: productos = [] } = useQuery({
@@ -33,13 +36,16 @@ export default function ProcesarSolicitudModal({ solicitud, onClose, onProcesar,
       try {
         const detalles = await dataService.getDetalleSolicitudes(solicitud.id)
         // Inicializar productos aprobados con las cantidades solicitadas
-        setProductosAprobados(detalles.map(d => ({
+        const productosIniciales = detalles.map(d => ({
           detalle_id: d.id,
           producto_id: d.producto_id,
           cantidad_solicitada: d.cantidad_solicitada,
           cantidad_aprobada: d.cantidad_solicitada,
-          observaciones: ''
-        })))
+          observaciones: '',
+          es_original: true
+        }))
+        setProductosAprobados(productosIniciales)
+        setProductosOriginales(productosIniciales)
       } catch (error) {
         console.error('Error cargando detalles:', error)
         setError('Error cargando los detalles de la solicitud')
@@ -71,6 +77,79 @@ export default function ProcesarSolicitudModal({ solicitud, onClose, onProcesar,
       prev.map(p => p.producto_id === productoId ? { ...p, cantidad_aprobada: cantidadNum } : p)
     )
   }
+
+  // Eliminar producto de la lista
+  const handleEliminarProducto = (productoId) => {
+    const producto = productosAprobados.find(p => p.producto_id === productoId)
+    
+    // Si es un producto original con cantidad solicitada, pedir confirmación
+    if (producto?.es_original && producto.cantidad_solicitada > 0) {
+      if (!window.confirm(`¿Eliminar ${getProductoNombre(productoId)} de la lista? Este producto fue solicitado originalmente.`)) {
+        return
+      }
+    }
+    
+    setProductosAprobados(prev => prev.filter(p => p.producto_id !== productoId))
+    setError('')
+  }
+
+  // Agregar nuevo producto
+  const handleAgregarProducto = (producto) => {
+    // Verificar si ya está en la lista
+    if (productosAprobados.some(p => p.producto_id === producto.id)) {
+      setError(`El producto "${producto.concatenado || producto.nombre}" ya está en la lista`)
+      return
+    }
+
+    // Verificar que el producto esté disponible en la ubicación origen
+    const ubicacionesPermitidas = producto.ubicaciones_asignadas || []
+    if (ubicacionesPermitidas.length > 0 && !ubicacionesPermitidas.includes(solicitud.ubicacion_origen_id)) {
+      setError(`El producto "${producto.concatenado || producto.nombre}" no está disponible en la ubicación origen`)
+      return
+    }
+
+    // Agregar producto a la lista
+    setProductosAprobados(prev => [...prev, {
+      producto_id: producto.id,
+      cantidad_solicitada: 0,
+      cantidad_aprobada: 0,
+      observaciones: '',
+      es_original: false
+    }])
+    
+    setMostrarAgregar(false)
+    setBusquedaProducto('')
+    setError('')
+  }
+
+  // Cancelar sin guardar cambios
+  const handleCancelar = () => {
+    // Restaurar productos originales
+    setProductosAprobados(productosOriginales)
+    setError('')
+    onClose()
+  }
+
+  // Filtrar productos disponibles para agregar
+  const productosDisponibles = productos.filter(p => {
+    // No mostrar productos ya en la lista
+    if (productosAprobados.some(pa => pa.producto_id === p.id)) return false
+    
+    // Filtrar por búsqueda
+    if (busquedaProducto) {
+      const searchLower = busquedaProducto.toLowerCase()
+      const nombre = (p.concatenado || p.nombre || '').toLowerCase()
+      if (!nombre.includes(searchLower)) return false
+    }
+    
+    // Verificar ubicaciones permitidas
+    const ubicacionesPermitidas = p.ubicaciones_asignadas || []
+    if (ubicacionesPermitidas.length > 0 && !ubicacionesPermitidas.includes(solicitud.ubicacion_origen_id)) {
+      return false
+    }
+    
+    return true
+  })
 
   // Validar y procesar
   const handleProcesar = () => {
@@ -190,6 +269,7 @@ export default function ProcesarSolicitudModal({ solicitud, onClose, onProcesar,
                         <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Stock Disponible</th>
                         <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Solicitado</th>
                         <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">A Enviar</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-600">
@@ -211,8 +291,12 @@ export default function ProcesarSolicitudModal({ solicitud, onClose, onProcesar,
                                 {stock}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-center font-medium text-slate-700 dark:text-slate-200">
-                              {prod.cantidad_solicitada}
+                            <td className="px-4 py-3 text-center">
+                              <span className="font-medium text-slate-700 dark:text-slate-200">
+                                {prod.cantidad_solicitada > 0 ? prod.cantidad_solicitada : (
+                                  <span className="text-slate-400 text-xs">N/A</span>
+                                )}
+                              </span>
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-center gap-2">
@@ -233,12 +317,103 @@ export default function ProcesarSolicitudModal({ solicitud, onClose, onProcesar,
                                 )}
                               </div>
                             </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-center">
+                                <button
+                                  onClick={() => handleEliminarProducto(prod.producto_id)}
+                                  className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                  title="Eliminar producto"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         )
                       })}
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              {/* Agregar productos */}
+              <div>
+                {!mostrarAgregar ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => setMostrarAgregar(true)}
+                    className="w-full border-dashed"
+                  >
+                    <Plus size={16} className="mr-2" />
+                    Agregar Producto No Solicitado
+                  </Button>
+                ) : (
+                  <div className="border border-slate-200 dark:border-slate-600 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Buscar producto para agregar
+                      </h4>
+                      <button
+                        onClick={() => {
+                          setMostrarAgregar(false)
+                          setBusquedaProducto('')
+                        }}
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                    
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <input
+                        type="text"
+                        value={busquedaProducto}
+                        onChange={(e) => setBusquedaProducto(e.target.value)}
+                        placeholder="Buscar por nombre de producto..."
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        autoFocus
+                      />
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-600 rounded-lg">
+                      {productosDisponibles.length === 0 ? (
+                        <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
+                          {busquedaProducto ? 'No se encontraron productos' : 'Escribe para buscar productos'}
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-200 dark:divide-slate-600">
+                          {productosDisponibles.slice(0, 10).map(producto => {
+                            const stockDisponible = getStockOrigen(producto.id)
+                            return (
+                              <button
+                                key={producto.id}
+                                onClick={() => handleAgregarProducto(producto)}
+                                className="w-full px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors flex items-center justify-between"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Package className="text-slate-400" size={16} />
+                                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                                    {producto.concatenado || producto.nombre}
+                                  </span>
+                                </div>
+                                <span className={`text-xs font-medium ${stockDisponible > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                  Stock: {stockDisponible}
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {productosDisponibles.length > 10 && (
+                      <div className="text-xs text-slate-500 dark:text-slate-400 text-center">
+                        Mostrando 10 de {productosDisponibles.length} productos. Refina tu búsqueda.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Observaciones */}
@@ -271,7 +446,7 @@ export default function ProcesarSolicitudModal({ solicitud, onClose, onProcesar,
         {/* Footer */}
         <div className="border-t border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-800/50">
           <div className="flex gap-3 justify-end">
-            <Button variant="outline" onClick={onClose} disabled={isLoading}>
+            <Button variant="outline" onClick={handleCancelar} disabled={isLoading}>
               Cancelar
             </Button>
             <Button

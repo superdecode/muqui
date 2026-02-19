@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Shield, Users, Building2, MapPin, Lock,
   Plus, Edit2, Trash2, Search, X, Save,
-  CheckCircle, XCircle, ChevronDown, ChevronRight, Package
+  CheckCircle, XCircle, ChevronDown, ChevronRight, Package, ExternalLink
 } from 'lucide-react'
 import Card from '../components/common/Card'
 import Button from '../components/common/Button'
@@ -36,11 +36,18 @@ const COLOR_OPTIONS = [
 const MODULOS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'productos', label: 'Productos' },
+  { id: 'stock', label: 'Stock' },
   { id: 'conteos', label: 'Conteos' },
   { id: 'movimientos', label: 'Movimientos' },
   { id: 'reportes', label: 'Reportes' },
   { id: 'configuracion', label: 'Configuración' },
   { id: 'administracion', label: 'Administración' }
+]
+
+const SUBMODULOS_MOVIMIENTOS = [
+  { id: 'solicitudes', label: 'Solicitudes', parent: 'movimientos' },
+  { id: 'salidas', label: 'Salidas', parent: 'movimientos' },
+  { id: 'entradas', label: 'Entradas', parent: 'movimientos' }
 ]
 
 const NIVELES_ACCESO = [
@@ -51,12 +58,12 @@ const NIVELES_ACCESO = [
 ]
 
 const PERMISOS_PLANTILLA = {
-  'Admin Global': { dashboard: 'total', productos: 'total', conteos: 'total', movimientos: 'total', reportes: 'total', configuracion: 'total', administracion: 'total' },
-  'Admin Empresa': { dashboard: 'total', productos: 'total', conteos: 'total', movimientos: 'total', reportes: 'total', configuracion: 'escritura', administracion: 'lectura' },
-  'Gerente': { dashboard: 'lectura', productos: 'escritura', conteos: 'escritura', movimientos: 'escritura', reportes: 'escritura', configuracion: 'lectura', administracion: 'sin_acceso' },
-  'Jefe Punto': { dashboard: 'lectura', productos: 'lectura', conteos: 'escritura', movimientos: 'escritura', reportes: 'lectura', configuracion: 'sin_acceso', administracion: 'sin_acceso' },
-  'Operador': { dashboard: 'lectura', productos: 'lectura', conteos: 'escritura', movimientos: 'lectura', reportes: 'sin_acceso', configuracion: 'sin_acceso', administracion: 'sin_acceso' },
-  'Consulta': { dashboard: 'lectura', productos: 'lectura', conteos: 'sin_acceso', movimientos: 'sin_acceso', reportes: 'lectura', configuracion: 'sin_acceso', administracion: 'sin_acceso' }
+  'Admin Global': { dashboard: 'total', productos: 'total', stock: 'total', conteos: 'total', movimientos: 'total', reportes: 'total', configuracion: 'total', administracion: 'total' },
+  'Admin Empresa': { dashboard: 'total', productos: 'total', stock: 'total', conteos: 'total', movimientos: 'total', reportes: 'total', configuracion: 'escritura', administracion: 'lectura' },
+  'Gerente': { dashboard: 'lectura', productos: 'escritura', stock: 'escritura', conteos: 'escritura', movimientos: 'escritura', reportes: 'escritura', configuracion: 'lectura', administracion: 'sin_acceso' },
+  'Jefe Punto': { dashboard: 'lectura', productos: 'lectura', stock: 'lectura', conteos: 'escritura', movimientos: 'escritura', reportes: 'lectura', configuracion: 'sin_acceso', administracion: 'sin_acceso' },
+  'Operador': { dashboard: 'lectura', productos: 'lectura', stock: 'lectura', conteos: 'escritura', movimientos: 'lectura', reportes: 'sin_acceso', configuracion: 'sin_acceso', administracion: 'sin_acceso' },
+  'Consulta': { dashboard: 'lectura', productos: 'lectura', stock: 'lectura', conteos: 'sin_acceso', movimientos: 'sin_acceso', reportes: 'lectura', configuracion: 'sin_acceso', administracion: 'sin_acceso' }
 }
 
 // ========== MODAL ==========
@@ -560,6 +567,7 @@ function TabRoles({ canWrite = true, canDelete = true }) {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState({ nombre: '', color: '', permisos: {} })
+  const [expandedMovimientos, setExpandedMovimientos] = useState(false)
 
   const { data: rolesDB = [], isLoading } = useQuery({ queryKey: ['admin-roles'], queryFn: () => dataService.getRoles() })
 
@@ -584,17 +592,36 @@ function TabRoles({ canWrite = true, canDelete = true }) {
     setEditing(null)
     const defaultPermisos = {}
     MODULOS.forEach(m => { defaultPermisos[m.id] = '' })
+    SUBMODULOS_MOVIMIENTOS.forEach(s => { defaultPermisos[s.id] = '' })
     setForm({ nombre: '', color: '', permisos: defaultPermisos })
+    setExpandedMovimientos(false)
     setShowModal(true)
   }
   const openEdit = (rol) => {
     setEditing(rol)
     const permisos = {}
     MODULOS.forEach(m => { permisos[m.id] = (rol.permisos && rol.permisos[m.id]) || '' })
+    SUBMODULOS_MOVIMIENTOS.forEach(s => { permisos[s.id] = (rol.permisos && rol.permisos[s.id]) || '' })
     setForm({ nombre: rol.nombre || rol.label || '', color: rol.color || 'bg-blue-100 text-blue-800', permisos })
+    // Auto-expand if any sub-permission is set
+    const hasSubPerms = SUBMODULOS_MOVIMIENTOS.some(s => rol.permisos && rol.permisos[s.id])
+    setExpandedMovimientos(hasSubPerms)
     setShowModal(true)
   }
-  const handlePermisoChange = (mod, val) => setForm(prev => ({ ...prev, permisos: { ...prev.permisos, [mod]: val } }))
+  const handlePermisoChange = (mod, val) => {
+    setForm(prev => {
+      const newPermisos = { ...prev.permisos, [mod]: val }
+      // If changing the parent 'movimientos', set all sub-modules to same value if they are empty
+      if (mod === 'movimientos') {
+        SUBMODULOS_MOVIMIENTOS.forEach(s => {
+          if (!newPermisos[s.id] || newPermisos[s.id] === '') {
+            newPermisos[s.id] = val
+          }
+        })
+      }
+      return { ...prev, permisos: newPermisos }
+    })
+  }
   const handleSave = () => {
     if (!form.nombre) { toast.error('Requerido', 'Nombre obligatorio'); return }
     if (!form.color) { toast.error('Requerido', 'Color obligatorio'); return }
@@ -680,17 +707,53 @@ function TabRoles({ canWrite = true, canDelete = true }) {
             <p className="text-xs text-slate-500 mb-3">Define el nivel de acceso para cada módulo del sistema.</p>
             <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
               <div className="grid grid-cols-[1fr_auto] gap-0">
-                {MODULOS.map(mod => (
-                  <div key={mod.id} className="contents">
-                    <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-600 flex items-center"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">{mod.label}</span></div>
-                    <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-600">
-                      <select value={form.permisos[mod.id] || ''} onChange={e => handlePermisoChange(mod.id, e.target.value)} className={`px-2 py-1 rounded-lg text-xs font-semibold border-0 cursor-pointer ${NIVELES_ACCESO.find(n => n.value === form.permisos[mod.id])?.color || 'bg-slate-100 text-slate-500'}`} disabled={editing && isAdminRol(editing)}>
-                        <option value="" disabled>Seleccionar</option>
-                        {NIVELES_ACCESO.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
-                      </select>
+                {MODULOS.map(mod => {
+                  if (mod.id === 'movimientos') {
+                    return (
+                      <div key={mod.id} className="contents">
+                        {/* Movimientos parent row */}
+                        <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-600 flex items-center gap-2">
+                          <button type="button" onClick={() => setExpandedMovimientos(!expandedMovimientos)} className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded transition-colors">
+                            <ChevronDown size={14} className={`text-slate-500 transition-transform ${expandedMovimientos ? 'rotate-180' : ''}`} />
+                          </button>
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{mod.label}</span>
+                          <span className="text-xs text-slate-400">(general)</span>
+                        </div>
+                        <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-600">
+                          <select value={form.permisos[mod.id] || ''} onChange={e => handlePermisoChange(mod.id, e.target.value)} className={`px-2 py-1 rounded-lg text-xs font-semibold border-0 cursor-pointer ${NIVELES_ACCESO.find(n => n.value === form.permisos[mod.id])?.color || 'bg-slate-100 text-slate-500'}`} disabled={editing && isAdminRol(editing)}>
+                            <option value="" disabled>Seleccionar</option>
+                            {NIVELES_ACCESO.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
+                          </select>
+                        </div>
+                        {/* Sub-modules */}
+                        {expandedMovimientos && SUBMODULOS_MOVIMIENTOS.map(sub => (
+                          <div key={sub.id} className="contents">
+                            <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-600 flex items-center gap-2 bg-slate-100/50 dark:bg-slate-600/30">
+                              <span className="text-sm text-slate-600 dark:text-slate-400">{sub.label}</span>
+                            </div>
+                            <div className="px-4 py-1.5 border-b border-slate-200 dark:border-slate-600 bg-slate-100/50 dark:bg-slate-600/30">
+                              <select value={form.permisos[sub.id] || form.permisos['movimientos'] || ''} onChange={e => handlePermisoChange(sub.id, e.target.value)} className={`px-2 py-1 rounded-lg text-xs font-semibold border-0 cursor-pointer ${NIVELES_ACCESO.find(n => n.value === (form.permisos[sub.id] || form.permisos['movimientos']))?.color || 'bg-slate-100 text-slate-500'}`} disabled={editing && isAdminRol(editing)}>
+                                <option value="" disabled>Hereda padre</option>
+                                {NIVELES_ACCESO.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  }
+                  return (
+                    <div key={mod.id} className="contents">
+                      <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-600 flex items-center"><span className="text-sm font-medium text-slate-700 dark:text-slate-300">{mod.label}</span></div>
+                      <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-600">
+                        <select value={form.permisos[mod.id] || ''} onChange={e => handlePermisoChange(mod.id, e.target.value)} className={`px-2 py-1 rounded-lg text-xs font-semibold border-0 cursor-pointer ${NIVELES_ACCESO.find(n => n.value === form.permisos[mod.id])?.color || 'bg-slate-100 text-slate-500'}`} disabled={editing && isAdminRol(editing)}>
+                          <option value="" disabled>Seleccionar</option>
+                          {NIVELES_ACCESO.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
+                        </select>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
             {editing && isAdminRol(editing) && <p className="text-xs text-amber-600 mt-2">El rol Admin Global tiene acceso total y no puede modificarse.</p>}
@@ -751,6 +814,48 @@ function TabHerramientas({ canWrite }) {
     limpiarEmpresasMutation.mutate()
   }
 
+  const actualizarSolicitudesMutation = useMutation({
+    mutationFn: () => dataService.actualizarSolicitudesProcesadasSinCodigo(),
+    onSuccess: (result) => {
+      toast.success('Solicitudes Actualizadas', `Se actualizaron ${result.actualizadas} solicitudes procesadas con sus códigos de movimiento`)
+      setIsUpdating(false)
+    },
+    onError: (error) => {
+      toast.error('Error Actualizando Solicitudes', error.message)
+      setIsUpdating(false)
+    }
+  })
+
+  const actualizarUrlsNotificacionesMutation = useMutation({
+    mutationFn: () => dataService.actualizarUrlsNotificacionesSolicitudes(),
+    onSuccess: (result) => {
+      toast.success('URLs Actualizadas', `Se actualizaron ${result.actualizadas} URLs de notificaciones de solicitudes`)
+      setIsUpdating(false)
+    },
+    onError: (error) => {
+      toast.error('Error al Actualizar URLs', error.message)
+      setIsUpdating(false)
+    }
+  })
+
+  const handleActualizarSolicitudes = () => {
+    if (!window.confirm('¿Estás seguro de actualizar todas las solicitudes procesadas que no tienen código de movimiento? Esto obtendrá los códigos de los movimientos generados y los guardará en las solicitudes correspondientes.')) {
+      return
+    }
+    
+    setIsUpdating(true)
+    actualizarSolicitudesMutation.mutate()
+  }
+
+  const handleActualizarUrlsNotificaciones = () => {
+    if (!window.confirm('¿Estás seguro de actualizar las URLs de todas las notificaciones de solicitudes existentes? Esto corregirá las rutas para que naveguen correctamente a la página de solicitudes.')) {
+      return
+    }
+    
+    setIsUpdating(true)
+    actualizarUrlsNotificacionesMutation.mutate()
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -808,15 +913,100 @@ function TabHerramientas({ canWrite }) {
                   ) : (
                     <>
                       <Save size={16} className="mr-2" />
-                      Actualizar Productos
+                      Actualizar Tipo de Conteo
                     </>
                   )}
                 </Button>
               </div>
               
               <div className="text-xs text-amber-600 dark:text-amber-400">
-                ⚠️ Esta acción solo afectará a productos que no tengan tipo de conteo asignado.
-                Los productos que ya tienen un tipo no serán modificados.
+                ⚠️ Esta acción actualizará todos los productos sin tipo de conteo asignado.
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="border-green-200 dark:border-green-800">
+        <div className="p-6">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+              <Package className="text-green-600 dark:text-green-400" size={24} />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">
+                Actualizar Solicitudes Procesadas
+              </h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                Actualiza todas las solicitudes procesadas que no tienen código de movimiento.
+                Obtiene los códigos de los movimientos generados y los guarda en las solicitudes.
+              </p>
+              
+              <div className="flex items-center gap-4 mb-4">
+                <Button
+                  onClick={handleActualizarSolicitudes}
+                  disabled={isUpdating}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
+                  {isUpdating ? (
+                    <>
+                      <LoadingSpinner size="sm" className="mr-2" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    <>
+                      <Package size={16} className="mr-2" />
+                      Actualizar Solicitudes Procesadas
+                    </>
+                  )}
+                </Button>
+              </div>
+              
+              <div className="text-xs text-green-600 dark:text-green-400">
+                ✅ Esta acción obtendrá y guardará los códigos de movimiento faltantes.
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="border-purple-200 dark:border-purple-800">
+        <div className="p-6">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+              <ExternalLink className="text-purple-600 dark:text-purple-400" size={24} />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">
+                Actualizar URLs de Notificaciones
+              </h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                Corrige las URLs de todas las notificaciones de solicitudes existentes.
+                Esto soluciona el problema de navegación de notificaciones antiguas.
+              </p>
+              
+              <div className="flex items-center gap-4 mb-4">
+                <Button
+                  onClick={handleActualizarUrlsNotificaciones}
+                  disabled={isUpdating}
+                  className="bg-purple-600 hover:bg-purple-700 text-white"
+                >
+                  {isUpdating ? (
+                    <>
+                      <LoadingSpinner size="sm" className="mr-2" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    <>
+                      <ExternalLink size={16} className="mr-2" />
+                      Actualizar URLs de Notificaciones
+                    </>
+                  )}
+                </Button>
+              </div>
+              
+              <div className="text-xs text-purple-600 dark:text-purple-400">
+                🔗 Esta acción corregirá las rutas de notificaciones existentes.
               </div>
             </div>
           </div>
@@ -892,17 +1082,7 @@ export default function Administracion() {
   const canWriteAdmin = adminLevel === 'escritura' || adminLevel === 'total'
   const canDeleteAdmin = adminLevel === 'total'
   
-  console.log('Administracion - Debug permisos:', {
-    user: user?.nombre,
-    rol: user?.rol,
-    rol_id: user?.rol_id,
-    permisos: user?.permisos,
-    cachedRole: user?.roleData,
-    adminLevel,
-    canWriteAdmin,
-    canDeleteAdmin
-  })
-
+  
   if (adminLevel === 'sin_acceso') return (<div className="flex flex-col items-center justify-center h-96 gap-4"><Shield className="text-red-400" size={64} /><h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200">Acceso Denegado</h2><p className="text-slate-600 dark:text-slate-400 text-center max-w-md">No tienes permisos para acceder al panel de administración.</p></div>)
 
   return (

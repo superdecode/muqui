@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useLocation } from 'react-router-dom'
 import {
   Package,
   Plus,
@@ -33,6 +34,7 @@ import { getUserAllowedUbicacionIds } from '../utils/userFilters'
 import dataService from '../services/dataService'
 
 export default function Salidas() {
+  const location = useLocation()
   const [statusTab, setStatusTab] = useState('todos')
   const [searchTerm, setSearchTerm] = useState('')
   const [sedeFilter, setSedeFilter] = useState('')
@@ -40,6 +42,13 @@ export default function Salidas() {
   const [showForm, setShowForm] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
   const [selectedMovimiento, setSelectedMovimiento] = useState(null)
+
+  // Debug logs
+  console.log('🔍 Salidas - estado inicial:', {
+    tipoSalidaFilter,
+    statusTab,
+    location: location.search
+  })
 
   const { user } = useAuthStore()
   const { canEdit, isReadOnly, isAdmin } = usePermissions()
@@ -93,6 +102,31 @@ export default function Salidas() {
     setStatusTab(status)
     setSelectedCard(status)
   }
+
+  // Handle URL parameter for opening specific movement
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const movimientoId = params.get('id')
+    
+    console.log('🔍 URL params recibidos en Salidas:', {
+      movimientoId,
+      search: location.search,
+      totalMovimientos: movimientos?.length,
+      movimientosIds: movimientos?.map(m => m.id).slice(0, 5)
+    })
+    
+    if (movimientoId && movimientos && movimientos.length > 0) {
+      const movimiento = movimientos.find(m => m.id === movimientoId)
+      console.log('🔍 Movimiento encontrado:', movimiento)
+      if (movimiento) {
+        console.log('📍 Opening movement from URL:', movimientoId)
+        setSelectedMovimiento(movimiento)
+        setShowDetail(true)
+      } else {
+        console.log('❌ Movimiento no encontrado con ID:', movimientoId)
+      }
+    }
+  }, [location.search, movimientos])
 
   const effectiveSedeFilter = (userUbicacionIds.length === 1 && !sedeFilter) ? userUbicacionIds[0] : sedeFilter
 

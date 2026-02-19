@@ -1,24 +1,118 @@
 import { Link } from 'react-router-dom'
+import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../stores/authStore'
 import { useAlertasStore } from '../stores/alertasStore'
-import useInventario from '../hooks/useInventario'
 import useMovimientos from '../hooks/useMovimientos'
 import useConteos from '../hooks/useConteos'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import { Package, AlertTriangle, ArrowRightLeft, ClipboardCheck, TrendingUp, Sparkles } from 'lucide-react'
-import { formatTimeAgo } from '../utils/formatters'
+import { formatTimeAgo, safeParseDate } from '../utils/formatters'
+import { getUserAllowedUbicacionIds } from '../utils/userFilters'
+import dataService from '../services/dataService'
 
 export default function Dashboard() {
   const { user } = useAuthStore()
 
-  const { inventario, productos, isLoading: loadingInventario } = useInventario()
+  // Data queries (same as Stock and Reportes)
+  const { data: inventario = [], isLoading: loadingInventario } = useQuery({ queryKey: ['inventario'], queryFn: () => dataService.getInventario() })
+  const { data: productos = [] } = useQuery({ queryKey: ['productos'], queryFn: () => dataService.getProductos() })
+  const { data: ubicaciones = [] } = useQuery({ queryKey: ['ubicaciones'], queryFn: () => dataService.getUbicaciones() })
+  const { data: empresas = [] } = useQuery({ queryKey: ['empresas'], queryFn: () => dataService.getEmpresas() })
+  const { data: movimientos = [], isLoading: loadingMovimientos } = useQuery({ queryKey: ['movimientos'], queryFn: () => dataService.getMovimientos() })
+  const { data: conteos = [], isLoading: loadingConteos } = useQuery({ queryKey: ['conteos'], queryFn: () => dataService.getConteos() })
+  const { data: detalleConteos = [] } = useQuery({ queryKey: ['detalle-conteos-all'], queryFn: () => dataService.getDetalleConteos() })
+  const { data: detalleMovimientos = [] } = useQuery({ queryKey: ['detalle-movimientos-all'], queryFn: () => dataService.getDetalleMovimientos() })
   const { alertas, loading: loadingAlertas } = useAlertasStore()
-  const { movimientos, isLoading: loadingMovimientos } = useMovimientos()
-  const { conteos, isLoading: loadingConteos } = useConteos()
+
+  // User ubicaciones (same logic as Stock)
+  const userUbicaciones = useMemo(() => {
+    const asignadas = user?.ubicaciones_asignadas
+    if (Array.isArray(asignadas) && asignadas.length > 0) {
+      return ubicaciones.filter(u => asignadas.includes(u.id))
+    }
+    return ubicaciones
+  }, [user, ubicaciones])
+
+  const userUbicacionIds = userUbicaciones.map(u => u.id)
+
+  // Same calculation logic as Stock
+  const calcularStockActual = (productoId, ubicacionId) => {
+    const estadosValidos = ['COMPLETADO', 'PARCIALMENTE_COMPLETADO']
+    const estadosMovValidos = ['COMPLETADO', 'PARCIAL', 'EN_PROCESO']
+
+    const conteosUbicacion = conteos.filter(c =>
+      c.ubicacion_id === ubicacionId && estadosValidos.includes(c.estado?.toUpperCase())
+    )
+
+    const conteosConProducto = conteosUbicacion
+      .map(c => {
+        const det = detalleConteos.find(d => d.conteo_id === c.id && d.producto_id === productoId)
+        if (!det) return null
+        const fecha = safeParseDate(c.fecha_completado || c.fecha_programada)
+        return { conteo: c, detalle: det, fecha }
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.fecha || 0) - (a.fecha || 0))
+
+    if (conteosConProducto.length === 0) {
+      const invItem = inventario.find(i => i.producto_id === productoId && i.ubicacion_id === ubicacionId)
+      return { stock_actual: invItem?.stock_actual ?? 0 }
+    }
+
+    const ultimo = conteosConProducto[0]
+    const fechaConteo = ultimo.fecha
+    const stockBase = ultimo.detalle.cantidad_fisica ?? ultimo.detalle.cantidad_sistema ?? 0
+    const ahora = new Date()
+    const msDesdeConteo = fechaConteo ? ahora - fechaConteo : null
+
+    if (msDesdeConteo !== null && msDesdeConteo < 24 * 60 * 60 * 1000) {
+      return { stock_actual: stockBase }
+    }
+
+    let entradas = 0
+    let salidas = 0
+    if (fechaConteo) {
+      movimientos.forEach(mov => {
+        const estadoMov = (mov.estado || '').toUpperCase()
+        if (!estadosMovValidos.includes(estadoMov)) return
+        const fechaMov = safeParseDate(mov.fecha_confirmacion || mov.fecha_creacion)
+        if (!fechaMov || fechaMov <= fechaConteo) return
+        const dets = detalleMovimientos.filter(d => d.movimiento_id === mov.id && d.producto_id === productoId)
+        dets.forEach(det => {
+          if (mov.destino_id === ubicacionId) entradas += det.cantidad_recibida ?? det.cantidad ?? 0
+          if (mov.origen_id === ubicacionId) salidas += det.cantidad_enviada ?? det.cantidad ?? 0
+        })
+      })
+    }
+
+    return { stock_actual: stockBase + entradas - salidas }
+  }
+
+  // Calculate stock stats using same logic as Stock module
+  const stockStats = useMemo(() => {
+    let bajo = 0
+    let agotado = 0
+    
+    userUbicacionIds.forEach(ubicacionId => {
+      const invUbicacion = inventario.filter(i => i.ubicacion_id === ubicacionId)
+      invUbicacion.forEach(item => {
+        const producto = productos.find(p => p.id === item.producto_id)
+        if (!producto) return
+        const calc = calcularStockActual(item.producto_id, ubicacionId)
+        const stockMin = parseInt(producto.stock_minimo) || 0
+        
+        if (calc.stock_actual <= 0) agotado++
+        else if (calc.stock_actual <= stockMin) bajo++
+      })
+    })
+
+    return { bajo, agotado }
+  }, [inventario, productos, ubicaciones, conteos, detalleConteos, movimientos, detalleMovimientos, userUbicacionIds])
 
   const stats = {
     totalProductos: productos?.length || 0,
-    productosAlertas: alertas?.filter(a => a.tipo === 'stock_bajo').length || 0,
+    productosAlertas: stockStats.bajo + stockStats.agotado,
     transferenciasPendientes: movimientos?.filter(m => m.estado === 'PENDIENTE').length || 0,
     conteosPendientes: conteos?.filter(c => c.estado === 'PENDIENTE').length || 0
   }
@@ -56,7 +150,7 @@ export default function Dashboard() {
           </div>
         </Link>
 
-        <Link to="/inventario" className="group relative overflow-hidden bg-white dark:bg-slate-800 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 p-6 border border-slate-100 dark:border-slate-700 cursor-pointer">
+        <Link to="/stock" className="group relative overflow-hidden bg-white dark:bg-slate-800 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 p-6 border border-slate-100 dark:border-slate-700 cursor-pointer">
           <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-danger-100 to-danger-50 dark:from-danger-900/30 dark:to-danger-800/20 rounded-full blur-2xl opacity-50 -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-4">

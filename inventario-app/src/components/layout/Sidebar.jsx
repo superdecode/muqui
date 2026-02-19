@@ -13,7 +13,7 @@ import {
   ChevronDown,
   Shield,
   Settings,
-  FileQuestion,
+  Triangle,
   PackageCheck,
   ArrowUpRight,
   ArrowDownLeft
@@ -56,15 +56,16 @@ export default function Sidebar() {
   const allMenuItems = [
     { to: '/', icon: Home, label: 'Dashboard' },
     { to: '/productos', icon: Package, label: 'Productos', permission: 'productos.ver' },
+    { to: '/stock', icon: PackageCheck, label: 'Stock', permission: 'productos.ver' },
     {
       to: '/movimientos',
       icon: ArrowRightLeft,
       label: 'Movimientos',
       permission: 'movimientos.ver',
       submenu: [
-        { to: '/movimientos/solicitudes', label: 'Solicitudes', icon: FileQuestion },
+        { to: '/movimientos/solicitudes', label: 'Solicitudes', icon: Triangle },
         { to: '/movimientos/salidas', label: 'Salidas', icon: ArrowUpRight },
-        { to: '/movimientos/recepciones', label: 'Recepciones', icon: ArrowDownLeft }
+        { to: '/movimientos/entradas', label: 'Entradas', icon: ArrowDownLeft }
       ]
     },
     { to: '/conteos', icon: ClipboardCheck, label: 'Conteos', permission: 'conteos.ver' },

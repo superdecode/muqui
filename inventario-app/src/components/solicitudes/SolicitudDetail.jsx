@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import Button from '../common/Button'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { X, FileQuestion, Package, Calendar, User, MapPin, ArrowRight, ExternalLink, XCircle, Send, Edit } from 'lucide-react'
+import { X, Triangle, Package, Calendar, User, MapPin, ArrowRight, ExternalLink, XCircle, Send, Edit } from 'lucide-react'
 import dataService from '../../services/dataService'
+import firestoreService from '../../services/firestoreService'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -26,11 +28,14 @@ export default function SolicitudDetail({
   canProcess = false,
   isLoading = false
 }) {
+  const navigate = useNavigate()
   const [detalles, setDetalles] = useState([])
   const [loadingDetalles, setLoadingDetalles] = useState(true)
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [motivoCancelacion, setMotivoCancelacion] = useState('')
-
+  
+  
+  
   // Cargar productos para nombres
   const { data: productos = [] } = useQuery({
     queryKey: ['productos'],
@@ -47,6 +52,8 @@ export default function SolicitudDetail({
         setDetalles(data)
       } catch (error) {
         console.error('Error cargando detalles:', error)
+        // No cerrar el modal por errores de Firebase
+        setDetalles([])
       } finally {
         setLoadingDetalles(false)
       }
@@ -83,7 +90,7 @@ export default function SolicitudDetail({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-white/20 rounded-xl">
-                <FileQuestion className="text-white" size={24} />
+                <Triangle className="text-white" size={20} />
               </div>
               <div>
                 <div className="flex items-center gap-3">
@@ -93,6 +100,22 @@ export default function SolicitudDetail({
                   <span className={`px-3 py-1 rounded-full text-xs font-medium ${config.color}`}>
                     {config.label}
                   </span>
+                  {/* Link a salida si está procesada - misma fila */}
+                  {solicitud.salida_id && (
+                    <div className="flex items-center gap-1">
+                      <span className="text-white/50 text-sm">→</span>
+                      <button
+                        onClick={() => {
+                          navigate(`/movimientos/salidas?id=${solicitud.salida_id}`)
+                        }}
+                        className="text-green-400 font-medium hover:text-green-300 underline decoration-2 underline-offset-2 transition-colors flex items-center gap-1"
+                        title="Ver movimiento de salida"
+                      >
+                        <ExternalLink size={14} className="text-green-400" />
+                        {solicitud.codigo_salida || 'MV...'}
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <p className="text-white/70 text-sm">
                   Detalle de solicitud de transferencia
@@ -106,15 +129,6 @@ export default function SolicitudDetail({
               <X className="text-white" size={24} />
             </button>
           </div>
-
-          {/* Link a salida si está procesada */}
-          {solicitud.salida_id && (
-            <div className="mt-4 flex items-center gap-2 bg-white/10 rounded-xl px-4 py-2">
-              <ExternalLink className="text-white/70" size={16} />
-              <span className="text-white/70 text-sm">Salida generada:</span>
-              <span className="text-white font-medium">{solicitud.salida_codigo || solicitud.salida_id}</span>
-            </div>
-          )}
         </div>
 
         {/* Content */}

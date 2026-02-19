@@ -216,8 +216,8 @@ export default function Conteos() {
               <div class="info-value">${conteo.tipo_conteo}</div>
             </div>
             <div class="info-item">
-              <div class="info-label">Fecha Programada</div>
-              <div class="info-value">${format(new Date(conteo.fecha_programada), "d 'de' MMMM 'de' yyyy", { locale: es })}</div>
+              <div class="info-label">Fecha Creación</div>
+              <div class="info-value">${conteo.fecha_creacion ? format(conteo.fecha_creacion.toDate ? conteo.fecha_creacion.toDate() : new Date(conteo.fecha_creacion), "d 'de' MMMM 'de' yyyy HH:mm", { locale: es }) : '-'}</div>
             </div>
             <div class="info-item">
               <div class="info-label">Responsable</div>
@@ -282,6 +282,7 @@ export default function Conteos() {
     return matchTab && matchSearch && matchSede
   })
 
+  
   const columns = [
     {
       header: 'Código',
@@ -292,10 +293,47 @@ export default function Conteos() {
       )
     },
     {
-      header: 'Fecha Programada',
-      accessor: 'fecha_programada',
-      sortKey: 'fecha_programada',
-      render: (value) => (value ? format(new Date(value), "d MMM yyyy", { locale: es }) : '-')
+      header: 'Fecha Creación',
+      accessor: 'fecha_creacion',
+      sortKey: 'fecha_creacion',
+      // Agregar sortValue para manejar conteos sin fecha
+      sortValue: (row) => {
+        // Prioridad 1: fecha_creacion (conteos nuevos)
+        if (row.fecha_creacion) {
+          return row.fecha_creacion.toDate ? row.fecha_creacion.toDate().getTime() : new Date(row.fecha_creacion).getTime()
+        }
+        // Prioridad 2: fecha_programada (conteos antiguos - equivalente a fecha_creacion)
+        if (row.fecha_programada) {
+          return row.fecha_programada.toDate ? row.fecha_programada.toDate().getTime() : new Date(row.fecha_programada).getTime()
+        }
+        // Prioridad 3: created_at (fallback adicional)
+        if (row.created_at) {
+          return row.created_at.toDate ? row.created_at.toDate().getTime() : new Date(row.created_at).getTime()
+        }
+        // Prioridad 4: fecha actual (último recurso)
+        return new Date().getTime()
+      },
+      render: (value, row) => {
+        // Usar la misma lógica que sortValue para consistencia
+        let fechaParaMostrar
+        if (row.fecha_creacion) {
+          fechaParaMostrar = row.fecha_creacion.toDate ? row.fecha_creacion.toDate() : new Date(row.fecha_creacion)
+        } else if (row.fecha_programada) {
+          fechaParaMostrar = row.fecha_programada.toDate ? row.fecha_programada.toDate() : new Date(row.fecha_programada)
+        } else if (row.created_at) {
+          fechaParaMostrar = row.created_at.toDate ? row.created_at.toDate() : new Date(row.created_at)
+        } else {
+          fechaParaMostrar = new Date()
+        }
+        
+        try {
+          const esEstimada = !row.fecha_creacion && !row.fecha_programada && !row.created_at
+          return format(fechaParaMostrar, "d MMM yyyy HH:mm", { locale: es }) + (esEstimada ? ' (estimada)' : '')
+        } catch (error) {
+          console.error('Error formateando fecha:', error, { value, row })
+          return 'Fecha no disponible'
+        }
+      }
     },
     {
       header: 'Ubicación',
@@ -657,7 +695,7 @@ export default function Conteos() {
             <DataTable
               columns={columns}
               data={conteosFiltrados}
-              defaultSortKey="fecha_programada"
+              defaultSortKey="fecha_creacion"
               defaultSortDir="desc"
             />
           )}

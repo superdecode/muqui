@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  FileQuestion,
+  Triangle,
   Plus,
   Download,
   CheckCircle,
@@ -35,6 +35,7 @@ import dataService from '../services/dataService'
 
 export default function Solicitudes() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [mainTab, setMainTab] = useState('mis_solicitudes') // 'mis_solicitudes' | 'recibidas'
   const [statusTab, setStatusTab] = useState('todos')
   const [searchTerm, setSearchTerm] = useState('')
@@ -52,15 +53,6 @@ export default function Solicitudes() {
   const canWriteSolicitudes = canEdit('solicitudes') || canEdit('movimientos')
   const isReadOnlySolicitudes = isReadOnly('solicitudes') && isReadOnly('movimientos')
   const esAdmin = isAdmin()
-
-  // Read URL params on mount (e.g., from notifications)
-  useEffect(() => {
-    const params = new URLSearchParams(location.search)
-    const tab = params.get('tab')
-    if (tab === 'recibidas') {
-      setMainTab('recibidas')
-    }
-  }, [location.search])
 
   const { data: empresas = [] } = useQuery({
     queryKey: ['empresas'],
@@ -116,6 +108,41 @@ export default function Solicitudes() {
 
   // State for selected card visual feedback
   const [selectedCard, setSelectedCard] = useState(null)
+
+  // Read URL params on mount (e.g., from notifications)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const tab = params.get('tab')
+    const filtro = params.get('filtro')
+    const id = params.get('id')
+    
+    if (tab === 'recibidas') {
+      setMainTab('recibidas')
+      if (filtro === 'recibida') {
+        setStatusTab('recibiendo')
+      }
+    }
+    
+    if (id) {
+      // Buscar la solicitud en los datos cargados
+      const solicitudEncontrada = solicitudes.find(s => s.id === id)
+      if (solicitudEncontrada) {
+        setSelectedSolicitud(solicitudEncontrada)
+        setShowDetail(true)
+      } else {
+        // Si no está en los datos cargados, esperar y reintentar
+        const checkSolicitud = () => {
+          const sol = solicitudes.find(s => s.id === id)
+          if (sol) {
+            setSelectedSolicitud(sol)
+            setShowDetail(true)
+          }
+        }
+        // Reintentar después de un corto tiempo
+        setTimeout(checkSolicitud, 1000)
+      }
+    }
+  }, [location.search, solicitudes])
 
   // Handler for interactive card clicks
   const handleCardClick = (tab, status) => {
@@ -367,12 +394,22 @@ export default function Solicitudes() {
     enviarSolicitud({
       solicitudId: solicitud.id,
       usuarioId: user?.id || user?.codigo
+    }, {
+      onSuccess: () => {
+        console.log('📝 Solicitud enviada, refrescando...')
+        refetch()
+      }
     })
   }
 
   const handleEliminar = async (solicitud) => {
     if (!window.confirm('¿Estás seguro de eliminar esta solicitud? Esta acción no se puede deshacer.')) return
-    eliminarSolicitud(solicitud.id)
+    eliminarSolicitud(solicitud.id, {
+      onSuccess: () => {
+        console.log('📝 Solicitud eliminada, refrescando...')
+        refetch()
+      }
+    })
   }
 
   const handleSaveSolicitud = async (data, enviar = false) => {
@@ -387,6 +424,7 @@ export default function Solicitudes() {
       }, {
         onSuccess: () => {
           console.log('📝 Solicitud updated successfully')
+          refetch() // Refetch explícito
           if (enviar) {
             console.log('📝 Sending solicitud...')
             enviarSolicitud({
@@ -395,6 +433,7 @@ export default function Solicitudes() {
             }, {
               onSuccess: () => {
                 console.log('📝 Solicitud sent successfully')
+                refetch() // Refetch explícito después de enviar
                 setShowForm(false)
               }
             })
@@ -412,6 +451,7 @@ export default function Solicitudes() {
       }, {
         onSuccess: (response) => {
           console.log('📝 Solicitud created successfully:', response)
+          refetch() // Refetch explícito
           if (enviar && response?.data?.id) {
             console.log('📝 Sending new solicitud...')
             enviarSolicitud({
@@ -420,6 +460,7 @@ export default function Solicitudes() {
             }, {
               onSuccess: () => {
                 console.log('📝 New solicitud sent successfully')
+                refetch() // Refetch explícito después de enviar
                 setShowForm(false)
               }
             })
@@ -437,8 +478,27 @@ export default function Solicitudes() {
       usuario_procesamiento_id: user?.id || user?.codigo
     }, {
       onSuccess: () => {
+        console.log('🔄 Procesamiento exitoso, refrescando datos...')
+        console.log('🔄 Estadísticas antes:', stats)
         setShowProcesar(false)
         setSelectedSolicitud(null)
+        
+        // Primer refetch inmediato
+        refetch()
+        
+        // Segundo refetch con delay para asegurar actualización completa
+        setTimeout(() => {
+          console.log('🔄 Ejecutando segundo refetch...')
+          refetch()
+        }, 300)
+        
+        // Verificar estadísticas después de ambos refetch
+        setTimeout(() => {
+          console.log('🔄 Estadísticas después de refetch:', {
+            porProcesar: getEstadisticasRecibidas(userUbicacionesAsignadas).recibidas,
+            pendientesEnvio: getEstadisticasMisSolicitudes(user?.id || user?.codigo).iniciadas
+          })
+        }, 800)
       }
     })
   }
@@ -525,12 +585,16 @@ export default function Solicitudes() {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-3 mb-2">
-                <FileQuestion className="text-white" size={28} />
+                <Triangle className="text-white" size={25} />
                 <h1 className="text-3xl font-bold text-white">Solicitudes de Transferencia</h1>
               </div>
               <p className="text-white/90">Solicita productos desde otras ubicaciones</p>
             </div>
             <div className="flex gap-3">
+              <Button variant="white/20" onClick={() => refetch()} className="hover:bg-white/30">
+                <RefreshCw size={20} className="mr-2" />
+                Actualizar
+              </Button>
               {canWriteSolicitudes && (
                 <Button variant="white" onClick={handleNuevaSolicitud}>
                   <Plus size={20} className="mr-2" />
@@ -668,7 +732,7 @@ export default function Solicitudes() {
         <div className="p-6">
           {solicitudesFiltrados.length === 0 ? (
             <div className="text-center py-12">
-              <FileQuestion className="mx-auto text-slate-300 dark:text-slate-600 mb-4" size={48} />
+              <Triangle className="mx-auto text-slate-300 dark:text-slate-600 mb-4" size={41} />
               <p className="text-slate-600 dark:text-slate-400 font-medium">
                 {mainTab === 'recibidas'
                   ? 'No tienes solicitudes recibidas'

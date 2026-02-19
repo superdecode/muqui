@@ -32,6 +32,9 @@ export const useConteos = (ubicacionId) => {
         ...conteo,
         ubicacion_nombre: ubicacionesData.find(u => u.id === conteo.ubicacion_id)?.nombre || conteo.ubicacion_id
       }))
+    },
+    onError: (error) => {
+      console.error('Error cargando datos de conteos:', error)
     }
   })
 

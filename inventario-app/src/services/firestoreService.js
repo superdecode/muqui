@@ -1091,6 +1091,94 @@ const firestoreService = {
   },
 
   /**
+   * Crear entrada directa por compra (sin salida de origen)
+   */
+  createEntradaCompra: async (data) => {
+    try {
+      const db = getDB()
+      const batch = writeBatch(db)
+
+      // Generar código legible secuencial
+      const codigoLegible = await getNextSequentialCode('EC')
+
+      // Crear movimiento de entrada
+      const movimientoRef = doc(collection(db, 'movimientos'))
+      const nuevoMovimiento = {
+        codigo_legible: codigoLegible,
+        tipo_movimiento: 'COMPRA',
+        origen_id: null, // No hay origen en compras
+        destino_id: data.destino_id,
+        proveedor: data.proveedor || '',
+        numero_documento: data.numero_documento || '',
+        estado: 'COMPLETADO', // Las compras se completan inmediatamente
+        usuario_creacion_id: data.usuario_creacion_id,
+        usuario_confirmacion_id: data.usuario_creacion_id,
+        fecha_creacion: Timestamp.now(),
+        fecha_confirmacion: Timestamp.now(),
+        observaciones_creacion: data.observaciones || '',
+        observaciones_confirmacion: ''
+      }
+
+      batch.set(movimientoRef, nuevoMovimiento)
+
+      // Crear detalles del movimiento
+      if (data.productos && data.productos.length > 0) {
+        for (const prod of data.productos) {
+          const detalleRef = doc(collection(db, 'detalle_movimientos'))
+          batch.set(detalleRef, {
+            movimiento_id: movimientoRef.id,
+            producto_id: prod.producto_id,
+            cantidad: prod.cantidad,
+            cantidad_enviada: prod.cantidad,
+            cantidad_recibida: prod.cantidad,
+            precio_unitario: prod.precio_unitario || 0,
+            observaciones: prod.observaciones || ''
+          })
+
+          // Actualizar inventario en destino
+          const inventarioQuery = fbQuery(
+            collection(db, 'inventario'),
+            where('ubicacion_id', '==', data.destino_id),
+            where('producto_id', '==', prod.producto_id)
+          )
+          const inventarioSnapshot = await getDocs(inventarioQuery)
+
+          if (!inventarioSnapshot.empty) {
+            // Actualizar inventario existente
+            const inventarioDoc = inventarioSnapshot.docs[0]
+            const inventarioActual = inventarioDoc.data()
+            const inventarioRef = doc(db, 'inventario', inventarioDoc.id)
+            batch.update(inventarioRef, {
+              cantidad: (inventarioActual.cantidad || 0) + parseFloat(prod.cantidad),
+              fecha_actualizacion: Timestamp.now()
+            })
+          } else {
+            // Crear nuevo registro de inventario
+            const inventarioRef = doc(collection(db, 'inventario'))
+            batch.set(inventarioRef, {
+              ubicacion_id: data.destino_id,
+              producto_id: prod.producto_id,
+              cantidad: parseFloat(prod.cantidad),
+              fecha_actualizacion: Timestamp.now()
+            })
+          }
+        }
+      }
+
+      await batch.commit()
+
+      return {
+        success: true,
+        message: 'Entrada por compra registrada exitosamente',
+        data: { id: movimientoRef.id, ...nuevoMovimiento }
+      }
+    } catch (error) {
+      console.error('Error creando entrada por compra:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  /**
    * Confirmar transferencia con soporte para recepción parcial.
    * data.productos_recibidos: [{ detalle_id, producto_id, cantidad_recibida }]
    * If productos_recibidos is not provided, assumes full reception (cantidad_recibida = cantidad_enviada).
@@ -1275,7 +1363,7 @@ const firestoreService = {
 
   getConteos: async (ubicacionId = null) => {
     try {
-      const filters = [orderBy('fecha_programada', 'desc')]
+      const filters = [orderBy('fecha_creacion', 'desc')]
 
       if (ubicacionId) {
         filters.unshift(where('ubicacion_id', '==', ubicacionId))
@@ -1319,11 +1407,12 @@ const firestoreService = {
         estado: 'PENDIENTE',
         usuario_responsable_id: data.usuario_responsable_id,
         usuario_ejecutor_id: null,
-        fecha_programada: data.fecha_programada,
+        fecha_creacion: serverTimestamp(),
         fecha_inicio: null,
         fecha_completado: null,
         observaciones: data.observaciones || '',
-        created_at: serverTimestamp()
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp()
       }
 
       const docRef = await addDoc(conteosRef, nuevoConteo)
@@ -2439,6 +2528,7 @@ const firestoreService = {
 
       // Generar código legible para el movimiento
       const codigoMovimiento = await getNextSequentialCode('MV')
+      console.log('🔄 Código generado para movimiento:', codigoMovimiento)
 
       // Crear movimiento de TRANSFERENCIA (invirtiendo origen/destino según lógica de solicitud)
       // En solicitud: ubicacion_origen = desde donde despachan, ubicacion_destino = donde llega
@@ -2489,17 +2579,54 @@ const firestoreService = {
       }
 
       // Actualizar solicitud como procesada
-      const solicitudRef = doc(db, 'solicitudes', data.solicitud_id)
-      batch.update(solicitudRef, {
+      const solicitudRefForBatch = doc(db, 'solicitudes', data.solicitud_id)
+      const updateData = {
         estado: 'procesada',
         fecha_procesamiento: Timestamp.now(),
         usuario_confirmacion_id: data.usuario_procesamiento_id,
         observaciones_procesamiento: data.observaciones || '',
         salida_id: movimientoRef.id,
+        codigo_salida: codigoMovimiento, // Agregar código del movimiento
         updated_at: serverTimestamp()
+      }
+      
+      console.log('🔄 Actualizando solicitud procesada con:', {
+        solicitud_id: data.solicitud_id,
+        salida_id: movimientoRef.id,
+        codigo_salida: codigoMovimiento
       })
+      
+      batch.update(solicitudRefForBatch, updateData)
 
       await batch.commit()
+
+      console.log('✅ Batch commit completado. Obteniendo código del movimiento creado...')
+      
+      // Obtener el documento del movimiento recién creado para obtener su código
+      const movimientoCreado = await getDoc(movimientoRef)
+      const movimientoData = movimientoCreado.data()
+      const codigoMovimientoReal = movimientoData?.codigo_legible || codigoMovimiento
+      
+      console.log('🔍 Movimiento creado obtenido:', {
+        movimientoId: movimientoRef.id,
+        codigo_legible: codigoMovimientoReal,
+        todosLosCampos: Object.keys(movimientoData)
+      })
+      
+      // Actualizar solicitud con el código real del movimiento
+      const solicitudRefForUpdate = doc(db, 'solicitudes', data.solicitud_id)
+      await updateDoc(solicitudRefForUpdate, {
+        codigo_salida: codigoMovimientoReal
+      })
+      
+      // Verificación final
+      const solicitudActualizada = await firestoreService.getById('solicitudes', data.solicitud_id)
+      console.log('🔍 Verificación final - solicitud actualizada:', {
+        id: solicitudActualizada.id,
+        estado: solicitudActualizada.estado,
+        salida_id: solicitudActualizada.salida_id,
+        codigo_salida: solicitudActualizada.codigo_salida
+      })
 
       return {
         success: true,
@@ -2569,6 +2696,253 @@ const firestoreService = {
     } catch (error) {
       console.error('Error eliminando solicitud:', error)
       return { success: false, message: error.message }
+    }
+  },
+
+  // Función para actualizar solicitudes procesadas que no tienen codigo_salida
+  actualizarSolicitudesProcesadasSinCodigo: async () => {
+    try {
+      const db = getDB()
+      console.log('🔄 Buscando solicitudes procesadas sin codigo_salida...')
+      
+      // Obtener todas las solicitudes procesadas
+      const solicitudesRef = collection(db, 'solicitudes')
+      const q = query(solicitudesRef, where('estado', '==', 'procesada'))
+      const snapshot = await getDocs(q)
+      
+      const solicitudesParaActualizar = []
+      
+      for (const docSnap of snapshot.docs) {
+        const solicitud = docSnap.data()
+        if (solicitud.salida_id && !solicitud.codigo_salida) {
+          console.log('🔍 Solicitud encontrada sin código:', {
+            id: docSnap.id,
+            codigo_legible: solicitud.codigo_legible,
+            salida_id: solicitud.salida_id
+          })
+          
+          // Obtener el movimiento para obtener su código
+          try {
+            const movimientoRef = doc(db, 'movimientos', solicitud.salida_id)
+            const movimientoSnap = await getDoc(movimientoRef)
+            const movimiento = movimientoSnap.data()
+            
+            if (movimiento && movimiento.codigo_legible) {
+              solicitudesParaActualizar.push({
+                solicitudId: docSnap.id,
+                codigo_salida: movimiento.codigo_legible
+              })
+              console.log('✅ Código encontrado:', movimiento.codigo_legible)
+            }
+          } catch (error) {
+            console.error('Error obteniendo movimiento:', error)
+          }
+        }
+      }
+      
+      // Actualizar las solicitudes encontradas
+      if (solicitudesParaActualizar.length > 0) {
+        console.log(`🔄 Actualizando ${solicitudesParaActualizar.length} solicitudes...`)
+        
+        for (const { solicitudId, codigo_salida } of solicitudesParaActualizar) {
+          const solicitudRef = doc(db, 'solicitudes', solicitudId)
+          await updateDoc(solicitudRef, { codigo_salida })
+          console.log(`✅ Actualizada solicitud ${solicitudId} con código ${codigo_salida}`)
+        }
+        
+        console.log(`✅ Se actualizaron ${solicitudesParaActualizar.length} solicitudes exitosamente`)
+      } else {
+        console.log('✅ No se encontraron solicitudes para actualizar')
+      }
+      
+      return {
+        success: true,
+        actualizadas: solicitudesParaActualizar.length
+      }
+      
+    } catch (error) {
+      console.error('Error actualizando solicitudes:', error)
+      return {
+        success: false,
+        error: error.message
+      }
+    }
+  },
+
+  cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
+    try {
+      const db = getDB()
+
+      const solicitud = await firestoreService.getById('solicitudes', solicitudId)
+      if (!solicitud) {
+        return { success: false, message: 'Solicitud no encontrada' }
+      }
+      if (solicitud.estado === 'procesada') {
+        return { success: false, message: 'No se pueden cancelar solicitudes ya procesadas' }
+      }
+
+      const solicitudRef = doc(db, 'solicitudes', solicitudId)
+      await updateDoc(solicitudRef, {
+        estado: 'cancelada',
+        fecha_cancelacion: Timestamp.now(),
+        usuario_cancelacion_id: usuarioId,
+        motivo_cancelacion: motivo || '',
+        updated_at: serverTimestamp()
+      })
+
+      return {
+        success: true,
+        message: 'Solicitud cancelada exitosamente'
+      }
+    } catch (error) {
+      console.error('Error cancelando solicitud:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  deleteSolicitud: async (solicitudId) => {
+    try {
+      const db = getDB()
+      const batch = writeBatch(db)
+
+      // Eliminar solicitud
+      const solicitudRef = doc(db, 'solicitudes', solicitudId)
+      batch.delete(solicitudRef)
+
+      // Eliminar detalles
+      const detalles = await firestoreService.getDetalleSolicitudes(solicitudId)
+      detalles.forEach(detalle => {
+        const detalleRef = doc(db, 'detalle_solicitudes', detalle.id)
+        batch.delete(detalleRef)
+      })
+
+      await batch.commit()
+
+      return { success: true, message: 'Solicitud eliminada exitosamente' }
+    } catch (error) {
+      console.error('Error eliminando solicitud:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  // Función para actualizar solicitudes procesadas que no tienen codigo_salida
+  actualizarSolicitudesProcesadasSinCodigo: async () => {
+    try {
+      const db = getDB()
+      console.log('🔄 Buscando solicitudes procesadas sin codigo_salida...')
+      
+      // Obtener todas las solicitudes procesadas
+      const solicitudesRef = collection(db, 'solicitudes')
+      const q = query(solicitudesRef, where('estado', '==', 'procesada'))
+      const snapshot = await getDocs(q)
+      
+      const solicitudesParaActualizar = []
+      
+      for (const docSnap of snapshot.docs) {
+        const solicitud = docSnap.data()
+        if (solicitud.salida_id && !solicitud.codigo_salida) {
+          console.log('🔍 Solicitud encontrada sin código:', {
+            id: docSnap.id,
+            codigo_legible: solicitud.codigo_legible,
+            salida_id: solicitud.salida_id
+          })
+          
+          // Obtener el movimiento para obtener su código
+          try {
+            const movimientoRef = doc(db, 'movimientos', solicitud.salida_id)
+            const movimientoSnap = await getDoc(movimientoRef)
+            const movimiento = movimientoSnap.data()
+            
+            if (movimiento && movimiento.codigo_legible) {
+              solicitudesParaActualizar.push({
+                solicitudId: docSnap.id,
+                codigo_salida: movimiento.codigo_legible
+              })
+              console.log('✅ Código encontrado:', movimiento.codigo_legible)
+            }
+          } catch (error) {
+            console.error('Error obteniendo movimiento:', error)
+          }
+        }
+      }
+      
+      // Actualizar las solicitudes encontradas
+      if (solicitudesParaActualizar.length > 0) {
+        console.log(`🔄 Actualizando ${solicitudesParaActualizar.length} solicitudes...`)
+        
+        for (const { solicitudId, codigo_salida } of solicitudesParaActualizar) {
+          const solicitudRef = doc(db, 'solicitudes', solicitudId)
+          await updateDoc(solicitudRef, { codigo_salida })
+          console.log(`✅ Actualizada solicitud ${solicitudId} con código ${codigo_salida}`)
+        }
+        
+        console.log(`✅ Se actualizaron ${solicitudesParaActualizar.length} solicitudes exitosamente`)
+      } else {
+        console.log('✅ No se encontraron solicitudes para actualizar')
+      }
+      
+      return {
+        success: true,
+        actualizadas: solicitudesParaActualizar.length
+      }
+      
+    } catch (error) {
+      console.error('Error actualizando solicitudes:', error)
+      return {
+        success: false,
+        error: error.message
+      }
+    }
+  },
+
+  // Función para actualizar URLs de notificaciones existentes
+  actualizarUrlsNotificacionesSolicitudes: async () => {
+    try {
+      const db = getDB()
+      console.log('🔄 Actualizando URLs de notificaciones de solicitudes...')
+      
+      const notificacionesRef = collection(db, 'notificaciones')
+      const snapshot = await getDocs(notificacionesRef)
+      
+      let actualizadas = 0
+      
+      for (const docSnap of snapshot.docs) {
+        const notificacion = docSnap.data()
+        const accionUrlActual = notificacion.datos_adicionales?.accionUrl
+        
+        // Verificar si tiene la URL incorrecta
+        if (accionUrlActual && accionUrlActual.startsWith('/solicitudes?')) {
+          const nuevaUrl = accionUrlActual.replace('/solicitudes?', '/movimientos/solicitudes?')
+          
+          // Actualizar la URL en datos_adicionales
+          const datosActualizados = {
+            ...notificacion.datos_adicionales,
+            accionUrl: nuevaUrl
+          }
+          
+          const notificacionRef = doc(db, 'notificaciones', docSnap.id)
+          await updateDoc(notificacionRef, {
+            datos_adicionales: datosActualizados
+          })
+          
+          console.log(`✅ Actualizada notificación ${docSnap.id}: ${accionUrlActual} → ${nuevaUrl}`)
+          actualizadas++
+        }
+      }
+      
+      console.log(`✅ Se actualizaron ${actualizadas} notificaciones exitosamente`)
+      
+      return {
+        success: true,
+        actualizadas
+      }
+      
+    } catch (error) {
+      console.error('Error actualizando URLs de notificaciones:', error)
+      return {
+        success: false,
+        error: error.message
+      }
     }
   }
 }

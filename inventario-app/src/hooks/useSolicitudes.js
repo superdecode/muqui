@@ -10,19 +10,25 @@ export const useSolicitudes = () => {
   // Obtener ubicaciones
   const { data: ubicaciones = [] } = useQuery({
     queryKey: ['ubicaciones'],
-    queryFn: () => dataService.getUbicaciones()
+    queryFn: () => dataService.getUbicaciones(),
+    staleTime: 0,
+    refetchOnWindowFocus: true
   })
 
   // Obtener usuarios
   const { data: usuarios = [] } = useQuery({
     queryKey: ['usuarios'],
-    queryFn: () => dataService.getUsuarios()
+    queryFn: () => dataService.getUsuarios(),
+    staleTime: 0,
+    refetchOnWindowFocus: true
   })
 
   // Obtener productos
   const { data: productos = [] } = useQuery({
     queryKey: ['productos'],
-    queryFn: () => dataService.getProductos()
+    queryFn: () => dataService.getProductos(),
+    staleTime: 0,
+    refetchOnWindowFocus: true
   })
 
   // Obtener solicitudes con nombres enriquecidos
@@ -51,15 +57,26 @@ export const useSolicitudes = () => {
       }
 
       // Agregar nombres de ubicación y usuarios
-      return solicitudes.map(solicitud => ({
-        ...solicitud,
-        origen_nombre: ubicacionesData.find(u => u.id === solicitud.ubicacion_origen_id)?.nombre || solicitud.ubicacion_origen_id,
-        destino_nombre: ubicacionesData.find(u => u.id === solicitud.ubicacion_destino_id)?.nombre || solicitud.ubicacion_destino_id,
-        usuario_creacion_nombre: getUserName(solicitud.usuario_creacion_id),
-        usuario_confirmacion_nombre: getUserName(solicitud.usuario_confirmacion_id),
-        usuario_cancelacion_nombre: getUserName(solicitud.usuario_cancelacion_id)
-      }))
-    }
+      const solicitudesEnriquecidas = solicitudes.map(solicitud => {
+        const enriquecida = {
+          ...solicitud,
+          origen_nombre: ubicacionesData.find(u => u.id === solicitud.ubicacion_origen_id)?.nombre || solicitud.ubicacion_origen_id,
+          destino_nombre: ubicacionesData.find(u => u.id === solicitud.ubicacion_destino_id)?.nombre || solicitud.ubicacion_destino_id,
+          usuario_creacion_nombre: getUserName(solicitud.usuario_creacion_id),
+          usuario_confirmacion_nombre: getUserName(solicitud.usuario_confirmacion_id),
+          usuario_cancelacion_nombre: getUserName(solicitud.usuario_cancelacion_id)
+        }
+        
+                
+        return enriquecida
+      })
+      
+      return solicitudesEnriquecidas
+    },
+    staleTime: 0, // Siempre considerar los datos como obsoletos
+    gcTime: 1000 * 60 * 5, // 5 minutos de cache
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true
   })
 
   // Crear solicitud
@@ -68,7 +85,9 @@ export const useSolicitudes = () => {
       return await dataService.createSolicitud(data)
     },
     onSuccess: (response) => {
+      console.log('🔄 Solicitud creada, invalidando y refetching queries...')
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
+      queryClient.refetchQueries({ queryKey: ['solicitudes'] }) // Refetch inmediato
       toast.success(
         'Solicitud Creada',
         response.message || 'La solicitud se ha guardado como borrador'
@@ -109,7 +128,9 @@ export const useSolicitudes = () => {
       return { ...result, solicitudId }
     },
     onSuccess: async (response, variables) => {
+      console.log('🔄 Solicitud enviada, invalidando y refetching queries...')
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
+      queryClient.refetchQueries({ queryKey: ['solicitudes'] }) // Refetch inmediato
       toast.success(
         'Solicitud Enviada',
         response.message || 'La solicitud ha sido enviada para procesamiento'
@@ -155,6 +176,7 @@ export const useSolicitudes = () => {
           })
 
           if (destinatarios.length > 0) {
+            console.log('📧 Enviando notificación a destinatarios:', destinatarios.length)
             await triggerSolicitudRecibida({
               solicitud: { id: variables.solicitudId, codigo_legible: solicitud.codigo_legible },
               productos: productosConNombres,
@@ -163,6 +185,8 @@ export const useSolicitudes = () => {
               usuarioCreador: { nombre: usuarioCreador?.nombre || 'Usuario' },
               usuariosDestino: destinatarios
             })
+          } else {
+            console.log('📧 No hay destinatarios para notificación')
           }
         }
       } catch (notifError) {
@@ -183,9 +207,13 @@ export const useSolicitudes = () => {
       return await dataService.procesarSolicitud(data)
     },
     onSuccess: (response) => {
+      console.log('🔄 Solicitud procesada, invalidando y refetching queries...')
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
+      queryClient.refetchQueries({ queryKey: ['solicitudes'] }) // Refetch inmediato
       queryClient.invalidateQueries({ queryKey: ['movimientos'] })
+      queryClient.refetchQueries({ queryKey: ['movimientos'] })
       queryClient.invalidateQueries({ queryKey: ['inventario'] })
+      queryClient.refetchQueries({ queryKey: ['inventario'] })
       toast.success(
         'Solicitud Procesada',
         response.message || `Salida ${response.data?.codigo_movimiento || ''} creada exitosamente`
@@ -206,6 +234,7 @@ export const useSolicitudes = () => {
     },
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
+      queryClient.refetchQueries({ queryKey: ['solicitudes'] }) // Refetch inmediato
       toast.success(
         'Solicitud Cancelada',
         response.message || 'La solicitud ha sido cancelada'
@@ -226,6 +255,7 @@ export const useSolicitudes = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
+      queryClient.refetchQueries({ queryKey: ['solicitudes'] }) // Refetch inmediato
       toast.success(
         'Solicitud Eliminada',
         'La solicitud se ha eliminado exitosamente'

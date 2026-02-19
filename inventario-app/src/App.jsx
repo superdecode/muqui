@@ -15,10 +15,11 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Inventario from './pages/Inventario'
 import Productos from './pages/Productos'
+import Stock from './pages/Stock'
 import Movimientos from './pages/Movimientos'
 import Solicitudes from './pages/Solicitudes'
 import Salidas from './pages/Salidas'
-import Recepciones from './pages/Recepciones'
+import Entradas from './pages/Entradas'
 import Conteos from './pages/Conteos'
 import Reportes from './pages/Reportes'
 import MiPerfil from './pages/MiPerfil'
@@ -152,10 +153,11 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="inventario" element={<Inventario />} />
             <Route path="productos" element={<PermissionRoute module="productos"><Productos /></PermissionRoute>} />
+            <Route path="stock" element={<PermissionRoute module="productos"><Stock /></PermissionRoute>} />
             <Route path="movimientos" element={<PermissionRoute module="movimientos"><Movimientos /></PermissionRoute>} />
             <Route path="movimientos/solicitudes" element={<PermissionRoute module="movimientos"><Solicitudes /></PermissionRoute>} />
             <Route path="movimientos/salidas" element={<PermissionRoute module="movimientos"><Salidas /></PermissionRoute>} />
-            <Route path="movimientos/recepciones" element={<PermissionRoute module="movimientos"><Recepciones /></PermissionRoute>} />
+            <Route path="movimientos/entradas" element={<PermissionRoute module="movimientos"><Entradas /></PermissionRoute>} />
             <Route path="transferencias" element={<Navigate to="/movimientos/salidas" replace />} />
             <Route path="conteos" element={<PermissionRoute module="conteos"><Conteos /></PermissionRoute>} />
             <Route path="reportes" element={<PermissionRoute module="reportes"><Reportes /></PermissionRoute>} />
