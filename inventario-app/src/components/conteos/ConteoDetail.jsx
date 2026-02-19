@@ -207,7 +207,7 @@ export default function ConteoDetail({ conteo, onClose }) {
                 </div>
                 <div>
                   <p className="text-sm text-slate-600 dark:text-slate-400">Tipo de Conteo</p>
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">{conteo.tipo_conteo}</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{conteo.tipo_conteo?.toUpperCase()}</p>
                 </div>
               </div>
 
