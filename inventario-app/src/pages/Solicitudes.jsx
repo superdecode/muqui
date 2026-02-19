@@ -434,7 +434,7 @@ export default function Solicitudes() {
   const handleProcesarSolicitud = async (data) => {
     procesarSolicitud({
       ...data,
-      usuario_confirmacion_id: user?.id || user?.codigo
+      usuario_procesamiento_id: user?.id || user?.codigo
     }, {
       onSuccess: () => {
         setShowProcesar(false)

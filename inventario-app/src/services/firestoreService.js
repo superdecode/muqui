@@ -2417,6 +2417,17 @@ const firestoreService = {
       const db = getDB()
       const batch = writeBatch(db)
 
+      // Validar datos requeridos
+      console.log('🔄 Procesar solicitud - data recibida:', data)
+      
+      if (!data.solicitud_id) {
+        return { success: false, message: 'ID de solicitud es requerido' }
+      }
+      if (!data.usuario_procesamiento_id) {
+        console.error('🔄 Error: usuario_procesamiento_id es undefined o null')
+        return { success: false, message: 'ID de usuario que procesa es requerido' }
+      }
+
       // Obtener la solicitud
       const solicitud = await firestoreService.getById('solicitudes', data.solicitud_id)
       if (!solicitud) {
