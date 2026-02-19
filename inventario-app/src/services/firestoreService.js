@@ -2211,6 +2211,354 @@ const firestoreService = {
     const razonRef = doc(db, 'razones_merma', id)
     await updateDoc(razonRef, { estado: 'INACTIVO' })
     return { id }
+  },
+
+  // ========== SOLICITUDES DE TRANSFERENCIA ==========
+
+  getSolicitudes: async (filtros = {}) => {
+    try {
+      let solicitudes = await firestoreService.getAll('solicitudes')
+
+      // Filtrar por usuario creador si se especifica
+      if (filtros.usuario_creacion_id) {
+        solicitudes = solicitudes.filter(s => s.usuario_creacion_id === filtros.usuario_creacion_id)
+      }
+
+      // Filtrar por ubicación origen (para recepciones)
+      if (filtros.ubicacion_origen_id) {
+        solicitudes = solicitudes.filter(s => s.ubicacion_origen_id === filtros.ubicacion_origen_id)
+      }
+
+      // Filtrar por estado
+      if (filtros.estado) {
+        solicitudes = solicitudes.filter(s => s.estado === filtros.estado)
+      }
+
+      // Ordenar por fecha de creación descendente
+      solicitudes.sort((a, b) => {
+        const fechaA = a.fecha_creacion?.seconds || a.fecha_creacion || 0
+        const fechaB = b.fecha_creacion?.seconds || b.fecha_creacion || 0
+        return fechaB - fechaA
+      })
+
+      return solicitudes
+    } catch (error) {
+      console.error('Error obteniendo solicitudes:', error)
+      return []
+    }
+  },
+
+  getDetalleSolicitudes: async (solicitudId) => {
+    try {
+      if (!solicitudId) {
+        return await firestoreService.getAll('detalle_solicitudes')
+      }
+      return await firestoreService.queryWithFilters('detalle_solicitudes', [
+        where('solicitud_id', '==', solicitudId)
+      ])
+    } catch (error) {
+      console.error('Error obteniendo detalle solicitudes:', error)
+      return []
+    }
+  },
+
+  createSolicitud: async (data) => {
+    try {
+      const db = getDB()
+      const batch = writeBatch(db)
+
+      // Generar código legible secuencial RM0001
+      const codigoLegible = await getNextSequentialCode('RM')
+
+      // Crear solicitud
+      const solicitudRef = doc(collection(db, 'solicitudes'))
+      const nuevaSolicitud = {
+        codigo_legible: codigoLegible,
+        ubicacion_origen_id: data.ubicacion_origen_id,
+        ubicacion_destino_id: data.ubicacion_destino_id,
+        estado: 'iniciada',
+        usuario_creacion_id: data.usuario_creacion_id,
+        usuario_confirmacion_id: null,
+        fecha_creacion: Timestamp.now(),
+        fecha_envio: null,
+        fecha_procesamiento: null,
+        observaciones_creacion: data.observaciones || '',
+        observaciones_procesamiento: '',
+        salida_id: null,
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp()
+      }
+
+      batch.set(solicitudRef, nuevaSolicitud)
+
+      // Crear detalles de la solicitud
+      if (data.productos && data.productos.length > 0) {
+        data.productos.forEach(prod => {
+          const detalleRef = doc(collection(db, 'detalle_solicitudes'))
+          batch.set(detalleRef, {
+            solicitud_id: solicitudRef.id,
+            producto_id: prod.producto_id,
+            cantidad_solicitada: prod.cantidad,
+            cantidad_aprobada: null,
+            observaciones: prod.observaciones || ''
+          })
+        })
+      }
+
+      await batch.commit()
+
+      return {
+        success: true,
+        message: 'Solicitud creada exitosamente',
+        data: { id: solicitudRef.id, ...nuevaSolicitud }
+      }
+    } catch (error) {
+      console.error('Error creando solicitud:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  updateSolicitud: async (solicitudId, data) => {
+    try {
+      const db = getDB()
+
+      // Verificar que la solicitud esté en estado 'iniciada'
+      const solicitudActual = await firestoreService.getById('solicitudes', solicitudId)
+      if (!solicitudActual) {
+        return { success: false, message: 'Solicitud no encontrada' }
+      }
+      if (solicitudActual.estado !== 'iniciada') {
+        return { success: false, message: 'Solo se pueden editar solicitudes en estado iniciada' }
+      }
+
+      const batch = writeBatch(db)
+
+      // Actualizar solicitud
+      const solicitudRef = doc(db, 'solicitudes', solicitudId)
+      batch.update(solicitudRef, {
+        ubicacion_origen_id: data.ubicacion_origen_id,
+        ubicacion_destino_id: data.ubicacion_destino_id,
+        observaciones_creacion: data.observaciones || '',
+        updated_at: serverTimestamp()
+      })
+
+      // Eliminar detalles existentes
+      const detallesActuales = await firestoreService.getDetalleSolicitudes(solicitudId)
+      detallesActuales.forEach(detalle => {
+        const detalleRef = doc(db, 'detalle_solicitudes', detalle.id)
+        batch.delete(detalleRef)
+      })
+
+      // Crear nuevos detalles
+      if (data.productos && data.productos.length > 0) {
+        data.productos.forEach(prod => {
+          const detalleRef = doc(collection(db, 'detalle_solicitudes'))
+          batch.set(detalleRef, {
+            solicitud_id: solicitudId,
+            producto_id: prod.producto_id,
+            cantidad_solicitada: prod.cantidad,
+            cantidad_aprobada: null,
+            observaciones: prod.observaciones || ''
+          })
+        })
+      }
+
+      await batch.commit()
+
+      return {
+        success: true,
+        message: 'Solicitud actualizada exitosamente'
+      }
+    } catch (error) {
+      console.error('Error actualizando solicitud:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  enviarSolicitud: async (solicitudId, usuarioId) => {
+    try {
+      const db = getDB()
+
+      // Verificar que la solicitud esté en estado 'iniciada'
+      const solicitud = await firestoreService.getById('solicitudes', solicitudId)
+      if (!solicitud) {
+        return { success: false, message: 'Solicitud no encontrada' }
+      }
+      if (solicitud.estado !== 'iniciada') {
+        return { success: false, message: 'Solo se pueden enviar solicitudes en estado iniciada' }
+      }
+
+      // Verificar que tenga productos
+      const detalles = await firestoreService.getDetalleSolicitudes(solicitudId)
+      if (detalles.length === 0) {
+        return { success: false, message: 'La solicitud debe tener al menos un producto' }
+      }
+
+      const solicitudRef = doc(db, 'solicitudes', solicitudId)
+      await updateDoc(solicitudRef, {
+        estado: 'enviada',
+        fecha_envio: Timestamp.now(),
+        updated_at: serverTimestamp()
+      })
+
+      return {
+        success: true,
+        message: 'Solicitud enviada exitosamente',
+        data: { ...solicitud, estado: 'enviada' }
+      }
+    } catch (error) {
+      console.error('Error enviando solicitud:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  procesarSolicitud: async (data) => {
+    try {
+      const db = getDB()
+      const batch = writeBatch(db)
+
+      // Obtener la solicitud
+      const solicitud = await firestoreService.getById('solicitudes', data.solicitud_id)
+      if (!solicitud) {
+        return { success: false, message: 'Solicitud no encontrada' }
+      }
+      if (solicitud.estado !== 'enviada' && solicitud.estado !== 'recibida') {
+        return { success: false, message: 'Solo se pueden procesar solicitudes enviadas o recibidas' }
+      }
+
+      // Generar código legible para el movimiento
+      const codigoMovimiento = await getNextSequentialCode('MV')
+
+      // Crear movimiento de TRANSFERENCIA (invirtiendo origen/destino según lógica de solicitud)
+      // En solicitud: ubicacion_origen = desde donde despachan, ubicacion_destino = donde llega
+      // En movimiento: origen = ubicacion_origen de solicitud, destino = ubicacion_destino de solicitud
+      const movimientoRef = doc(collection(db, 'movimientos'))
+      const nuevoMovimiento = {
+        codigo_legible: codigoMovimiento,
+        tipo_movimiento: 'TRANSFERENCIA',
+        origen_id: solicitud.ubicacion_origen_id,
+        destino_id: solicitud.ubicacion_destino_id,
+        estado: 'PENDIENTE',
+        usuario_creacion_id: data.usuario_procesamiento_id,
+        usuario_confirmacion_id: null,
+        fecha_creacion: Timestamp.now(),
+        fecha_confirmacion: null,
+        observaciones_creacion: data.observaciones || `Generado desde solicitud ${solicitud.codigo_legible}`,
+        observaciones_confirmacion: '',
+        solicitud_id: data.solicitud_id // Referencia a la solicitud original
+      }
+
+      batch.set(movimientoRef, nuevoMovimiento)
+
+      // Crear detalles del movimiento con las cantidades aprobadas
+      if (data.productos_aprobados && data.productos_aprobados.length > 0) {
+        data.productos_aprobados.forEach(prod => {
+          const detalleRef = doc(collection(db, 'detalle_movimientos'))
+          batch.set(detalleRef, {
+            movimiento_id: movimientoRef.id,
+            producto_id: prod.producto_id,
+            cantidad: prod.cantidad_aprobada,
+            cantidad_enviada: prod.cantidad_aprobada,
+            cantidad_recibida: null,
+            observaciones: prod.observaciones || ''
+          })
+        })
+      }
+
+      // Actualizar detalles de la solicitud con cantidades aprobadas
+      if (data.productos_aprobados && data.productos_aprobados.length > 0) {
+        for (const prod of data.productos_aprobados) {
+          if (prod.detalle_id) {
+            const detalleRef = doc(db, 'detalle_solicitudes', prod.detalle_id)
+            batch.update(detalleRef, {
+              cantidad_aprobada: prod.cantidad_aprobada
+            })
+          }
+        }
+      }
+
+      // Actualizar solicitud como procesada
+      const solicitudRef = doc(db, 'solicitudes', data.solicitud_id)
+      batch.update(solicitudRef, {
+        estado: 'procesada',
+        fecha_procesamiento: Timestamp.now(),
+        usuario_confirmacion_id: data.usuario_procesamiento_id,
+        observaciones_procesamiento: data.observaciones || '',
+        salida_id: movimientoRef.id,
+        updated_at: serverTimestamp()
+      })
+
+      await batch.commit()
+
+      return {
+        success: true,
+        message: 'Solicitud procesada y salida creada exitosamente',
+        data: {
+          solicitud_id: data.solicitud_id,
+          movimiento_id: movimientoRef.id,
+          codigo_movimiento: codigoMovimiento
+        }
+      }
+    } catch (error) {
+      console.error('Error procesando solicitud:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
+    try {
+      const db = getDB()
+
+      const solicitud = await firestoreService.getById('solicitudes', solicitudId)
+      if (!solicitud) {
+        return { success: false, message: 'Solicitud no encontrada' }
+      }
+      if (solicitud.estado === 'procesada') {
+        return { success: false, message: 'No se pueden cancelar solicitudes ya procesadas' }
+      }
+
+      const solicitudRef = doc(db, 'solicitudes', solicitudId)
+      await updateDoc(solicitudRef, {
+        estado: 'cancelada',
+        fecha_cancelacion: Timestamp.now(),
+        usuario_cancelacion_id: usuarioId,
+        motivo_cancelacion: motivo || '',
+        updated_at: serverTimestamp()
+      })
+
+      return {
+        success: true,
+        message: 'Solicitud cancelada exitosamente'
+      }
+    } catch (error) {
+      console.error('Error cancelando solicitud:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  deleteSolicitud: async (solicitudId) => {
+    try {
+      const db = getDB()
+      const batch = writeBatch(db)
+
+      // Eliminar solicitud
+      const solicitudRef = doc(db, 'solicitudes', solicitudId)
+      batch.delete(solicitudRef)
+
+      // Eliminar detalles
+      const detalles = await firestoreService.getDetalleSolicitudes(solicitudId)
+      detalles.forEach(detalle => {
+        const detalleRef = doc(db, 'detalle_solicitudes', detalle.id)
+        batch.delete(detalleRef)
+      })
+
+      await batch.commit()
+
+      return { success: true, message: 'Solicitud eliminada exitosamente' }
+    } catch (error) {
+      console.error('Error eliminando solicitud:', error)
+      return { success: false, message: error.message }
+    }
   }
 }
 

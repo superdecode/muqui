@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
   Home,
   Package,
@@ -10,12 +10,17 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Shield,
-  Settings
+  Settings,
+  FileQuestion,
+  PackageCheck,
+  ArrowUpRight,
+  ArrowDownLeft
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { formatLabel } from '../../utils/formatters'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 // Helper function to get role label with proper priority
 const getRoleLabel = (rol, cachedRole, user) => {
@@ -33,16 +38,35 @@ const getRoleLabel = (rol, cachedRole, user) => {
 }
 
 export default function Sidebar() {
+  const location = useLocation()
   const { user, logout, cachedRole } = useAuthStore()
   const [isOpen, setIsOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [expandedMenus, setExpandedMenus] = useState({})
 
   const { hasPermission } = useAuthStore()
+
+  // Auto-expand menus based on current route
+  useEffect(() => {
+    if (location.pathname.startsWith('/movimientos')) {
+      setExpandedMenus(prev => ({ ...prev, movimientos: true }))
+    }
+  }, [location.pathname])
 
   const allMenuItems = [
     { to: '/', icon: Home, label: 'Dashboard' },
     { to: '/productos', icon: Package, label: 'Productos', permission: 'productos.ver' },
-    { to: '/movimientos', icon: ArrowRightLeft, label: 'Movimientos', permission: 'movimientos.ver' },
+    {
+      to: '/movimientos',
+      icon: ArrowRightLeft,
+      label: 'Movimientos',
+      permission: 'movimientos.ver',
+      submenu: [
+        { to: '/movimientos/solicitudes', label: 'Solicitudes', icon: FileQuestion },
+        { to: '/movimientos/salidas', label: 'Salidas', icon: ArrowUpRight },
+        { to: '/movimientos/recepciones', label: 'Recepciones', icon: ArrowDownLeft }
+      ]
+    },
     { to: '/conteos', icon: ClipboardCheck, label: 'Conteos', permission: 'conteos.ver' },
     { to: '/reportes', icon: FileBarChart, label: 'Reportes', permission: 'reportes.ver' },
     { to: '/configuraciones', icon: Settings, label: 'Configuraciones', permission: 'configuracion.ver' },
@@ -50,6 +74,10 @@ export default function Sidebar() {
   ]
 
   const menuItems = allMenuItems.filter(item => !item.permission || hasPermission(item.permission))
+
+  const toggleSubmenu = (menuKey) => {
+    setExpandedMenus(prev => ({ ...prev, [menuKey]: !prev[menuKey] }))
+  }
 
   const handleLogout = () => {
     logout()
@@ -119,26 +147,84 @@ export default function Sidebar() {
 
           {/* Menu items */}
           <nav className="flex-1 p-4 space-y-2">
-            {menuItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                onClick={() => setIsOpen(false)}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-white/20 text-white'
-                      : 'text-white/80 hover:bg-white/10 hover:text-white'
-                  } ${isCollapsed ? 'lg:justify-center' : ''}`
-                }
-                title={isCollapsed ? item.label : ''}
-              >
-                <item.icon size={20} />
-                <span className={`transition-opacity duration-300 ${isCollapsed ? 'lg:hidden' : 'opacity-100'}`}>
-                  {item.label}
-                </span>
-              </NavLink>
-            ))}
+            {menuItems.map((item) => {
+              const hasSubmenu = item.submenu && item.submenu.length > 0
+              const menuKey = item.to.replace('/', '') || 'home'
+              const isExpanded = expandedMenus[menuKey]
+              const isInSubmenu = hasSubmenu && location.pathname.startsWith(item.to)
+
+              if (hasSubmenu) {
+                return (
+                  <div key={item.to}>
+                    {/* Parent menu item with submenu */}
+                    <button
+                      onClick={() => toggleSubmenu(menuKey)}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors w-full ${
+                        isInSubmenu
+                          ? 'bg-white/20 text-white'
+                          : 'text-white/80 hover:bg-white/10 hover:text-white'
+                      } ${isCollapsed ? 'lg:justify-center' : ''}`}
+                      title={isCollapsed ? item.label : ''}
+                    >
+                      <item.icon size={20} />
+                      <span className={`flex-1 text-left transition-opacity duration-300 ${isCollapsed ? 'lg:hidden' : 'opacity-100'}`}>
+                        {item.label}
+                      </span>
+                      {!isCollapsed && (
+                        <ChevronDown
+                          size={16}
+                          className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                        />
+                      )}
+                    </button>
+                    {/* Submenu items */}
+                    {(isExpanded || isCollapsed) && (
+                      <div className={`mt-1 space-y-1 ${isCollapsed ? 'lg:hidden' : 'ml-4'}`}>
+                        {item.submenu.map((subitem) => (
+                          <NavLink
+                            key={subitem.to}
+                            to={subitem.to}
+                            onClick={() => setIsOpen(false)}
+                            className={({ isActive }) =>
+                              `flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-sm ${
+                                isActive
+                                  ? 'bg-white/20 text-white'
+                                  : 'text-white/70 hover:bg-white/10 hover:text-white'
+                              }`
+                            }
+                          >
+                            <subitem.icon size={16} />
+                            <span>{subitem.label}</span>
+                          </NavLink>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+
+              // Regular menu item without submenu
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setIsOpen(false)}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-white/20 text-white'
+                        : 'text-white/80 hover:bg-white/10 hover:text-white'
+                    } ${isCollapsed ? 'lg:justify-center' : ''}`
+                  }
+                  title={isCollapsed ? item.label : ''}
+                >
+                  <item.icon size={20} />
+                  <span className={`transition-opacity duration-300 ${isCollapsed ? 'lg:hidden' : 'opacity-100'}`}>
+                    {item.label}
+                  </span>
+                </NavLink>
+              )
+            })}
           </nav>
 
           {/* User info and logout */}

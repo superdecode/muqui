@@ -273,6 +273,32 @@ const dataService = {
   },
   deleteRol: async (id) => {
     return await firestoreService.deleteRol(id)
+  },
+
+  // ========== SOLICITUDES DE TRANSFERENCIA ==========
+  getSolicitudes: async (filtros) => {
+    return await firestoreService.getSolicitudes(filtros)
+  },
+  getDetalleSolicitudes: async (solicitudId) => {
+    return await firestoreService.getDetalleSolicitudes(solicitudId)
+  },
+  createSolicitud: async (data) => {
+    return await firestoreService.createSolicitud(data)
+  },
+  updateSolicitud: async (solicitudId, data) => {
+    return await firestoreService.updateSolicitud(solicitudId, data)
+  },
+  enviarSolicitud: async (solicitudId, usuarioId) => {
+    return await firestoreService.enviarSolicitud(solicitudId, usuarioId)
+  },
+  procesarSolicitud: async (data) => {
+    return await firestoreService.procesarSolicitud(data)
+  },
+  cancelarSolicitud: async (solicitudId, usuarioId, motivo) => {
+    return await firestoreService.cancelarSolicitud(solicitudId, usuarioId, motivo)
+  },
+  deleteSolicitud: async (solicitudId) => {
+    return await firestoreService.deleteSolicitud(solicitudId)
   }
 }
 

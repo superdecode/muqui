@@ -14,7 +14,8 @@ export const NOTIFICATION_TYPES = {
   TRANSFERENCIA_RECIBIDA: 'transferencia_recibida',
   TRANSFERENCIA_PENDIENTE: 'transferencia_pendiente',
   CONTEO_RECORDATORIO: 'conteo_recordatorio',
-  CONTEO_INVENTARIO: 'conteo_inventario'
+  CONTEO_INVENTARIO: 'conteo_inventario',
+  SOLICITUD_RECIBIDA: 'solicitud_recibida'
 }
 
 export const PRIORITY = {
@@ -494,6 +495,38 @@ export async function triggerTransferenciaPendiente({ transferencia, ubicacion, 
       accionUrl: `/movimientos?id=${transferencia.id}` // Navigate to movimiento details
     },
     usuarios_destino: usuariosDestino || []
+  })
+}
+
+/**
+ * Trigger solicitud_recibida notification when a transfer request is submitted
+ */
+export async function triggerSolicitudRecibida({ solicitud, productos, origen, destino, usuarioCreador, usuariosDestino }) {
+  const datosAdicionales = {
+    solicitud_id: solicitud?.id || '',
+    codigo: solicitud?.codigo_legible || '',
+    accionUrl: `/movimientos/solicitudes?tab=recibidas&id=${solicitud?.id || ''}`
+  }
+
+  if (origen?.id) datosAdicionales.origen_id = origen.id
+  if (origen?.nombre) datosAdicionales.origen_nombre = origen.nombre
+  if (destino?.id) datosAdicionales.destino_id = destino.id
+  if (destino?.nombre) datosAdicionales.destino_nombre = destino.nombre
+  if (usuarioCreador?.nombre) datosAdicionales.usuario_creador = usuarioCreador.nombre
+
+  return createOrUpdateNotification({
+    tipo: NOTIFICATION_TYPES.SOLICITUD_RECIBIDA,
+    prioridad: PRIORITY.ALTA,
+    titulo: `Nueva solicitud: ${solicitud?.codigo_legible || 'N/A'}`,
+    mensaje: `${usuarioCreador?.nombre || 'Usuario'} solicita productos desde ${origen?.nombre || 'origen'}`,
+    datos_adicionales: datosAdicionales,
+    usuarios_destino: usuariosDestino || [],
+    productos_afectados: (productos || []).map(p => ({
+      producto_id: p.producto_id || '',
+      nombre: p.nombre || 'Producto',
+      cantidad: p.cantidad_solicitada || p.cantidad || 0
+    })),
+    cantidad_items: (productos || []).length
   })
 }
 

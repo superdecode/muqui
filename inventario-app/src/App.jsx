@@ -16,6 +16,9 @@ import Dashboard from './pages/Dashboard'
 import Inventario from './pages/Inventario'
 import Productos from './pages/Productos'
 import Movimientos from './pages/Movimientos'
+import Solicitudes from './pages/Solicitudes'
+import Salidas from './pages/Salidas'
+import Recepciones from './pages/Recepciones'
 import Conteos from './pages/Conteos'
 import Reportes from './pages/Reportes'
 import MiPerfil from './pages/MiPerfil'
@@ -150,7 +153,10 @@ function App() {
             <Route path="inventario" element={<Inventario />} />
             <Route path="productos" element={<PermissionRoute module="productos"><Productos /></PermissionRoute>} />
             <Route path="movimientos" element={<PermissionRoute module="movimientos"><Movimientos /></PermissionRoute>} />
-            <Route path="transferencias" element={<Navigate to="/movimientos" replace />} />
+            <Route path="movimientos/solicitudes" element={<PermissionRoute module="movimientos"><Solicitudes /></PermissionRoute>} />
+            <Route path="movimientos/salidas" element={<PermissionRoute module="movimientos"><Salidas /></PermissionRoute>} />
+            <Route path="movimientos/recepciones" element={<PermissionRoute module="movimientos"><Recepciones /></PermissionRoute>} />
+            <Route path="transferencias" element={<Navigate to="/movimientos/salidas" replace />} />
             <Route path="conteos" element={<PermissionRoute module="conteos"><Conteos /></PermissionRoute>} />
             <Route path="reportes" element={<PermissionRoute module="reportes"><Reportes /></PermissionRoute>} />
             <Route path="perfil" element={<MiPerfil />} />
