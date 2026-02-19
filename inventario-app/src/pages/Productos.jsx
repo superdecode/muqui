@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Package, Plus, Edit2, Trash2, Search, Download, ChevronUp, ChevronDown, X } from 'lucide-react'
+import { Package, Plus, Edit2, Trash2, Search, Download, ChevronUp, ChevronDown, X, MapPin, Building2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -9,6 +9,7 @@ import { useAuthStore } from '../stores/authStore'
 import { usePermissions } from '../hooks/usePermissions'
 import dataService from '../services/dataService'
 import { formatLabel } from '../utils/formatters'
+import { filtrarProductosPorUbicacion, getUbicacionesPermitidasParaProducto } from '../utils/productosPorUbicacion'
 
 export default function Productos() {
   const toast = useToastStore()
@@ -23,6 +24,8 @@ export default function Productos() {
   const [sortDirection, setSortDirection] = useState('asc')
   const [showForm, setShowForm] = useState(false)
   const [selectedProducto, setSelectedProducto] = useState(null)
+  const [ubicacionFilter, setUbicacionFilter] = useState('')
+  const [empresaFilter, setEmpresaFilter] = useState('')
 
   const { hasPermission } = useAuthStore()
   const { canEdit } = usePermissions()
@@ -35,6 +38,16 @@ export default function Productos() {
     queryFn: () => dataService.getProductos()
   })
 
+  // Cargar empresas y ubicaciones para filtros
+  const { data: empresas = [] } = useQuery({
+    queryKey: ['empresas'],
+    queryFn: () => dataService.getEmpresas()
+  })
+  const { data: ubicaciones = [] } = useQuery({
+    queryKey: ['ubicaciones'],
+    queryFn: () => dataService.getUbicaciones()
+  })
+
   // Filtrar productos
   const filteredProductos = productos.filter(item => {
     const matchesSearch = !searchTerm || item.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || (item.especificacion || '').toLowerCase().includes(searchTerm.toLowerCase()) || (item.id || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -42,7 +55,25 @@ export default function Productos() {
     const matchesUnidad = !unidadFilter || item.unidad_medida === unidadFilter
     const matchesEstado = !estadoFilter || item.estado === estadoFilter
     const matchesEspec = !especificacionFilter || item.especificacion === especificacionFilter
-    return matchesSearch && matchesCategory && matchesUnidad && matchesEstado && matchesEspec
+    
+    // Filtrar por ubicación o empresa
+    let matchesUbicacion = true
+    if (ubicacionFilter) {
+      matchesUbicacion = filtrarProductosPorUbicacion([item], ubicacionFilter, ubicaciones).length > 0
+    }
+    
+    let matchesEmpresa = true
+    if (empresaFilter) {
+      const empresa = empresas.find(e => e.id === empresaFilter)
+      if (empresa) {
+        const ubicacionesEmpresa = ubicaciones.filter(u => u.empresa_id === empresaFilter)
+        matchesEmpresa = filtrarProductosPorUbicacion([item], null, ubicacionesEmpresa).length > 0
+      } else {
+        matchesEmpresa = false
+      }
+    }
+    
+    return matchesSearch && matchesCategory && matchesUnidad && matchesEstado && matchesEspec && matchesUbicacion && matchesEmpresa
   }).sort((a, b) => {
     if (!sortColumn) return 0
     const valA = a[sortColumn] ?? ''
@@ -126,6 +157,17 @@ export default function Productos() {
     toast.info('Exportar', 'Función de exportación en desarrollo')
   }
 
+  const handleLimpiarFiltros = () => {
+    setSearchTerm('')
+    setCategoriaFilter('')
+    setUnidadFilter('')
+    setEstadoFilter('')
+    setEspecificacionFilter('')
+    setUbicacionFilter('')
+    setEmpresaFilter('')
+    toast.success('Filtros Limpiados', 'Todos los filtros han sido eliminados')
+  }
+
   const handleCloseForm = () => {
     setShowForm(false)
     setSelectedProducto(null)
@@ -152,7 +194,7 @@ export default function Productos() {
     </span>
   )
 
-  const activeFilters = [categoriaFilter, unidadFilter, estadoFilter, especificacionFilter].filter(Boolean).length
+  const activeFilters = [categoriaFilter, unidadFilter, estadoFilter, especificacionFilter, ubicacionFilter, empresaFilter].filter(Boolean).length
 
   const isSaving = createMutation.isPending || updateMutation.isPending
 
@@ -221,13 +263,44 @@ export default function Productos() {
             <Download size={20} className="mr-2" />
             Exportar
           </Button>
+          <Button
+            variant="outline"
+            className="md:w-auto"
+            onClick={handleLimpiarFiltros}
+            disabled={activeFilters === 0}
+          >
+            <X size={20} className="mr-2" />
+            Limpiar Filtros
+          </Button>
         </div>
 
         {/* Filter Chips */}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium text-slate-600 dark:text-slate-400">{filteredProductos.length} productos</span>
-          {/* Especificación chips */}
+          
+          {/* Filtros de ubicación y empresa */}
           <div className="flex flex-wrap gap-1.5 ml-2">
+            <select value={empresaFilter} onChange={e => setEmpresaFilter(e.target.value)}
+              className="px-3 py-1.5 text-xs font-medium rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary-500 cursor-pointer">
+              <option value="">Todas las empresas</option>
+              {empresas.filter(e => e.estado !== 'INACTIVO').map(e => (
+                <option key={e.id} value={e.id}>{e.nombre}</option>
+              ))}
+            </select>
+            <select value={ubicacionFilter} onChange={e => setUbicacionFilter(e.target.value)}
+              className="px-3 py-1.5 text-xs font-medium rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary-500 cursor-pointer">
+              <option value="">Todas las ubicaciones</option>
+              {ubicaciones.filter(u => u.estado !== 'INACTIVO').map(u => {
+                const empresa = empresas.find(e => e.id === u.empresa_id)
+                return (
+                  <option key={u.id} value={u.id}>
+                    {u.nombre} {empresa ? `(${empresa.nombre})` : ''}
+                  </option>
+                )
+              })}
+            </select>
+            
+            {/* Especificación chips */}
             {especificaciones.length > 0 && (
               <select value={especificacionFilter} onChange={e => setEspecificacionFilter(e.target.value)}
                 className="px-3 py-1.5 text-xs font-medium rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary-500 cursor-pointer">
@@ -246,9 +319,17 @@ export default function Productos() {
               {estados.map(e => <option key={e} value={e}>{e}</option>)}
             </select>
           </div>
+          
           {/* Active filter badges */}
           {activeFilters > 0 && (
-            <button onClick={() => { setCategoriaFilter(''); setUnidadFilter(''); setEstadoFilter(''); setEspecificacionFilter('') }}
+            <button onClick={() => { 
+              setCategoriaFilter(''); 
+              setUnidadFilter(''); 
+              setEstadoFilter(''); 
+              setEspecificacionFilter('');
+              setUbicacionFilter('');
+              setEmpresaFilter('');
+            }}
               className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-full transition-colors">
               <X size={12} /> Limpiar filtros ({activeFilters})
             </button>
@@ -298,6 +379,12 @@ export default function Productos() {
                   <th onClick={() => handleSort('categoria')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Categoría<SortIcon column="categoria" /></span>
                   </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                    <span className="inline-flex items-center gap-1">
+                      <MapPin size={14} />
+                      Ubicaciones
+                    </span>
+                  </th>
                   <th onClick={() => handleSort('estado')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Estado<SortIcon column="estado" /></span>
                   </th>
@@ -319,7 +406,7 @@ export default function Productos() {
                         </div>
                         <div>
                           <p className="font-semibold text-slate-900 dark:text-slate-100">{item.nombre}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">{item.id}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{item.codigo_legible || item.id}</p>
                         </div>
                       </div>
                     </td>
@@ -336,6 +423,44 @@ export default function Productos() {
                       <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full text-xs font-medium">
                         {item.categoria}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm">
+                        {(() => {
+                          const ubicacionesPermitidas = getUbicacionesPermitidasParaProducto(item, ubicaciones, empresas)
+                          if (ubicacionesPermitidas.length === 0) {
+                            return <span className="text-xs text-slate-500">Todas las ubicaciones</span>
+                          }
+                          if (ubicacionesPermitidas.length <= 2) {
+                            return (
+                              <div className="space-y-1">
+                                {ubicacionesPermitidas.slice(0, 2).map(ub => {
+                                  const empresa = empresas.find(e => e.id === ub.empresa_id)
+                                  return (
+                                    <div key={ub.id} className="text-xs text-slate-600 dark:text-slate-400">
+                                      {ub.nombre}
+                                      {empresa && <span className="text-xs text-slate-400 ml-1">({empresa.nombre.substring(0, 3)})</span>}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )
+                          }
+                          return (
+                            <div>
+                              <div className="text-xs text-slate-600 dark:text-slate-400">
+                                {ubicacionesPermitidas.slice(0, 2).map(ub => {
+                                  const empresa = empresas.find(e => e.id === ub.empresa_id)
+                                  return `${ub.nombre}${empresa ? `(${empresa.nombre.substring(0, 3)})` : ''}`
+                                }).join(', ')}
+                              </div>
+                              <div className="text-xs text-primary-600 font-medium">
+                                +{ubicacionesPermitidas.length - 2} más
+                              </div>
+                            </div>
+                          )
+                        })()}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1 text-xs font-semibold rounded-full ${

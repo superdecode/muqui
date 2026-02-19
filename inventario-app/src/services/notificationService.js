@@ -451,9 +451,9 @@ export async function triggerTransferenciaRecibida({ transferencia, productos, o
   const datosAdicionales = {
     transferencia_id: transferencia?.id || '',
     codigo: transferencia?.codigo_legible || '',
-    accionUrl: `/movimientos?id=${transferencia?.id || ''}` // Navigate to movimiento details
+    accionUrl: `/movimientos?tab=recepcion&filtro=pendiente&id=${transferencia?.id || ''}` // Navigate to recepciones tab
   }
-  
+
   // Solo agregar campos si tienen valores definidos
   if (origen?.id) datosAdicionales.origen_id = origen.id
   if (origen?.nombre) datosAdicionales.origen_nombre = origen.nombre

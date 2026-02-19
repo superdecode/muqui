@@ -15,7 +15,7 @@ export const useMovimientos = (ubicacionId) => {
     queryFn: () => dataService.getUbicaciones()
   })
 
-  // Obtener movimientos (transferencias + ventas + mermas) con nombres de ubicación
+  // Obtener movimientos (transferencias + ventas + mermas) con nombres de ubicación y usuarios
   const {
     data: movimientosConNombres = [],
     isLoading,
@@ -24,11 +24,12 @@ export const useMovimientos = (ubicacionId) => {
   } = useQuery({
     queryKey: ['movimientos', ubicacionId],
     queryFn: async () => {
-      const [movimientos, ventas, mermas, ubicacionesData] = await Promise.all([
+      const [movimientos, ventas, mermas, ubicacionesData, usuariosData] = await Promise.all([
         dataService.getMovimientos(ubicacionId || null),
         dataService.getVentas().catch(() => []),
         dataService.getMermas().catch(() => []),
-        dataService.getUbicaciones()
+        dataService.getUbicaciones(),
+        dataService.getUsuarios()
       ])
 
       // Ensure tipo_movimiento is set on transferencias
@@ -51,11 +52,26 @@ export const useMovimientos = (ubicacionId) => {
           )
         : allMovimientos
 
-      // Agregar nombres de ubicación
+      // Helper function to get user name
+      const getUserName = (userId) => {
+        if (!userId) return null
+        // First try to find by doc.id (Firestore ID)
+        let user = usuariosData.find(u => u.id === userId)
+        // If not found, try to find by codigo field
+        if (!user) {
+          user = usuariosData.find(u => u.codigo === userId)
+        }
+        return user ? user.nombre : userId
+      }
+
+      // Agregar nombres de ubicación y usuarios
       return movimientosFiltrados.map(movimiento => ({
         ...movimiento,
         origen_nombre: ubicacionesData.find(u => u.id === movimiento.origen_id)?.nombre || movimiento.origen_id,
-        destino_nombre: ubicacionesData.find(u => u.id === movimiento.destino_id)?.nombre || movimiento.destino_id
+        destino_nombre: ubicacionesData.find(u => u.id === movimiento.destino_id)?.nombre || movimiento.destino_id,
+        usuario_creacion_nombre: getUserName(movimiento.usuario_creacion_id),
+        usuario_confirmacion_nombre: getUserName(movimiento.usuario_confirmacion_id),
+        usuario_cancelacion_nombre: getUserName(movimiento.usuario_cancelacion_id)
       }))
     }
   })

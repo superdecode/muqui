@@ -32,7 +32,7 @@ const generateId = (prefix = 'ITEM') => {
 }
 
 /**
- * Genera un código secuencial legible (MV0001, CT0001, etc.)
+ * Genera un código secuencial legible (MV0001, CT0001, PROD00001, etc.)
  * Usa una colección 'contadores' en Firestore para mantener la secuencia
  */
 const getNextSequentialCode = async (prefix) => {
@@ -44,8 +44,14 @@ const getNextSequentialCode = async (prefix) => {
     if (counterDoc.exists()) {
       nextVal = (counterDoc.data().valor || 0) + 1
     }
-    await setDoc(counterRef, { valor: nextVal, updated_at: serverTimestamp() })
-    return `${prefix}${String(nextVal).padStart(4, '0')}`
+    await setDoc(counterRef, { 
+      valor: nextVal, 
+      updated_at: serverTimestamp(),
+      last_updated: serverTimestamp()
+    })
+    // Use 5 digits for PROD, 4 for others
+    const padding = prefix === 'PROD' ? 5 : 4
+    return `${prefix}${String(nextVal).padStart(padding, '0')}`
   } catch (error) {
     console.warn('Error getting sequential code, using timestamp fallback:', error)
     return `${prefix}${Date.now()}`
@@ -569,8 +575,12 @@ const firestoreService = {
       const db = getDB()
       const productosRef = collection(db, 'productos')
 
+      // Generar código legible secuencial PROD00001
+      const codigoLegible = await getNextSequentialCode('PROD')
+
       const nuevoProducto = {
         ...productoData,
+        codigo_legible: codigoLegible,
         concatenado: `${productoData.nombre} ${productoData.especificacion || ''}`.trim(),
         estado: productoData.estado || 'ACTIVO',
         created_at: serverTimestamp(),
@@ -592,8 +602,14 @@ const firestoreService = {
 
   updateProducto: async (productoId, productoData) => {
     try {
+      console.log('🔧 INICIANDO ACTUALIZACIÓN DE PRODUCTO')
+      console.log('📋 ID del producto:', productoId)
+      console.log('📦 Datos a actualizar:', productoData)
+      
       const db = getDB()
       const productoRef = doc(db, 'productos', productoId)
+      
+      console.log('🗂️ Referencia del documento:', productoRef.path)
 
       const datosActualizados = {
         ...productoData,
@@ -601,15 +617,21 @@ const firestoreService = {
         updated_at: serverTimestamp()
       }
 
+      console.log('📝 Datos finales a guardar:', datosActualizados)
+
       await updateDoc(productoRef, datosActualizados)
 
+      console.log('✅ Producto actualizado exitosamente')
       return {
         success: true,
         message: 'Producto actualizado exitosamente',
         data: { id: productoId, ...datosActualizados }
       }
     } catch (error) {
-      console.error('Error actualizando producto:', error)
+      console.error('❌ Error actualizando producto:', error)
+      console.error('❌ Código de error:', error.code)
+      console.error('❌ Mensaje de error:', error.message)
+      console.error('❌ Stack trace:', error.stack)
       return { success: false, message: error.message }
     }
   },
@@ -628,6 +650,107 @@ const firestoreService = {
       return { success: true, message: 'Producto eliminado exitosamente' }
     } catch (error) {
       console.error('Error eliminando producto:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  // Actualizar todos los productos para establecer tipo de conteo por defecto
+  actualizarTodosLosProductosTipoConteo: async (tipoConteoPorDefecto = 'diario') => {
+    try {
+      console.log('🔄 INICIANDO ACTUALIZACIÓN MASIVA DE TIPO DE CONTEO')
+      console.log('📋 Tipo de conteo por defecto:', tipoConteoPorDefecto)
+      
+      const db = getDB()
+      const productosRef = collection(db, 'productos')
+      const snapshot = await getDocs(productosRef)
+      
+      let actualizados = 0
+      let omitidos = 0
+      const batch = writeBatch(db)
+      
+      for (const docSnapshot of snapshot.docs) {
+        const producto = docSnapshot.data()
+        const productoRef = doc(db, 'productos', docSnapshot.id)
+        
+        // Solo actualizar si no tiene frecuencia_inventario o está vacía
+        if (!producto.frecuencia_inventario || producto.frecuencia_inventario === '') {
+          batch.update(productoRef, {
+            frecuencia_inventario: tipoConteoPorDefecto,
+            updated_at: serverTimestamp()
+          })
+          actualizados++
+          console.log(`✅ Actualizando: ${producto.nombre} -> ${tipoConteoPorDefecto}`)
+        } else {
+          omitidos++
+          console.log(`⏭️ Omitido: ${producto.nombre} (ya tiene: ${producto.frecuencia_inventario})`)
+        }
+      }
+      
+      // Ejecutar el batch
+      await batch.commit()
+      
+      console.log('═══════════════════════════════════════════════════')
+      console.log('✅ ACTUALIZACIÓN MASIVA COMPLETADA')
+      console.log('📊 Productos actualizados:', actualizados)
+      console.log('📊 Productos omitidos:', omitidos)
+      console.log('📊 Total procesados:', snapshot.size)
+      console.log('═══════════════════════════════════════════════════')
+      
+      return {
+        success: true,
+        message: `Se actualizaron ${actualizados} productos con tipo de conteo "${tipoConteoPorDefecto}"`,
+        actualizados,
+        omitidos,
+        total: snapshot.size
+      }
+    } catch (error) {
+      console.error('❌ Error en actualización masiva:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  // Limpiar empresas asignadas de todos los productos
+  limpiarEmpresasAsignadasProductos: async () => {
+    try {
+      console.log('🔄 INICIANDO LIMPIEZA DE EMPRESAS ASIGNADAS')
+      
+      const db = getDB()
+      const productosRef = collection(db, 'productos')
+      const snapshot = await getDocs(productosRef)
+      
+      let actualizados = 0
+      const batch = writeBatch(db)
+      
+      for (const docSnapshot of snapshot.docs) {
+        const productoRef = doc(db, 'productos', docSnapshot.id)
+        const producto = docSnapshot.data()
+        
+        // Limpiar empresas_permitidas (dejar array vacío)
+        batch.update(productoRef, {
+          empresas_permitidas: [],
+          updated_at: serverTimestamp()
+        })
+        actualizados++
+        console.log(`✅ Limpiando empresas de: ${producto.nombre}`)
+      }
+      
+      // Ejecutar el batch
+      await batch.commit()
+      
+      console.log('═══════════════════════════════════════════════════')
+      console.log('✅ LIMPIEZA DE EMPRESAS COMPLETADA')
+      console.log('📊 Productos actualizados:', actualizados)
+      console.log('📊 Total procesados:', snapshot.size)
+      console.log('═══════════════════════════════════════════════════')
+      
+      return {
+        success: true,
+        message: `Se limpiaron las empresas asignadas de ${actualizados} productos. Ahora estarán disponibles en todas las ubicaciones.`,
+        actualizados,
+        total: snapshot.size
+      }
+    } catch (error) {
+      console.error('❌ Error en limpieza de empresas:', error)
       return { success: false, message: error.message }
     }
   },
@@ -662,6 +785,32 @@ const firestoreService = {
   ajustarInventario: async (data) => {
     try {
       const db = getDB()
+
+      // Validar que el producto esté permitido en la ubicación
+      const producto = await firestoreService.getById('productos', data.producto_id)
+      const ubicacion = await firestoreService.getById('ubicaciones', data.ubicacion_id)
+      
+      if (!producto) {
+        return { success: false, message: 'Producto no encontrado' }
+      }
+      
+      if (!ubicacion) {
+        return { success: false, message: 'Ubicación no encontrada' }
+      }
+
+      // Importar utilidad de validación (evitar circular dependency)
+      const { esProductoPermitidoEnUbicacion } = await import('../utils/productosPorUbicacion')
+      
+      // Cargar todas las ubicaciones para validación
+      const todasUbicaciones = await firestoreService.getAll('ubicaciones')
+      const esPermitido = esProductoPermitidoEnUbicacion(producto, data.ubicacion_id, todasUbicaciones)
+      
+      if (!esPermitido) {
+        return { 
+          success: false, 
+          message: `El producto "${producto.nombre}" no está permitido en la ubicación "${ubicacion.nombre}"` 
+        }
+      }
 
       // Buscar si existe el inventario para ese producto en esa ubicación
       const inventarioExistente = await firestoreService.queryWithFilters('inventario', [
@@ -1218,13 +1367,13 @@ const firestoreService = {
 
       const updateData = {
         estado: estadoFinal,
-        fecha_completado: Timestamp.now(),
+        fecha_completado: serverTimestamp(),
         usuario_ejecutor_id: data.usuario_ejecutor_id
       }
       // Si no tenía fecha_inicio, ponerla ahora
       const conteoDoc = await getDoc(conteoRef)
       if (conteoDoc.exists() && !conteoDoc.data().fecha_inicio) {
-        updateData.fecha_inicio = Timestamp.now()
+        updateData.fecha_inicio = serverTimestamp()
       }
 
       batch.update(conteoRef, updateData)
@@ -1279,6 +1428,18 @@ const firestoreService = {
       return { success: true, message: 'Conteo ejecutado exitosamente' }
     } catch (error) {
       console.error('Error ejecutando conteo:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  deleteDetalleConteo: async (detalleId) => {
+    try {
+      const db = getDB()
+      const detalleRef = doc(db, 'detalle_conteos', detalleId)
+      await deleteDoc(detalleRef)
+      return { success: true, message: 'Producto eliminado del conteo' }
+    } catch (error) {
+      console.error('Error eliminando detalle conteo:', error)
       return { success: false, message: error.message }
     }
   },

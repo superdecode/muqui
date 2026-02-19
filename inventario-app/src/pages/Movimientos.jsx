@@ -1,6 +1,7 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Package, Plus, ArrowRightLeft, Download, CheckCircle, Clock, XCircle, Trash2, AlertTriangle, RefreshCw, Search, ArrowUpRight, ArrowDownLeft, Loader, PackageCheck, Info, ShoppingCart, TrendingDown } from 'lucide-react'
+import { Package, Plus, ArrowRightLeft, Download, CheckCircle, Clock, XCircle, Trash2, AlertTriangle, RefreshCw, Search, ArrowUpRight, ArrowDownLeft, Loader, PackageCheck, Eye, ShoppingCart, TrendingDown } from 'lucide-react'
 import Card from '../components/common/Card'
 import DataTable from '../components/common/DataTable'
 import Button from '../components/common/Button'
@@ -17,6 +18,7 @@ import { getUserAllowedUbicacionIds } from '../utils/userFilters'
 import dataService from '../services/dataService'
 
 export default function Movimientos() {
+  const location = useLocation()
   const [directionTab, setDirectionTab] = useState('salida')
   const [statusTab, setStatusTab] = useState('todos')
   const [searchTerm, setSearchTerm] = useState('')
@@ -34,6 +36,17 @@ export default function Movimientos() {
   const canWriteMovimientos = canEdit('movimientos')
   const isReadOnlyMovimientos = isReadOnly('movimientos')
   const esAdmin = isAdmin()
+
+  // Leer parámetros de URL al montar (ej: desde notificaciones)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const tab = params.get('tab')
+    const filtro = params.get('filtro')
+    if (tab === 'recepcion') {
+      setDirectionTab('recepcion')
+      if (filtro === 'pendiente') setStatusTab('pendientes')
+    }
+  }, [location.search])
 
   const { data: empresas = [] } = useQuery({
     queryKey: ['empresas'],
@@ -112,6 +125,8 @@ export default function Movimientos() {
 
   const isReceiver = (mov) => {
     if (esAdmin) return true
+    // userUbicacionIds vacío significa admin global sin restricciones
+    if (userUbicacionIds.length === 0) return true
     return userUbicacionIds.includes(mov.destino_id)
   }
 
@@ -161,7 +176,7 @@ export default function Movimientos() {
       return [
         { id: 'todos', label: 'Todos' },
         { id: 'recibiendo', label: 'Recibiendo', matchEstado: 'PENDIENTE' },
-        { id: 'completados', label: 'Completados', matchEstado: 'COMPLETADO' }
+        { id: 'completados', label: 'Completados', matchEstados: ['COMPLETADO', 'PARCIAL'] }
       ]
     }
     // salida
@@ -230,6 +245,7 @@ export default function Movimientos() {
       const tabs = getStatusTabs()
       const activeTab = tabs.find(t => t.id === statusTab)
       if (activeTab?.matchEstado) return estado === activeTab.matchEstado
+      if (activeTab?.matchEstados) return activeTab.matchEstados.includes(estado)
       return true
     })
   }, [movimientosFiltradosPorDireccion, statusTab, directionTab])
@@ -241,7 +257,11 @@ export default function Movimientos() {
       ...tab,
       count: tab.id === 'todos'
         ? movimientosFiltradosPorDireccion.length
-        : movimientosFiltradosPorDireccion.filter(m => normalizeEstado(m.estado) === tab.matchEstado).length
+        : tab.matchEstado
+          ? movimientosFiltradosPorDireccion.filter(m => normalizeEstado(m.estado) === tab.matchEstado).length
+          : tab.matchEstados
+            ? movimientosFiltradosPorDireccion.filter(m => tab.matchEstados.includes(normalizeEstado(m.estado))).length
+            : 0
     }))
   }, [movimientosFiltradosPorDireccion, directionTab])
 
@@ -297,6 +317,12 @@ export default function Movimientos() {
       }
     },
     {
+      header: 'Creado por',
+      accessor: 'usuario_creacion_nombre',
+      sortKey: 'usuario_creacion_nombre',
+      render: (value) => <span className="text-sm font-medium">{value || '-'}</span>
+    },
+    {
       header: 'Estado',
       accessor: 'estado',
       sortKey: 'estado',
@@ -328,7 +354,7 @@ export default function Movimientos() {
               className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
               title="Ver detalle"
             >
-              <Info size={18} />
+              <Eye size={18} />
             </button>
             {canDeleteRow && (
               <button
@@ -371,11 +397,11 @@ export default function Movimientos() {
     }
   }
 
-  const handleConfirmar = async (movimiento, productosRecibidos = null) => {
+  const handleConfirmar = async (movimiento, productosRecibidos = null, observacionesRecepcion = '') => {
     const data = {
       movimiento_id: movimiento.id,
       usuario_confirmacion_id: user?.id || 'USR001',
-      observaciones: ''
+      observaciones: observacionesRecepcion || ''
     }
     if (productosRecibidos) {
       data.productos_recibidos = productosRecibidos
@@ -701,7 +727,7 @@ export default function Movimientos() {
             isReceiver(selectedMovimiento) &&
             selectedMovimiento.tipo_movimiento === 'TRANSFERENCIA' &&
             canWriteMovimientos
-              ? () => handleConfirmar(selectedMovimiento)
+              ? (productosRecibidos, observaciones) => handleConfirmar(selectedMovimiento, productosRecibidos, observaciones)
               : null
           }
           onConfirmarParcial={
@@ -709,7 +735,7 @@ export default function Movimientos() {
             isReceiver(selectedMovimiento) &&
             selectedMovimiento.tipo_movimiento === 'TRANSFERENCIA' &&
             canWriteMovimientos
-              ? (productosRecibidos) => handleConfirmar(selectedMovimiento, productosRecibidos)
+              ? (productosRecibidos, observaciones) => handleConfirmar(selectedMovimiento, productosRecibidos, observaciones)
               : null
           }
           isConfirmando={isConfirmando}

@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
 import Alert from '../common/Alert'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { Calendar, MapPin, AlertCircle, X } from 'lucide-react'
+import { Calendar, MapPin, AlertCircle, X, Package } from 'lucide-react'
 import dataService from '../../services/dataService'
 import { useAuthStore } from '../../stores/authStore'
 
@@ -12,7 +12,7 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
   const [formData, setFormData] = useState({
     fecha_programada: new Date().toISOString().split('T')[0],
     ubicacion_id: '',
-    tipo_conteo: 'DIARIO',
+    tipo_conteo: 'diario',
     observaciones: ''
   })
   const [error, setError] = useState('')
@@ -22,6 +22,50 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
     queryKey: ['ubicaciones'],
     queryFn: () => dataService.getUbicaciones()
   })
+
+  // Cargar productos para calcular contador
+  const { data: todosProductos = [] } = useQuery({
+    queryKey: ['productos'],
+    queryFn: () => dataService.getProductos()
+  })
+
+  // Calcular productos que aplican para este conteo
+  const productosParaConteo = useMemo(() => {
+    if (!formData.ubicacion_id || !formData.tipo_conteo) return []
+    
+    console.log('🔍 CALCULANDO PRODUCTOS PARA CONTEO')
+    console.log('📍 Ubicación:', formData.ubicacion_id)
+    console.log('📅 Tipo de conteo:', formData.tipo_conteo)
+    console.log('📦 Total productos disponibles:', todosProductos.length)
+    
+    const productosFiltrados = todosProductos.filter(producto => {
+      if (producto.estado === 'INACTIVO' || producto.estado === 'ELIMINADO') return false
+      const ubicPermitidas = producto.ubicaciones_permitidas || []
+      const matchUbicacion = ubicPermitidas.length === 0 || ubicPermitidas.includes(formData.ubicacion_id)
+      
+      const frecuencia = (producto.frecuencia_inventario || '').toLowerCase()
+      const tipoConteo = (formData.tipo_conteo || '').toLowerCase()
+      const matchFrecuencia = frecuencia === tipoConteo || frecuencia === 'todos' || tipoConteo === 'todos'
+      
+      const pasaFiltro = matchUbicacion && matchFrecuencia
+      
+      // Log de cada producto que pasa o no el filtro
+      if (pasaFiltro || !matchFrecuencia) {
+        console.log(`${pasaFiltro ? '✅' : '❌'} ${producto.nombre}:`, {
+          frecuencia_inventario: frecuencia || 'SIN DEFINIR',
+          tipo_conteo: tipoConteo,
+          matchFrecuencia,
+          matchUbicacion,
+          pasaFiltro
+        })
+      }
+      
+      return pasaFiltro
+    })
+    
+    console.log('✅ Productos que se incluirán en el conteo:', productosFiltrados.length)
+    return productosFiltrados
+  }, [todosProductos, formData.ubicacion_id, formData.tipo_conteo])
 
   // Filtrar ubicaciones asignadas al usuario
   const ubicaciones = todasUbicaciones.filter(ubicacion => {
@@ -47,6 +91,17 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
 
     if (!formData.ubicacion_id) {
       setError('Por favor selecciona una ubicación')
+      return
+    }
+
+    if (!formData.tipo_conteo) {
+      setError('Por favor selecciona un tipo de conteo')
+      return
+    }
+
+    // Verificar que haya productos para contar
+    if (productosParaConteo.length === 0) {
+      setError(`No hay productos disponibles para un conteo de tipo "${formData.tipo_conteo}" en esta ubicación. Por favor, selecciona otro tipo de conteo o verifica los productos.`)
       return
     }
 
@@ -143,10 +198,11 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
               onChange={(e) => setFormData({ ...formData, tipo_conteo: e.target.value })}
               className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             >
-              <option value="DIARIO">Diario</option>
-              <option value="SEMANAL">Semanal</option>
-              <option value="MENSUAL">Mensual</option>
-              <option value="EXTRAORDINARIO">Extraordinario</option>
+              <option value="diario">Diario</option>
+              <option value="semanal">Semanal</option>
+              <option value="quincenal">Quincenal</option>
+              <option value="mensual">Mensual</option>
+              <option value="todos">Todos los conteos</option>
             </select>
           </div>
 
@@ -164,6 +220,58 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
             />
           </div>
 
+          {/* Contador de productos */}
+          {formData.ubicacion_id && formData.tipo_conteo && (
+            <div className={`rounded-xl p-4 shadow-sm ${
+              productosParaConteo.length === 0 
+                ? 'bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800'
+                : 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800'
+            }`}>
+              <div className="flex items-start gap-3">
+                <div className={`p-2 rounded-lg flex-shrink-0 ${
+                  productosParaConteo.length === 0 
+                    ? 'bg-amber-100 dark:bg-amber-900/30'
+                    : 'bg-blue-100 dark:bg-blue-900/30'
+                }`}>
+                  <Package className={productosParaConteo.length === 0 ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'} size={20} />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-lg font-bold ${
+                      productosParaConteo.length === 0 
+                        ? 'text-amber-900 dark:text-amber-100'
+                        : 'text-blue-900 dark:text-blue-100'
+                    }`}>
+                      {productosParaConteo.length}
+                    </span>
+                    <span className={`text-sm font-medium ${
+                      productosParaConteo.length === 0 
+                        ? 'text-amber-700 dark:text-amber-300'
+                        : 'text-blue-700 dark:text-blue-300'
+                    }`}>
+                      producto{productosParaConteo.length !== 1 ? 's' : ''} se incluirán en este conteo
+                    </span>
+                  </div>
+                  <div className={`text-xs ${
+                    productosParaConteo.length === 0 
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-blue-600 dark:text-blue-400'
+                  }`}>
+                    Tipo: <span className="font-semibold">{formData.tipo_conteo}</span>
+                    {productosParaConteo.length === 0 && (
+                      <div className="mt-1">
+                        ⚠️ No se puede crear el conteo. No hay productos para este tipo.
+                        <div className="mt-1 text-xs">
+                          💡 Intenta con otro tipo de conteo o verifica los productos de esta ubicación.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Botones */}
           <div className="flex gap-4 mt-8">
             <Button
@@ -179,6 +287,7 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
               type="submit"
               variant="primary"
               loading={isLoading}
+              disabled={!formData.ubicacion_id || !formData.tipo_conteo || productosParaConteo.length === 0}
               className="flex-1"
             >
               {isLoading ? 'Programando...' : 'Programar Conteo'}

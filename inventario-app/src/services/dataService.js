@@ -82,6 +82,14 @@ const dataService = {
     return await firestoreService.deleteProducto(productoId)
   },
 
+  actualizarTodosLosProductosTipoConteo: async (tipoConteoPorDefecto = 'diario') => {
+    return await firestoreService.actualizarTodosLosProductosTipoConteo(tipoConteoPorDefecto)
+  },
+
+  limpiarEmpresasAsignadasProductos: async () => {
+    return await firestoreService.limpiarEmpresasAsignadasProductos()
+  },
+
   // TRANSFERENCIAS/MOVIMIENTOS
   createTransferencia: async (data) => {
     return await firestoreService.createTransferencia(uppercaseStrings(data))
@@ -105,6 +113,10 @@ const dataService = {
 
   deleteConteo: async (conteoId) => {
     return await firestoreService.deleteConteo(conteoId)
+  },
+
+  deleteDetalleConteo: async (detalleId) => {
+    return await firestoreService.deleteDetalleConteo(detalleId)
   },
 
   // CONTEOS
@@ -141,7 +153,7 @@ const dataService = {
     return await firestoreService.hardDeleteUsuario(id)
   },
 
-  // Empresas/Sedes CRUD
+  // Empresas CRUD
   createEmpresa: async (data) => {
     return await firestoreService.createEmpresa(uppercaseStrings(data))
   },

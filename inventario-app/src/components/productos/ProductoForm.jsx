@@ -1,22 +1,31 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
 import Input from '../common/Input'
-import { X, RefreshCw } from 'lucide-react'
-import { FRECUENCIA_INVENTARIO } from '../../utils/constants'
+import { X, RefreshCw, MapPin, Building2 } from 'lucide-react'
 import dataService from '../../services/dataService'
+import { useAuthStore } from '../../stores/authStore'
+import { getUserAllowedUbicacionIds, getUserAllowedEmpresaIds } from '../../utils/userFilters'
 
 
 export default function ProductoForm({ producto = null, onClose, onSave, isLoading = false }) {
-  const [formData, setFormData] = useState({
-    id: '',
+  const { user } = useAuthStore()
+
+  const initialFormData = {
     nombre: '',
     especificacion: '',
     unidad_medida: '',
     stock_minimo: 10,
-    frecuencia_inventario_Dias: 30,
+    frecuencia_inventario: '',
     categoria: '',
-    estado: 'ACTIVO'
+    estado: 'ACTIVO',
+    empresas_permitidas: [],
+    ubicaciones_permitidas: []
+  }
+
+  const [formData, setFormData] = useState({
+    id: '',
+    ...initialFormData
   })
 
   const [errors, setErrors] = useState({})
@@ -36,6 +45,16 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
   const { data: unidadesDB = [] } = useQuery({
     queryKey: ['config-unidades'],
     queryFn: () => dataService.getUnidadesMedida()
+  })
+
+  // Cargar empresas y ubicaciones para el selector
+  const { data: empresas = [] } = useQuery({
+    queryKey: ['empresas'],
+    queryFn: () => dataService.getEmpresas()
+  })
+  const { data: ubicaciones = [] } = useQuery({
+    queryKey: ['ubicaciones'],
+    queryFn: () => dataService.getUbicaciones()
   })
 
   const categoriasOptions = (categoriasDB || []).filter(i => i.estado !== 'INACTIVO' && i.estado !== 'ELIMINADO').map(i => i.nombre).filter(Boolean)
@@ -65,25 +84,33 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
   useEffect(() => {
     if (producto) {
       // Modo edición: cargar datos del producto existente
-      setFormData({
-        id: producto.id || producto.producto_id || '',
-        nombre: producto.nombre || producto.producto || '',
+      const nuevoFormData = {
+        id: producto.id || '',
+        nombre: producto.nombre || '',
         especificacion: producto.especificacion || '',
         unidad_medida: producto.unidad_medida || 'KG',
         stock_minimo: producto.stock_minimo || producto.stock_minimo_default || 10,
-        frecuencia_inventario_Dias: producto.frecuencia_inventario_Dias || producto.frecuencia_inventario_dias || 30,
+        frecuencia_inventario: (producto.frecuencia_inventario || '').toLowerCase(),
         categoria: producto.categoria || 'OTROS',
-        estado: producto.estado || 'ACTIVO'
-      })
+        estado: producto.estado || 'ACTIVO',
+        empresas_permitidas: producto.empresas_permitidas || [],
+        ubicaciones_permitidas: producto.ubicaciones_permitidas || []
+      }
+      setFormData(nuevoFormData)
     } else if (productosExistentes.length > 0 && !formData.id) {
-      // Modo creación: generar ID automáticamente solo si aún no tiene uno
+      // Modo creación: generar ID y poblar TODAS las ubicaciones activas
+            const todasUbicacionesIds = ubicaciones
+        .filter(u => u.estado !== 'INACTIVO' && u.estado !== 'ELIMINADO')
+        .map(u => u.id)
       setFormData(prev => ({
         ...prev,
-        id: generarNuevoID()
+        id: generarNuevoID(),
+        ubicaciones_permitidas: todasUbicacionesIds
       }))
     }
-  }, [producto, productosExistentes])
+  }, [producto, productosExistentes, ubicaciones])
 
+  
   const validate = () => {
     const newErrors = {}
 
@@ -107,27 +134,112 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
     e.preventDefault()
 
     if (!validate()) {
-      return
+            return
     }
 
+    
     try {
-      await onSave(formData)
+      const result = await onSave(formData)
     } catch (error) {
-      console.error('Error guardando producto:', error)
+      // Manejar error
     }
   }
 
   const handleChange = (e) => {
     const { name, value } = e.target
+    
     setFormData(prev => ({
       ...prev,
       [name]: value
     }))
+    
     // Limpiar error del campo
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }))
     }
   }
+
+  // Manejadores para empresas y ubicaciones
+  const toggleEmpresa = (empresaId) => {
+    setFormData(prev => {
+      const nuevasEmpresas = prev.empresas_permitidas.includes(empresaId)
+        ? prev.empresas_permitidas.filter(id => id !== empresaId)
+        : [...prev.empresas_permitidas, empresaId]
+      
+      // Limpiar ubicaciones que no pertenecen a las empresas seleccionadas
+      const empresasIds = nuevasEmpresas
+      const ubicacionesFiltradas = prev.ubicaciones_permitidas.filter(ubicId => {
+        const ubicacion = ubicaciones.find(u => u.id === ubicId)
+        return ubicacion && empresasIds.includes(ubicacion.empresa_id)
+      })
+      
+      return {
+        ...prev,
+        empresas_permitidas: nuevasEmpresas,
+        ubicaciones_permitidas: ubicacionesFiltradas
+      }
+    })
+  }
+
+  const toggleUbicacion = (ubicacionId) => {
+    setFormData(prev => ({
+      ...prev,
+      ubicaciones_permitidas: prev.ubicaciones_permitidas.includes(ubicacionId)
+        ? prev.ubicaciones_permitidas.filter(id => id !== ubicacionId)
+        : [...prev.ubicaciones_permitidas, ubicacionId]
+    }))
+  }
+
+  const toggleAllEmpresas = () => {
+    setFormData(prev => {
+      const allEmpIds = empresasFiltradas.map(e => e.id)
+      const allSelected = allEmpIds.every(id => prev.empresas_permitidas.includes(id))
+      const newEmpresas = allSelected ? [] : allEmpIds
+      
+      // Si seleccionamos todas las empresas, también seleccionamos todas las ubicaciones
+      const newUbicaciones = allSelected ? [] : ubicaciones.filter(u => 
+        u.estado !== 'INACTIVO' && allEmpIds.includes(u.empresa_id)
+      ).map(u => u.id)
+      
+      return {
+        ...prev,
+        empresas_permitidas: newEmpresas,
+        ubicaciones_permitidas: newUbicaciones
+      }
+    })
+  }
+
+  const toggleAllUbicaciones = () => {
+    setFormData(prev => {
+      const allUbIds = ubicacionesFiltradas.filter(u => u.estado !== 'INACTIVO').map(u => u.id)
+      const allSelected = allUbIds.every(id => prev.ubicaciones_permitidas.includes(id))
+      return {
+        ...prev,
+        ubicaciones_permitidas: allSelected ? [] : allUbIds
+      }
+    })
+  }
+
+  // Empresas visibles según permisos del usuario
+  const empresasFiltradas = useMemo(() => {
+    const userEmpresaIds = getUserAllowedEmpresaIds(user)
+    if (userEmpresaIds.length === 0) return empresas.filter(e => e.estado !== 'INACTIVO')
+    return empresas.filter(e => e.estado !== 'INACTIVO' && userEmpresaIds.includes(e.id))
+  }, [empresas, user])
+
+  // Obtener ubicaciones filtradas por empresas seleccionadas y permisos del usuario
+  const ubicacionesFiltradas = useMemo(() => {
+    let filtradas = ubicaciones.filter(u =>
+      formData.empresas_permitidas.length === 0 ||
+      formData.empresas_permitidas.includes(u.empresa_id)
+    )
+    // Limitar a las ubicaciones asignadas al usuario (aplica en crear y editar)
+    const userUbicIds = getUserAllowedUbicacionIds(user, ubicaciones, empresas)
+    if (userUbicIds.length > 0) {
+      filtradas = filtradas.filter(u => userUbicIds.includes(u.id))
+    }
+    return filtradas
+  }, [ubicaciones, empresas, formData.empresas_permitidas, user])
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -241,24 +353,28 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Cantidad mínima antes de alertar</p>
             </div>
 
-            {/* Frecuencia de Inventario */}
+            
+            {/* Tipo de Conteo */}
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Frecuencia de Inventario <span className="text-danger-500">*</span>
+                Tipo de Conteo
               </label>
               <select
-                name="frecuencia_inventario_Dias"
-                value={formData.frecuencia_inventario_Dias}
+                name="frecuencia_inventario"
+                value={formData.frecuencia_inventario}
                 onChange={handleChange}
                 className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
-                required
               >
-                {Object.entries(FRECUENCIA_INVENTARIO).map(([key, { valor, label }]) => (
-                  <option key={key} value={valor}>{label} ({valor} días)</option>
-                ))}
+                <option value="">Seleccionar tipo...</option>
+                <option value="diario">Diario</option>
+                <option value="semanal">Semanal</option>
+                <option value="quincenal">Quincenal</option>
+                <option value="mensual">Mensual</option>
+                <option value="todos">Todos los conteos</option>
               </select>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Tipo de conteo en el que se incluye este producto</p>
             </div>
-
+            
             {/* Categoría */}
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -293,6 +409,88 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
                 <option value="ACTIVO">ACTIVO</option>
                 <option value="INACTIVO">INACTIVO</option>
               </select>
+            </div>
+          </div>
+
+          {/* SECCIÓN DE UBICACIONES */}
+          <div className="mt-8 pt-8 border-t border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-2 mb-6">
+              <MapPin size={20} className="text-primary-600" />
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                Ubicaciones Permitidas
+              </h3>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Empresas */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-bold text-slate-900 dark:text-slate-100">Empresas</label>
+                  <button 
+                    type="button"
+                    onClick={() => toggleAllEmpresas()}
+                    className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
+                  >
+                    {formData.empresas_permitidas.length === empresasFiltradas.length ? 'Deseleccionar todas' : 'Seleccionar todas'}
+                  </button>
+                </div>
+                <div className="max-h-36 overflow-y-auto p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
+                  {empresasFiltradas.map(emp => (
+                    <label key={emp.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-white dark:hover:bg-slate-600 p-1.5 rounded-lg">
+                      <input 
+                        type="checkbox" 
+                        checked={formData.empresas_permitidas.includes(emp.id)} 
+                        onChange={() => toggleEmpresa(emp.id)} 
+                        className="rounded border-slate-300 text-primary-600" 
+                      />
+                      <span className="text-slate-700 dark:text-slate-300">{emp.nombre}</span>
+                    </label>
+                  ))}
+                  {empresasFiltradas.length === 0 && 
+                    <p className="text-xs text-slate-400">No hay empresas</p>
+                  }
+                </div>
+              </div>
+
+              {/* Ubicaciones */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-bold text-slate-900 dark:text-slate-100">Ubicaciones</label>
+                  <button 
+                    type="button"
+                    onClick={() => toggleAllUbicaciones()}
+                    className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-md hover:bg-purple-200 transition-colors"
+                  >
+                    {formData.ubicaciones_permitidas.length === ubicacionesFiltradas.filter(u => u.estado !== 'INACTIVO').length ? 'Deseleccionar todas' : 'Seleccionar todas'}
+                  </button>
+                </div>
+                <div className="max-h-36 overflow-y-auto p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
+                  {ubicacionesFiltradas.filter(u => u.estado !== 'INACTIVO').map(ub => { 
+                    const emp = empresas.find(e => e.id === ub.empresa_id)
+                    return (
+                      <label key={ub.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-white dark:hover:bg-slate-600 p-1.5 rounded-lg">
+                        <input 
+                          type="checkbox" 
+                          checked={formData.ubicaciones_permitidas.includes(ub.id)} 
+                          onChange={() => toggleUbicacion(ub.id)} 
+                          className="rounded border-slate-300 text-primary-600" 
+                        />
+                        <span className="text-slate-700 dark:text-slate-300">{ub.nombre}</span>
+                        {emp && <span className="text-xs text-slate-400 ml-auto">({emp.nombre})</span>}
+                      </label>
+                    )
+                  })}
+                  {ubicacionesFiltradas.filter(u => u.estado !== 'INACTIVO').length === 0 && 
+                    <p className="text-xs text-slate-400">Selecciona empresas primero</p>
+                  }
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                <strong>Nota:</strong> Si no seleccionas ninguna empresa o ubicación, el producto estará disponible en todas las ubicaciones.
+              </p>
             </div>
           </div>
 

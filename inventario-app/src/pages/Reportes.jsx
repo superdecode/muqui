@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import Select from 'react-select'
 import Card from '../components/common/Card'
 import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -72,7 +73,7 @@ export default function Reportes() {
   const [dateRange, setDateRange] = useState(getDefaultDates())
   const [filterUbicacion, setFilterUbicacion] = useState('')
   const [filterUbicaciones, setFilterUbicaciones] = useState([])
-  const [filterProducto, setFilterProducto] = useState('')
+  const [filterProductos, setFilterProductos] = useState([]) // array de IDs seleccionados
   const [vistaConsolidada, setVistaConsolidada] = useState(true)
 
   // Cargar datos
@@ -230,9 +231,8 @@ export default function Reportes() {
 
     let result = Object.values(consolidated)
 
-    if (filterProducto.trim()) {
-      const q = filterProducto.trim().toLowerCase()
-      result = result.filter(item => item.nombre.toLowerCase().includes(q))
+    if (filterProductos.length > 0) {
+      result = result.filter(item => filterProductos.includes(item.producto_id))
     }
 
     return result
@@ -265,9 +265,11 @@ export default function Reportes() {
           }
         })
 
-        if (filterProducto.trim()) {
-          const q = filterProducto.trim().toLowerCase()
-          result = result.filter(r => r.Producto.toLowerCase().includes(q))
+        if (filterProductos.length > 0) {
+          result = result.filter(r => {
+            const prod = productos.find(p => p.nombre === r.Producto)
+            return prod && filterProductos.includes(prod.id)
+          })
         }
 
         result.sort((a, b) => {
@@ -530,6 +532,17 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
   
   const consolidatedKPIs = getConsolidatedKPIs()
 
+  // Opciones para el selector de productos (debe estar antes de cualquier early return)
+  const productosOptions = useMemo(() => {
+    const sorted = [...productos]
+      .filter(p => p.estado !== 'INACTIVO' && p.estado !== 'ELIMINADO')
+      .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''))
+    return sorted.map(p => ({
+      value: p.id,
+      label: p.especificacion ? `${p.nombre} (${p.especificacion})` : p.nombre
+    }))
+  }, [productos])
+
   if (isLoading) return <div className="flex items-center justify-center h-96"><LoadingSpinner size="lg" /></div>
 
   // ========== REPORT VIEW (when a report is selected) ==========
@@ -583,20 +596,32 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
               )}
             </div>
             {selectedReport === 'stock' && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Producto</label>
-                <input
-                  type="text"
-                  value={filterProducto}
-                  onChange={e => { setFilterProducto(e.target.value); setShowResults(false) }}
-                  placeholder="Buscar producto..."
-                  className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Productos</label>
+                <Select
+                  isMulti
+                  isSearchable
+                  isClearable
+                  placeholder="Todos los productos..."
+                  noOptionsMessage={() => 'Sin resultados'}
+                  options={productosOptions}
+                  value={productosOptions.filter(opt => filterProductos.includes(opt.value))}
+                  onChange={(selected) => {
+                    setFilterProductos(selected ? selected.map(s => s.value) : [])
+                    setShowResults(false)
+                  }}
+                  classNamePrefix="rs"
+                  styles={{
+                    control: (base) => ({ ...base, borderRadius: '0.75rem', borderColor: '#cbd5e1', minHeight: '42px', fontSize: '0.875rem' }),
+                    menu: (base) => ({ ...base, borderRadius: '0.75rem', zIndex: 50, fontSize: '0.875rem' }),
+                    multiValue: (base) => ({ ...base, borderRadius: '0.375rem' })
+                  }}
                 />
               </div>
             )}
             <div className="flex items-end gap-2">
               <Button onClick={handleGenerateReport} className="flex-1" disabled={!canGenerarReporte}>Generar</Button>
-              <Button variant="outline" onClick={() => { setDateRange(getDefaultDates()); setFilterUbicacion(''); setFilterProducto(''); setShowResults(false) }}>Limpiar</Button>
+              <Button variant="outline" onClick={() => { setDateRange(getDefaultDates()); setFilterUbicacion(''); setFilterProductos([]); setShowResults(false) }}>Limpiar</Button>
             </div>
           </div>
           {isReadOnly('reportes') && (

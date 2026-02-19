@@ -154,8 +154,8 @@ export default function Dashboard() {
           <div className="space-y-3">
             {alertas.slice(0, 5).map((alerta) => (
               <div key={alerta.id} className="group flex items-start gap-4 p-4 bg-gradient-to-r from-slate-50 dark:from-slate-700/50 to-transparent rounded-xl hover:from-slate-100 dark:hover:from-slate-700 transition-all duration-300 border border-slate-100 dark:border-slate-700 hover:border-slate-200 dark:hover:border-slate-600">
-                <div className={`p-2 rounded-lg ${alerta.prioridad === 'CRITICA' ? 'bg-danger-100' : alerta.prioridad === 'ALTA' ? 'bg-warning-100' : alerta.prioridad === 'MEDIA' ? 'bg-accent-100' : 'bg-slate-100'}`}>
-                  <AlertTriangle size={20} className={alerta.prioridad === 'CRITICA' ? 'text-danger-600' : alerta.prioridad === 'ALTA' ? 'text-warning-600' : alerta.prioridad === 'MEDIA' ? 'text-accent-600' : 'text-slate-600'} />
+                <div className={`p-2 rounded-lg ${alerta.prioridad === 'CRITICA' || alerta.prioridad === 'critica' ? 'bg-danger-100' : alerta.prioridad === 'ALTA' || alerta.prioridad === 'alta' ? 'bg-red-100' : alerta.prioridad === 'MEDIA' || alerta.prioridad === 'media' ? 'bg-accent-100' : 'bg-slate-100'}`}>
+                  <AlertTriangle size={20} className={alerta.prioridad === 'CRITICA' || alerta.prioridad === 'critica' ? 'text-danger-600' : alerta.prioridad === 'ALTA' || alerta.prioridad === 'alta' ? 'text-red-600' : alerta.prioridad === 'MEDIA' || alerta.prioridad === 'media' ? 'text-accent-600' : 'text-slate-600'} />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{alerta.mensaje}</p>
@@ -165,8 +165,8 @@ export default function Dashboard() {
                     <span>{alerta.ubicacion_nombre}</span>
                   </p>
                 </div>
-                <span className={`px-3 py-1 text-xs font-semibold rounded-full ${alerta.prioridad === 'CRITICA' ? 'bg-red-500 text-white' : alerta.prioridad === 'ALTA' ? 'bg-yellow-500 text-white' : alerta.prioridad === 'MEDIA' ? 'bg-blue-500 text-white' : 'bg-gray-500 text-white'}`}>
-                  {alerta.prioridad}
+                <span className={`px-3 py-1 text-xs font-semibold rounded-full ${alerta.prioridad === 'CRITICA' || alerta.prioridad === 'critica' ? 'bg-red-600 text-white' : alerta.prioridad === 'ALTA' || alerta.prioridad === 'alta' ? 'bg-red-500 text-white' : alerta.prioridad === 'MEDIA' || alerta.prioridad === 'media' ? 'bg-blue-500 text-white' : 'bg-gray-500 text-white'}`}>
+                  {alerta.prioridad.toUpperCase()}
                 </span>
               </div>
             ))}

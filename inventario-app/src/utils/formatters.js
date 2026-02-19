@@ -203,7 +203,8 @@ const SKIP_UPPERCASE_KEYS = new Set([
   'usuario_ejecutor_id', 'producto_id', 'ubicacion_id', 'empresa_id',
   'origen_id', 'destino_id', 'movimiento_id', 'conteo_id', 'rol',
   'estado', 'tipo', 'tipo_movimiento', 'tipo_conteo', 'tipo_ubicacion',
-  'tipo_ajuste', 'tipo_dato', 'categoria_ticket', 'prioridad', 'color'
+  'tipo_ajuste', 'tipo_dato', 'categoria_ticket', 'prioridad', 'color',
+  'frecuencia_inventario'
 ])
 
 export const uppercaseStrings = (data) => {

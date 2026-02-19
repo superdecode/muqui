@@ -34,6 +34,9 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
   const [motivoCancelacion, setMotivoCancelacion] = useState('')
   const [isCancelling, setIsCancelling] = useState(false)
 
+  // Observaciones de recepción
+  const [observacionesRecepcion, setObservacionesRecepcion] = useState('')
+
   // Validación inicial para evitar errores
   if (!transferencia) {
     console.error('TransferenciaDetail: transferencia es null o undefined')
@@ -142,8 +145,13 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
   // Función para obtener nombre del usuario
   const getUsuarioNombre = (usuarioId) => {
     if (!usuarioId) return '-'
-    const usuario = usuarios.find(u => u.id === usuarioId)
-    return usuario ? `${usuario.nombre} - ${usuario.rol}` : usuarioId
+    // First try to find by doc.id (Firestore ID)
+    let usuario = usuarios.find(u => u.id === usuarioId)
+    // If not found, try to find by codigo field
+    if (!usuario) {
+      usuario = usuarios.find(u => u.codigo === usuarioId)
+    }
+    return usuario ? usuario.nombre : usuarioId
   }
 
   const formatDate = (dateString) => {
@@ -303,9 +311,7 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
   }, [modoRecepcion, detalles])
 
   const handleConfirmarTodo = () => {
-    // El usuario ya hizo clic en el botón de confirmación dentro del modal
-    // No necesitamos otra confirmación
-    if (onConfirmar) onConfirmar()
+    if (onConfirmar) onConfirmar(null, observacionesRecepcion)
   }
 
   const handleConfirmarParcial = () => {
@@ -315,9 +321,9 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
       cantidad_recibida: cantidadesRecibidas[d.id] || (d.cantidad_enviada ?? d.cantidad)
     }))
     if (onConfirmarParcial) {
-      onConfirmarParcial(productosRecibidos)
+      onConfirmarParcial(productosRecibidos, observacionesRecepcion)
     } else if (onConfirmar) {
-      onConfirmar(productosRecibidos)
+      onConfirmar(productosRecibidos, observacionesRecepcion)
     }
   }
 
@@ -602,7 +608,7 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
             )}
           </div>
 
-          {/* Observaciones */}
+          {/* Observaciones guardadas */}
           {(transferencia.observaciones_creacion || transferencia.observaciones_confirmacion) && (
             <div className="space-y-3">
               <h3 className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -611,16 +617,32 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
               </h3>
               {transferencia.observaciones_creacion && (
                 <div className="border-l-4 border-slate-400 pl-4 py-2">
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Creación</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Observaciones de Salida</p>
                   <p className="text-slate-700 dark:text-slate-300">{transferencia.observaciones_creacion}</p>
                 </div>
               )}
               {transferencia.observaciones_confirmacion && (
                 <div className="border-l-4 border-green-500 pl-4 py-2">
-                  <p className="text-xs text-green-600 mb-1">Confirmación</p>
+                  <p className="text-xs text-green-600 mb-1">Observaciones de Recepción</p>
                   <p className="text-slate-700 dark:text-slate-300">{transferencia.observaciones_confirmacion}</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Textarea observaciones de recepción al confirmar */}
+          {onConfirmar && normalizeEstado(transferencia.estado) !== 'CANCELADA' && normalizeEstado(transferencia.estado) !== 'COMPLETADO' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Observaciones de Recepción (Opcional)
+              </label>
+              <textarea
+                value={observacionesRecepcion}
+                onChange={(e) => setObservacionesRecepcion(e.target.value)}
+                placeholder="Notas sobre la recepción del producto..."
+                rows={3}
+                className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+              />
             </div>
           )}
 

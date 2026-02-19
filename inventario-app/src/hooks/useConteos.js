@@ -113,6 +113,20 @@ export const useConteos = (ubicacionId) => {
     }
   })
 
+  // Eliminar detalle de conteo (producto individual)
+  const eliminarDetalleConteo = useMutation({
+    mutationFn: async (detalleId) => {
+      return await dataService.deleteDetalleConteo(detalleId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conteo-detalle'] })
+      toast.success('Producto Eliminado', 'El producto fue eliminado del conteo')
+    },
+    onError: (error) => {
+      toast.error('Error', error.message || 'No se pudo eliminar el producto del conteo')
+    }
+  })
+
   // Estadísticas de conteos
   const getEstadisticas = () => {
     const pendientes = conteosConNombres.filter(c => c.estado === 'PENDIENTE').length
@@ -142,6 +156,8 @@ export const useConteos = (ubicacionId) => {
     isEjecutando: ejecutarConteo.isPending,
     eliminarConteo: eliminarConteo.mutate,
     isEliminando: eliminarConteo.isPending,
+    eliminarDetalleConteo: eliminarDetalleConteo.mutate,
+    isEliminandoDetalle: eliminarDetalleConteo.isPending,
     estadisticas: getEstadisticas()
   }
 }

@@ -1,16 +1,46 @@
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Button from '../common/Button'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { Package, MapPin, Calendar, User, CheckCircle, AlertCircle, X, Download } from 'lucide-react'
+import { Package, MapPin, Calendar, User, CheckCircle, AlertCircle, X, Download, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import dataService from '../../services/dataService'
 import { useToastStore } from '../../stores/toastStore'
 import { exportConteoToExcel } from '../../utils/exportUtils'
 import { formatDisplayId } from '../../utils/formatters'
+import { usePermissions } from '../../hooks/usePermissions'
 
 export default function ConteoDetail({ conteo, onClose }) {
   const toast = useToastStore()
+  const queryClient = useQueryClient()
+  const { canEdit } = usePermissions()
+  const [eliminandoId, setEliminandoId] = useState(null)
+  const [confirmDetalle, setConfirmDetalle] = useState(null)
+
+  const eliminarDetalleMutation = useMutation({
+    mutationFn: (detalleId) => dataService.deleteDetalleConteo(detalleId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conteo-detalle', conteo.id] })
+      toast.success('Eliminado', 'El producto fue eliminado del conteo')
+      setEliminandoId(null)
+    },
+    onError: (error) => {
+      toast.error('Error', error.message || 'No se pudo eliminar el producto')
+      setEliminandoId(null)
+    }
+  })
+
+  const handleEliminarProducto = (detalle) => {
+    setConfirmDetalle(detalle)
+  }
+
+  const confirmarEliminar = () => {
+    if (!confirmDetalle) return
+    setEliminandoId(confirmDetalle.id)
+    eliminarDetalleMutation.mutate(confirmDetalle.id)
+    setConfirmDetalle(null)
+  }
 
   // Cargar detalles del conteo
   const { data: detalles = [], isLoading } = useQuery({
@@ -71,8 +101,13 @@ export default function ConteoDetail({ conteo, onClose }) {
   // Función para obtener nombre del usuario
   const getUsuarioNombre = (usuarioId) => {
     if (!usuarioId) return '-'
-    const usuario = usuarios.find(u => u.id === usuarioId)
-    return usuario ? `${usuario.nombre} - ${usuario.rol}` : usuarioId
+    // First try to find by doc.id (Firestore ID)
+    let usuario = usuarios.find(u => u.id === usuarioId)
+    // If not found, try to find by codigo field
+    if (!usuario) {
+      usuario = usuarios.find(u => u.codigo === usuarioId)
+    }
+    return usuario ? usuario.nombre : usuarioId
   }
 
   // Función para obtener nombre de la ubicación
@@ -140,55 +175,104 @@ export default function ConteoDetail({ conteo, onClose }) {
 
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)] space-y-6">
           {/* Info General */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-primary-100 rounded-lg">
-                <Calendar className="text-primary-600" size={20} />
-              </div>
-              <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Fecha Programada</p>
-                <p className="font-semibold text-slate-900 dark:text-slate-100">{formatDate(conteo.fecha_programada)}</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <MapPin className="text-purple-600" size={20} />
-              </div>
-              <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Ubicación</p>
-                <p className="font-semibold text-slate-900 dark:text-slate-100">{getUbicacionNombre(conteo.ubicacion_id)}</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Package className="text-blue-600" size={20} />
-              </div>
-              <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Tipo de Conteo</p>
-                <p className="font-semibold text-slate-900 dark:text-slate-100">{conteo.tipo_conteo}</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <User className="text-green-600" size={20} />
-              </div>
-              <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Responsable</p>
-                <p className="font-semibold text-slate-900 dark:text-slate-100">{getUsuarioNombre(conteo.usuario_responsable_id)}</p>
-              </div>
-            </div>
-
-            {conteo.usuario_ejecutor_id && (
+          <div className="space-y-6">
+            {/* Primera fila: Fecha Programada y Responsable */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <User className="text-blue-600" size={20} />
+                <div className="p-2 bg-primary-100 rounded-lg">
+                  <Calendar className="text-primary-600" size={20} />
                 </div>
                 <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Ejecutado por</p>
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">{getUsuarioNombre(conteo.usuario_ejecutor_id)}</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">Fecha Programada</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{formatDate(conteo.fecha_programada)}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <User className="text-green-600" size={20} />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">Responsable</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{getUsuarioNombre(conteo.usuario_responsable_id)}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Segunda fila: Tipo de Conteo y Ubicación */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Package className="text-blue-600" size={20} />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">Tipo de Conteo</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{conteo.tipo_conteo}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <MapPin className="text-purple-600" size={20} />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">Ubicación</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{getUbicacionNombre(conteo.ubicacion_id)}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Tercera fila: Ejecución (solo si existe) */}
+            {conteo.usuario_ejecutor_id && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {conteo.fecha_completado && (
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Calendar className="text-blue-600" size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-600 dark:text-slate-400">Completado el</p>
+                      <p className="font-semibold text-slate-900 dark:text-slate-100">
+                        {(() => {
+                          try {
+                            let date;
+                            if (conteo.fecha_completado?.seconds) {
+                              // Firestore Timestamp
+                              date = new Date(conteo.fecha_completado.seconds * 1000);
+                            } else if (typeof conteo.fecha_completado === 'string') {
+                              // ISO String
+                              date = new Date(conteo.fecha_completado);
+                            } else if (conteo.fecha_completado instanceof Date) {
+                              // Date object
+                              date = conteo.fecha_completado;
+                            } else {
+                              // Fallback
+                              date = new Date();
+                            }
+                            
+                            if (isNaN(date.getTime())) {
+                              return 'Fecha no válida';
+                            }
+                            
+                            return format(date, "d 'de' MMMM 'de' yyyy' 'a las' HH:mm", { locale: es });
+                          } catch (error) {
+                            console.error('Error formateando fecha:', error);
+                            return 'Error en fecha';
+                          }
+                        })()}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <User className="text-green-600" size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Ejecutado por</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{getUsuarioNombre(conteo.usuario_ejecutor_id)}</p>
+                  </div>
                 </div>
               </div>
             )}
@@ -223,6 +307,9 @@ export default function ConteoDetail({ conteo, onClose }) {
                         <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Sistema</th>
                         <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Físico</th>
                         <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">Diferencia</th>
+                        {conteo.estado === 'EN_PROGRESO' && canEdit('conteos') && (
+                          <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">Acciones</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
@@ -285,6 +372,18 @@ export default function ConteoDetail({ conteo, onClose }) {
                                 <span className="text-slate-400">-</span>
                               )}
                             </td>
+                            {conteo.estado === 'EN_PROGRESO' && canEdit('conteos') && (
+                              <td className="px-6 py-4 text-center">
+                                <button
+                                  onClick={() => handleEliminarProducto(detalle)}
+                                  disabled={eliminandoId === detalle.id}
+                                  className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
+                                  title="Eliminar del conteo"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         )
                       })}
@@ -311,6 +410,48 @@ export default function ConteoDetail({ conteo, onClose }) {
           </div>
         </div>
       </div>
+
+      {/* Modal de confirmación para eliminar producto */}
+      {confirmDetalle && (
+        <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-10 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full flex-shrink-0">
+                <Trash2 className="text-red-600" size={22} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">
+                  Eliminar producto del conteo
+                </h3>
+                <p className="text-slate-700 dark:text-slate-300 font-medium mb-2">
+                  {getProductoInfo(confirmDetalle.producto_id).nombre}
+                </p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  Elimina este producto si no corresponde a la frecuencia de conteo configurada o a la empresa. Puedes ajustar su configuración en el módulo <strong>Productos</strong>.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <Button
+                variant="ghost"
+                onClick={() => setConfirmDetalle(null)}
+                className="flex-1"
+                disabled={eliminandoId !== null}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="danger"
+                onClick={confirmarEliminar}
+                loading={eliminandoId !== null}
+                className="flex-1"
+              >
+                {eliminandoId !== null ? 'Eliminando...' : 'Eliminar'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

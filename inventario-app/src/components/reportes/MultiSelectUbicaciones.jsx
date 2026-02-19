@@ -21,10 +21,10 @@ export default function MultiSelectUbicaciones({ ubicaciones, selected, onChange
   }
 
   const selectedNames = selected.length === 0 
-    ? 'Seleccionar ubicaciones...'
+    ? 'Seleccionar...'
     : selected.length === ubicaciones.length
     ? 'Todas las ubicaciones'
-    : `${selected.length} ubicación(es) seleccionada(s)`
+    : `${selected.length} seleccionada(s)`
 
   return (
     <div className="relative">

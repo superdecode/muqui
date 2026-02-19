@@ -219,12 +219,11 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
       // Verificar que el producto esté asignado a la ubicación de origen
       if (!formData.origen_id) return false
 
-      // product.ubicacion_id es un array de ubicaciones
-      const productUbicaciones = Array.isArray(product.ubicacion_id)
-        ? product.ubicacion_id
-        : (product.ubicacion_id ? product.ubicacion_id.split(',').map(id => id.trim()) : [])
+      // Filtrar por ubicaciones_permitidas (igual que en conteos)
+      const ubicPermitidas = product.ubicaciones_permitidas || []
+      const matchUbicacion = ubicPermitidas.length === 0 || ubicPermitidas.includes(formData.origen_id)
 
-      if (!productUbicaciones.includes(formData.origen_id)) return false
+      if (!matchUbicacion) return false
 
       // Filtrar por búsqueda
       return product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -341,11 +340,11 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
         const productoCompleto = productos.find(p => p.id === producto.id)
         if (!productoCompleto) return true
         
-        const productUbicaciones = Array.isArray(productoCompleto.ubicacion_id) 
-          ? productoCompleto.ubicacion_id 
-          : (productoCompleto.ubicacion_id ? productoCompleto.ubicacion_id.split(',').map(id => id.trim()) : [])
+        // Filtrar por ubicaciones_permitidas (igual que en conteos)
+        const ubicPermitidas = productoCompleto.ubicaciones_permitidas || []
+        const matchUbicacion = ubicPermitidas.length === 0 || ubicPermitidas.includes(formData.destino_id)
         
-        return !productUbicaciones.includes(formData.destino_id)
+        return !matchUbicacion
       })
 
       if (productosNoAsignados.length > 0) {
@@ -833,12 +832,12 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
           {/* Observaciones */}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Observaciones (Opcional)
+              Observaciones de Salida (Opcional)
             </label>
             <textarea
               value={formData.observaciones}
               onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
-              placeholder="Notas adicionales sobre la transferencia..."
+              placeholder="Notas adicionales sobre la salida..."
               rows={3}
               className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />

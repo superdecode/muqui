@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Shield, Users, Building2, MapPin, Lock,
   Plus, Edit2, Trash2, Search, X, Save,
-  CheckCircle, XCircle, ChevronDown, ChevronRight
+  CheckCircle, XCircle, ChevronDown, ChevronRight, Package
 } from 'lucide-react'
 import Card from '../components/common/Card'
 import Button from '../components/common/Button'
@@ -143,7 +143,7 @@ function TabUsuarios({ usuarios, empresas, ubicaciones, isLoading, canWrite = tr
       return { ...prev, ubicaciones_asignadas: allSelected ? [] : allUbIds }
     })
   }
-  const ubicacionesFiltradas = (ubicaciones || []).filter(u => form.empresas_asignadas.length === 0 || form.empresas_asignadas.includes(u.empresa_id))
+  const ubicacionesFiltradas = (ubicaciones || []).filter(u => form.empresas_asignadas.length > 0 && form.empresas_asignadas.includes(u.empresa_id))
   const handleSave = () => { if (!form.nombre || !form.email) { toast.error('Requerido', 'Nombre y email obligatorios'); return }; const d = { ...form }; if (!d.password) delete d.password; editingUser ? updateMut.mutate({ id: editingUser.id, data: d }) : createMut.mutate(d) }
   const filtered = (usuarios || []).filter(u => u.nombre?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()) || u.rol?.toLowerCase().includes(search.toLowerCase()))
   const getRolBadge = (rol) => {
@@ -250,7 +250,7 @@ function TabUsuarios({ usuarios, empresas, ubicaciones, isLoading, canWrite = tr
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-bold text-slate-900 dark:text-slate-100">Empresas/Sedes</label>
+                <label className="block text-sm font-bold text-slate-900 dark:text-slate-100">Empresas</label>
                 <button 
                   onClick={toggleAllEmpresas}
                   className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
@@ -407,11 +407,11 @@ function TabSedes({ empresas, ubicaciones, isLoading, canWrite = true, canDelete
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-md"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={searchSede} onChange={e => setSearchSede(e.target.value)} placeholder="Buscar sedes..." className="w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm" /></div>
-        {canWrite && <Button onClick={openCreate}><Plus size={18} className="mr-1.5" />Nueva Sede</Button>}
+        <div className="relative flex-1 max-w-md"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={searchSede} onChange={e => setSearchSede(e.target.value)} placeholder="Buscar empresas..." className="w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm" /></div>
+        {canWrite && <Button onClick={openCreate}><Plus size={18} className="mr-1.5" />Nueva Empresa</Button>}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {(empresas || []).filter(emp => !searchSede || emp.nombre?.toLowerCase().includes(searchSede.toLowerCase()) || emp.direccion?.toLowerCase().includes(searchSede.toLowerCase()) || emp.responsable?.toLowerCase().includes(searchSede.toLowerCase())).length === 0 ? <div className="col-span-full text-center py-12 text-slate-500"><Building2 size={48} className="mx-auto mb-3 text-slate-300" /><p>No hay sedes</p></div> : (empresas || []).filter(emp => !searchSede || emp.nombre?.toLowerCase().includes(searchSede.toLowerCase()) || emp.direccion?.toLowerCase().includes(searchSede.toLowerCase()) || emp.responsable?.toLowerCase().includes(searchSede.toLowerCase())).map(emp => (
+        {(empresas || []).filter(emp => !searchSede || emp.nombre?.toLowerCase().includes(searchSede.toLowerCase()) || emp.direccion?.toLowerCase().includes(searchSede.toLowerCase()) || emp.responsable?.toLowerCase().includes(searchSede.toLowerCase())).length === 0 ? <div className="col-span-full text-center py-12 text-slate-500"><Building2 size={48} className="mx-auto mb-3 text-slate-300" /><p>No hay empresas</p></div> : (empresas || []).filter(emp => !searchSede || emp.nombre?.toLowerCase().includes(searchSede.toLowerCase()) || emp.direccion?.toLowerCase().includes(searchSede.toLowerCase()) || emp.responsable?.toLowerCase().includes(searchSede.toLowerCase())).map(emp => (
           <div key={emp.id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between mb-3"><div className="p-2.5 bg-blue-100 rounded-xl"><Building2 size={20} className="text-blue-600" /></div><span className={`px-2 py-1 rounded-full text-xs font-semibold ${emp.estado === 'ACTIVO' || !emp.estado ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{emp.estado || 'ACTIVO'}</span></div>
             <h4 className="font-bold text-slate-900 dark:text-slate-100 mb-1">{emp.nombre}</h4>
@@ -629,7 +629,7 @@ function TabRoles({ canWrite = true, canDelete = true }) {
                   {canDelete && !isAdminRol(rol) && <button onClick={() => { if (window.confirm(`¿Eliminar rol "${rol.nombre || rol.label}"?`)) deleteMut.mutate(rol.id) }} className="p-1 hover:bg-red-50 rounded-lg text-red-600"><Trash2 size={14} /></button>}
                 </div>}
               </div>
-              <div className="mb-3"><div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 mb-1"><span>Acceso a módulos</span><span>{conAcceso}/{totalModulos}</span></div><div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2"><div className="bg-primary-500 h-2 rounded-full" style={{ width: `${(conAcceso / totalModulos) * 100}%` }}></div></div></div>
+              <div className="mb-3"><div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 mb-1"><span>Acceso a módulos</span><span>{conAcceso}/{totalModulos}</span></div><div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 overflow-hidden"><div className="bg-primary-500 h-2 rounded-full transition-all duration-300" style={{ width: `${Math.min((conAcceso / totalModulos) * 100, 100)}%` }}></div></div></div>
               <div className="space-y-1">
                 {MODULOS.map(mod => {
                   const val = permisos[mod.id]
@@ -703,12 +703,180 @@ function TabRoles({ canWrite = true, canDelete = true }) {
   )
 }
 
+// ========== TAB HERRAMIENTAS ==========
+function TabHerramientas({ canWrite }) {
+  const toast = useToastStore()
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [selectedTipo, setSelectedTipo] = useState('diario')
+
+  const actualizarProductosMutation = useMutation({
+    mutationFn: (tipoConteo) => dataService.actualizarTodosLosProductosTipoConteo(tipoConteo),
+    onSuccess: (result) => {
+      toast.success('Actualización Completada', result.message)
+      setIsUpdating(false)
+    },
+    onError: (error) => {
+      toast.error('Error en Actualización', error.message)
+      setIsUpdating(false)
+    }
+  })
+
+  const handleActualizarProductos = () => {
+    if (!window.confirm(`¿Estás seguro de actualizar todos los productos sin tipo de conteo a "${selectedTipo}"?`)) {
+      return
+    }
+    
+    setIsUpdating(true)
+    actualizarProductosMutation.mutate(selectedTipo)
+  }
+
+  const limpiarEmpresasMutation = useMutation({
+    mutationFn: () => dataService.limpiarEmpresasAsignadasProductos(),
+    onSuccess: (result) => {
+      toast.success('Limpieza Completada', result.message)
+      setIsUpdating(false)
+    },
+    onError: (error) => {
+      toast.error('Error en Limpieza', error.message)
+      setIsUpdating(false)
+    }
+  })
+
+  const handleLimpiarEmpresas = () => {
+    if (!window.confirm('¿Estás seguro de limpiar las empresas asignadas de TODOS los productos? Esta acción eliminará las restricciones de empresa y los productos quedarán disponibles en todas las ubicaciones.')) {
+      return
+    }
+    
+    setIsUpdating(true)
+    limpiarEmpresasMutation.mutate()
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
+          Herramientas Administrativas
+        </h3>
+        <p className="text-slate-600 dark:text-slate-400">
+          Utilidades para mantenimiento y actualización masiva de datos
+        </p>
+      </div>
+
+      <Card className="border-amber-200 dark:border-amber-800">
+        <div className="p-6">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+              <Save className="text-amber-600 dark:text-amber-400" size={24} />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">
+                Actualizar Tipo de Conteo de Productos
+              </h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                Establece el tipo de conteo por defecto para todos los productos que no tengan uno asignado.
+                Esto es útil después de cambios en la lógica de conteos.
+              </p>
+              
+              <div className="flex items-center gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Tipo de Conteo por Defecto
+                  </label>
+                  <select
+                    value={selectedTipo}
+                    onChange={(e) => setSelectedTipo(e.target.value)}
+                    className="px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg"
+                    disabled={isUpdating}
+                  >
+                    <option value="diario">Diario</option>
+                    <option value="semanal">Semanal</option>
+                    <option value="quincenal">Quincenal</option>
+                    <option value="mensual">Mensual</option>
+                  </select>
+                </div>
+                
+                <Button
+                  onClick={handleActualizarProductos}
+                  disabled={isUpdating || !canWrite}
+                  className="mt-6"
+                >
+                  {isUpdating ? (
+                    <>
+                      <LoadingSpinner size="sm" className="mr-2" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={16} className="mr-2" />
+                      Actualizar Productos
+                    </>
+                  )}
+                </Button>
+              </div>
+              
+              <div className="text-xs text-amber-600 dark:text-amber-400">
+                ⚠️ Esta acción solo afectará a productos que no tengan tipo de conteo asignado.
+                Los productos que ya tienen un tipo no serán modificados.
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="border-blue-200 dark:border-blue-800">
+        <div className="p-6">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <Package className="text-blue-600 dark:text-blue-400" size={24} />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">
+                Limpiar Empresas Asignadas de Productos
+              </h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                Elimina todas las empresas asignadas de los productos, dejándolos disponibles en todas las ubicaciones.
+                Esto es útil cuando quieres que todos los productos sean universales.
+              </p>
+              
+              <div className="flex items-center gap-4 mb-4">
+                <Button
+                  onClick={handleLimpiarEmpresas}
+                  disabled={isUpdating}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {isUpdating ? (
+                    <>
+                      <LoadingSpinner size="sm" className="mr-2" />
+                      Limpiando...
+                    </>
+                  ) : (
+                    <>
+                      <Package size={16} className="mr-2" />
+                      Limpiar Empresas de Productos
+                    </>
+                  )}
+                </Button>
+              </div>
+              
+              <div className="text-xs text-blue-600 dark:text-blue-400">
+                ⚠️ Esta acción eliminará las restricciones de empresa de TODOS los productos.
+                Los productos quedarán disponibles en todas las ubicaciones sin importar la empresa.
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
 // ========== MAIN ==========
 const TABS = [
   { id: 'usuarios', label: 'Usuarios', icon: Users },
-  { id: 'sedes', label: 'Sedes', icon: Building2 },
+  { id: 'roles', label: 'Roles', icon: Lock },
+  { id: 'empresas', label: 'Empresas', icon: Building2 },
   { id: 'ubicaciones', label: 'Ubicaciones', icon: MapPin },
-  { id: 'roles', label: 'Roles', icon: Shield }
+  { id: 'herramientas', label: 'Herramientas', icon: Save }
 ]
 
 export default function Administracion() {
@@ -741,21 +909,22 @@ export default function Administracion() {
     <div className="space-y-6">
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-800 to-slate-900 p-6 shadow-card">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-32 -mt-32"></div>
-        <div className="relative z-10 flex items-center gap-3"><Shield className="text-primary-400" size={32} /><div><h1 className="text-3xl font-bold text-white">Administración del Sistema</h1><p className="text-white/70 mt-1">Usuarios, sedes, ubicaciones y roles del sistema</p></div></div>
+        <div className="relative z-10 flex items-center gap-3"><Shield className="text-primary-400" size={32} /><div><h1 className="text-3xl font-bold text-white">Administración del Sistema</h1><p className="text-white/70 mt-1">Usuarios, empresas, ubicaciones y roles del sistema</p></div></div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <button onClick={() => setActiveTab('usuarios')} className="text-left"><Card className={`bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-slate-800 border-blue-100 dark:border-blue-900/30 cursor-pointer hover:shadow-md transition-shadow ${activeTab === 'usuarios' ? 'ring-2 ring-blue-500' : ''}`}><div className="flex items-center justify-between"><div><p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Usuarios</p><p className="text-3xl font-bold text-blue-600">{usuarios.length}</p></div><div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center"><Users className="text-blue-600" size={24} /></div></div></Card></button>
-        <button onClick={() => setActiveTab('sedes')} className="text-left"><Card className={`bg-gradient-to-br from-green-50 to-white dark:from-green-900/20 dark:to-slate-800 border-green-100 dark:border-green-900/30 cursor-pointer hover:shadow-md transition-shadow ${activeTab === 'sedes' ? 'ring-2 ring-green-500' : ''}`}><div className="flex items-center justify-between"><div><p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Sedes</p><p className="text-3xl font-bold text-green-600">{empresas.length}</p></div><div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center"><Building2 className="text-green-600" size={24} /></div></div></Card></button>
-        <button onClick={() => setActiveTab('ubicaciones')} className="text-left"><Card className={`bg-gradient-to-br from-purple-50 to-white dark:from-purple-900/20 dark:to-slate-800 border-purple-100 dark:border-purple-900/30 cursor-pointer hover:shadow-md transition-shadow ${activeTab === 'ubicaciones' ? 'ring-2 ring-purple-500' : ''}`}><div className="flex items-center justify-between"><div><p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Ubicaciones</p><p className="text-3xl font-bold text-purple-600">{ubicaciones.length}</p></div><div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center"><MapPin className="text-purple-600" size={24} /></div></div></Card></button>
         <button onClick={() => setActiveTab('roles')} className="text-left"><Card className={`bg-gradient-to-br from-amber-50 to-white dark:from-amber-900/20 dark:to-slate-800 border-amber-100 dark:border-amber-900/30 cursor-pointer hover:shadow-md transition-shadow ${activeTab === 'roles' ? 'ring-2 ring-amber-500' : ''}`}><div className="flex items-center justify-between"><div><p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Roles</p><p className="text-3xl font-bold text-amber-600">{ROLES.length}</p></div><div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center"><Lock className="text-amber-600" size={24} /></div></div></Card></button>
+        <button onClick={() => setActiveTab('empresas')} className="text-left"><Card className={`bg-gradient-to-br from-green-50 to-white dark:from-green-900/20 dark:to-slate-800 border-green-100 dark:border-green-900/30 cursor-pointer hover:shadow-md transition-shadow ${activeTab === 'empresas' ? 'ring-2 ring-green-500' : ''}`}><div className="flex items-center justify-between"><div><p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Empresas</p><p className="text-3xl font-bold text-green-600">{empresas.length}</p></div><div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center"><Building2 className="text-green-600" size={24} /></div></div></Card></button>
+        <button onClick={() => setActiveTab('ubicaciones')} className="text-left"><Card className={`bg-gradient-to-br from-purple-50 to-white dark:from-purple-900/20 dark:to-slate-800 border-purple-100 dark:border-purple-900/30 cursor-pointer hover:shadow-md transition-shadow ${activeTab === 'ubicaciones' ? 'ring-2 ring-purple-500' : ''}`}><div className="flex items-center justify-between"><div><p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Ubicaciones</p><p className="text-3xl font-bold text-purple-600">{ubicaciones.length}</p></div><div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center"><MapPin className="text-purple-600" size={24} /></div></div></Card></button>
       </div>
       <Card>
         <div className="border-b border-slate-200 dark:border-slate-700"><nav className="flex gap-1 px-2 overflow-x-auto">{TABS.map(tab => { const Icon = tab.icon; return (<button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-2 py-3.5 px-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${activeTab === tab.id ? 'border-primary-600 text-primary-600' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:border-slate-300'}`}><Icon size={18} />{tab.label}</button>) })}</nav></div>
         <div className="p-6">
           {activeTab === 'usuarios' && <TabUsuarios usuarios={usuarios} empresas={empresas} ubicaciones={ubicaciones} isLoading={loadingUsuarios} canWrite={canWriteAdmin} canDelete={canDeleteAdmin} />}
-          {activeTab === 'sedes' && <TabSedes empresas={empresas} ubicaciones={ubicaciones} isLoading={loadingEmpresas} canWrite={canWriteAdmin} canDelete={canDeleteAdmin} />}
-          {activeTab === 'ubicaciones' && <TabUbicaciones ubicaciones={ubicaciones} empresas={empresas} isLoading={loadingUbicaciones} canWrite={canWriteAdmin} canDelete={canDeleteAdmin} />}
           {activeTab === 'roles' && <TabRoles canWrite={canWriteAdmin} canDelete={canDeleteAdmin} />}
+          {activeTab === 'empresas' && <TabSedes empresas={empresas} ubicaciones={ubicaciones} isLoading={loadingEmpresas} canWrite={canWriteAdmin} canDelete={canDeleteAdmin} />}
+          {activeTab === 'ubicaciones' && <TabUbicaciones ubicaciones={ubicaciones} empresas={empresas} isLoading={loadingUbicaciones} canWrite={canWriteAdmin} canDelete={canDeleteAdmin} />}
+          {activeTab === 'herramientas' && <TabHerramientas canWrite={canWriteAdmin} />}
         </div>
       </Card>
     </div>

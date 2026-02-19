@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ClipboardCheck, Plus, Play, Download, CheckCircle, Clock, AlertCircle, Trash2, Printer, Search, Filter } from 'lucide-react'
+import { ClipboardCheck, Plus, Play, Download, CheckCircle, Clock, AlertCircle, Trash2, Printer, Search, Filter, Eye } from 'lucide-react'
 import Card from '../components/common/Card'
 import DataTable from '../components/common/DataTable'
 import Button from '../components/common/Button'
@@ -66,14 +66,19 @@ export default function Conteos() {
   // Función para obtener nombre del usuario
   const getUsuarioNombre = (usuarioId) => {
     if (!usuarioId) return '-'
-    const usuario = usuarios.find(u => u.id === usuarioId)
+    // First try to find by doc.id (Firestore ID)
+    let usuario = usuarios.find(u => u.id === usuarioId)
+    // If not found, try to find by codigo field
+    if (!usuario) {
+      usuario = usuarios.find(u => u.codigo === usuarioId)
+    }
     return usuario ? usuario.nombre : usuarioId
   }
 
   // Función para imprimir conteo
   const handleImprimir = (conteo) => {
     const detalles = conteos.find(c => c.id === conteo.id)
-    const usuario = usuarios.find(u => u.id === conteo.usuario_responsable_id)
+    const usuarioNombre = getUsuarioNombre(conteo.usuario_responsable_id)
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -216,7 +221,7 @@ export default function Conteos() {
             </div>
             <div class="info-item">
               <div class="info-label">Responsable</div>
-              <div class="info-value">${usuario ? usuario.nombre : conteo.usuario_responsable_id}</div>
+              <div class="info-value">${usuarioNombre}</div>
             </div>
           </div>
 
@@ -380,6 +385,7 @@ export default function Conteos() {
             variant="outline"
             onClick={() => handleVer(row)}
           >
+            <Eye size={14} className="mr-1" />
             Ver Detalle
           </Button>
           {/* SUPER-PRIVILEGIO: Solo Admin Global puede eliminar permanentemente */}
@@ -417,7 +423,15 @@ export default function Conteos() {
 
   const handleIniciar = (conteo) => {
     if (!window.confirm('¿Iniciar este conteo? El estado cambiará a "En Progreso".')) return
-    iniciarConteo({ conteoId: conteo.id, usuarioId: user?.id })
+    iniciarConteo(
+      { conteoId: conteo.id, usuarioId: user?.id },
+      {
+        onSuccess: () => {
+          setSelectedConteo(conteo)
+          setShowExecute(true)
+        }
+      }
+    )
   }
 
   const handleEjecutar = (conteo) => {
