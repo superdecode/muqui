@@ -20,7 +20,7 @@ export const useAlertasStore = create((set, get) => ({
 
   // NEW: Popup notifications state
   popupNotifications: [],
-  panelTab: 'no_leidas', // 'no_leidas' | 'todas'
+  panelTab: 'todas', // 'no_leidas' | 'todas'
   showPanel: false, // Control panel visibility
 
   // Set current user ID for read tracking
@@ -29,10 +29,12 @@ export const useAlertasStore = create((set, get) => ({
   // Set notifications from Firebase (real-time)
   setAlertas: (alertas) => {
     const { userId } = get()
-    // Filter out expired notifications
-    const activeAlertas = alertas.filter(a => !isExpired(a))
+    // Mostrar historial: NO filtrar por expiración aquí.
+    const activeAlertas = alertas
+    
+    // Calculate unread count but preserve existing leido_por state
     const noLeidas = activeAlertas.filter(a => {
-      if (!a.activa) return false
+      if (a.activa === false) return false
       const leidoPor = Array.isArray(a.leido_por) ? a.leido_por : []
       return !leidoPor.includes(userId)
     }).length
@@ -112,23 +114,23 @@ export const useAlertasStore = create((set, get) => ({
 
   getAlertasPorTipo: (tipo) => {
     const { alertas } = get()
-    return alertas.filter(a => a.tipo === tipo && a.activa && !isExpired(a))
+    return alertas.filter(a => a.tipo === tipo && a.activa)
   },
 
   getAlertasPorPrioridad: (prioridad) => {
     const { alertas } = get()
-    return alertas.filter(a => a.prioridad === prioridad && a.activa && !isExpired(a))
+    return alertas.filter(a => a.prioridad === prioridad && a.activa)
   },
 
   getAlertasActivas: () => {
     const { alertas } = get()
-    return alertas.filter(a => a.activa && !isExpired(a))
+    return alertas.filter(a => a.activa)
   },
 
   // NEW: Get alerts filtered by current panel tab
   getAlertasFiltradas: () => {
     const { alertas, panelTab, userId } = get()
-    const activas = alertas.filter(a => a.activa && !isExpired(a))
+    const activas = alertas.filter(a => a.activa)
     if (panelTab === 'no_leidas') {
       return activas.filter(a => !a.leido_por?.includes(userId))
     }

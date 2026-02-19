@@ -4,7 +4,7 @@
  */
 import {
   collection, doc, addDoc, updateDoc, getDocs, deleteDoc,
-  query, where, orderBy, onSnapshot, serverTimestamp, Timestamp, limit
+  query, where, onSnapshot, serverTimestamp, Timestamp
 } from 'firebase/firestore'
 import { getDB } from '../config/firebase.config'
 
@@ -31,32 +31,40 @@ const SOUNDS = {
 
 function initSounds() {
   try {
-    // Use Web Audio API for lightweight sounds
     const ctx = new (window.AudioContext || window.webkitAudioContext)()
 
-    SOUNDS.critical = () => {
+    function playNote(freq, startTime, duration, volume = 0.22) {
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
       osc.connect(gain)
       gain.connect(ctx.destination)
-      osc.frequency.value = 880
-      gain.gain.value = 0.3
-      osc.start()
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5)
-      osc.stop(ctx.currentTime + 0.5)
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0, startTime)
+      gain.gain.linearRampToValueAtTime(volume, startTime + 0.015)
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration)
+      osc.start(startTime)
+      osc.stop(startTime + duration + 0.05)
     }
 
+    // Critical: arpegio C mayor ascendente con resolución (~2.2s)
+    SOUNDS.critical = () => {
+      const t = ctx.currentTime
+      playNote(523.25, t,        0.5,  0.25) // C5
+      playNote(659.25, t + 0.30, 0.5,  0.25) // E5
+      playNote(783.99, t + 0.60, 0.5,  0.25) // G5
+      playNote(1046.5, t + 0.90, 0.5,  0.28) // C6
+      playNote(1318.5, t + 1.20, 0.5,  0.22) // E6
+      playNote(1046.5, t + 1.55, 0.75, 0.18) // C6 (resolución)
+    }
+
+    // Info: melodía ascendente con cierre suave (~2s)
     SOUNDS.info = () => {
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.frequency.value = 520
-      osc.type = 'sine'
-      gain.gain.value = 0.15
-      osc.start()
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
-      osc.stop(ctx.currentTime + 0.3)
+      const t = ctx.currentTime
+      playNote(523.25, t,        0.5,  0.18) // C5
+      playNote(659.25, t + 0.40, 0.5,  0.18) // E5
+      playNote(783.99, t + 0.80, 0.5,  0.18) // G5
+      playNote(659.25, t + 1.25, 0.75, 0.15) // E5 (resolución)
     }
   } catch (e) {
     console.warn('Web Audio API not available:', e)
@@ -101,46 +109,87 @@ export function sendBrowserNotification(title, body, options = {}) {
 // ========== FIRESTORE OPERATIONS ==========
 
 /**
- * Subscribe to real-time notifications for a user
+ * Subscribe to real-time notifications for a user.
+ *
+ * Uses a single array-contains query (no compound constraints) to:
+ * 1. Avoid requiring a Firestore composite index
+ * 2. Satisfy security rules that restrict reads to documents where the user
+ *    is in usuarios_destino (a compound fallback without array-contains
+ *    would be rejected by those rules)
+ *
+ * All other filtering (activa, sort, limit) is done client-side.
  */
-export function subscribeToNotifications(userId, callback) {
-  const db = getDB()
-  const q = query(
-    collection(db, 'notificaciones'),
-    where('usuarios_destino', 'array-contains', userId),
-    where('activa', '==', true),
-    orderBy('fecha_creacion', 'desc'),
-    limit(50)
-  )
+export function subscribeToNotifications(userIdOrIds, callback, onError) {
+  const ids = Array.isArray(userIdOrIds) ? userIdOrIds : [userIdOrIds]
+  const userIds = [...new Set(ids.filter(Boolean).map(v => String(v).trim()))]
+  if (userIds.length === 0) return () => {}
 
-  // Try with compound query, fallback to simple
-  try {
-    return onSnapshot(q, (snapshot) => {
-      const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-      callback(notifs)
-    }, (error) => {
-      // Fallback: simpler query without compound index
-      console.warn('Compound index not available for notifications, using fallback:', error.message)
-      const fallbackQ = query(
-        collection(db, 'notificaciones'),
-        where('activa', '==', true)
-      )
-      return onSnapshot(fallbackQ, (snapshot) => {
-        const all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-        const filtered = all
-          .filter(n => Array.isArray(n.usuarios_destino) && n.usuarios_destino.includes(userId))
-          .sort((a, b) => {
-            const fa = a.fecha_creacion?.seconds || 0
-            const fb = b.fecha_creacion?.seconds || 0
-            return fb - fa
-          })
-          .slice(0, 50)
-        callback(filtered)
-      })
+  const db = getDB()
+
+  // Soportar múltiples IDs (p.ej. codigo y firestoreId) para compatibilidad
+  // con notificaciones antiguas que pudieron haberse creado con otro identificador.
+  const perUserDocs = new Map() // userId -> array docs
+
+  const recomputeAndEmit = () => {
+    const union = []
+    perUserDocs.forEach(arr => {
+      if (Array.isArray(arr)) union.push(...arr)
     })
-  } catch (e) {
-    console.error('Error subscribing to notifications:', e)
-    return () => {}
+
+    const dedupById = new Map()
+    union.forEach(n => {
+      if (!n?.id) return
+      if (!dedupById.has(n.id)) dedupById.set(n.id, n)
+    })
+
+    const notifs = Array.from(dedupById.values())
+      .sort((a, b) => {
+        const fa = a.fecha_creacion?.seconds || 0
+        const fb = b.fecha_creacion?.seconds || 0
+        return fb - fa
+      })
+      .slice(0, 50)
+
+    callback(notifs)
+  }
+
+  const unsubs = []
+
+  userIds.forEach((userId) => {
+    const attach = (key, q) => {
+      const unsub = onSnapshot(q, (snapshot) => {
+        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        perUserDocs.set(key, docs)
+        recomputeAndEmit()
+      }, (error) => {
+        console.error('Error in notifications listener:', error.code, error.message)
+        if (typeof onError === 'function') onError(error)
+      })
+      unsubs.push(unsub)
+    }
+
+    // Nuevo esquema (array)
+    attach(
+      `${userId}:array`,
+      query(collection(db, 'notificaciones'), where('usuarios_destino', 'array-contains', userId))
+    )
+
+    // Esquemas legacy (campo simple)
+    attach(
+      `${userId}:usuarioId`,
+      query(collection(db, 'notificaciones'), where('usuarioId', '==', userId))
+    )
+
+    attach(
+      `${userId}:usuario_id`,
+      query(collection(db, 'notificaciones'), where('usuario_id', '==', userId))
+    )
+  })
+
+  return () => {
+    unsubs.forEach(fn => {
+      try { fn?.() } catch { /* ignore */ }
+    })
   }
 }
 
@@ -255,47 +304,76 @@ export function isNotificationExpired(notification) {
  */
 async function createOrUpdateNotification({ tipo, prioridad, titulo, mensaje, datos_adicionales, usuarios_destino, agrupada = false, productos_afectados = [], cantidad_items = 0 }) {
   const db = getDB()
+  
+  console.log(`🔔 createOrUpdateNotification [${tipo}]:`, { titulo, usuarios_destino, productos: productos_afectados.length })
 
-  // Deduplication: check for existing active notification of same type today
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const todayTimestamp = Timestamp.fromDate(today)
+  const usuariosDestinoNorm = Array.isArray(usuarios_destino)
+    ? [...new Set(usuarios_destino.map(v => String(v).trim()).filter(Boolean))]
+    : []
 
-  try {
-    const existing = await getDocs(query(
-      collection(db, 'notificaciones'),
-      where('tipo', '==', tipo),
-      where('activa', '==', true)
-    ))
+  if (usuariosDestinoNorm.length === 0) {
+    console.warn('⚠️ No hay usuarios destino para la notificación, abortando creación.')
+    return null
+  }
 
-    // Check if there's a matching notification from today
-    const match = existing.docs.find(d => {
-      const data = d.data()
-      const created = data.fecha_creacion?.toDate?.() || new Date(0)
-      return created >= today &&
-        JSON.stringify(data.datos_adicionales?.ubicacion_id) === JSON.stringify(datos_adicionales?.ubicacion_id)
-    })
+  // Deduplicación SOLO para tipos consolidables.
+  // Importante: transferencias NO deben deduplicarse, porque si se actualiza el mismo doc
+  // el cliente lo verá como "modified" y no disparará popup como nueva notificación.
+  const shouldDedup = tipo === NOTIFICATION_TYPES.STOCK_BAJO || tipo === NOTIFICATION_TYPES.CONTEO_RECORDATORIO
 
-    if (match) {
-      // Update existing notification
-      const existingData = match.data()
-      const mergedProducts = [...new Set([...(existingData.productos_afectados || []), ...productos_afectados])]
-      await updateDoc(doc(db, 'notificaciones', match.id), {
-        titulo,
-        mensaje,
-        datos_adicionales,
-        productos_afectados: mergedProducts,
-        cantidad_items: mergedProducts.length || cantidad_items,
-        agrupada: mergedProducts.length > 3,
-        usuarios_destino: [...new Set([...(existingData.usuarios_destino || []), ...usuarios_destino])],
-        leido_por: [], // Reset read status on update
-        updated_at: serverTimestamp()
+  if (shouldDedup) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    try {
+      const existing = await getDocs(query(
+        collection(db, 'notificaciones'),
+        where('tipo', '==', tipo),
+        where('activa', '==', true)
+      ))
+
+      // Check if there's a matching notification from today
+      const match = existing.docs.find(d => {
+        const data = d.data()
+        const created = data.fecha_creacion?.toDate?.() || new Date(0)
+
+        const isToday = created >= today
+        const sameUbicacion = String(data.datos_adicionales?.ubicacion_id || '') === String(datos_adicionales?.ubicacion_id || '')
+
+        return isToday && sameUbicacion
       })
-      return match.id
+
+      if (match) {
+        console.log('♻️ Deduplicando notificación existente:', match.id)
+        const existingData = match.data()
+        const mergedProducts = [...new Set([...(existingData.productos_afectados || []), ...productos_afectados])]
+        const newCount = mergedProducts.length || cantidad_items
+
+        let newTitulo = titulo
+        let newMensaje = mensaje
+
+        if (tipo === NOTIFICATION_TYPES.STOCK_BAJO && newCount > 1) {
+          newTitulo = `${newCount} productos con stock bajo`
+          newMensaje = `${newCount} productos están por debajo del stock mínimo en ${datos_adicionales?.ubicacion_nombre || 'ubicación'}`
+        }
+
+        await updateDoc(doc(db, 'notificaciones', match.id), {
+          titulo: newTitulo,
+          mensaje: newMensaje,
+          datos_adicionales,
+          productos_afectados: mergedProducts,
+          cantidad_items: newCount,
+          agrupada: newCount > 3,
+          usuarios_destino: [...new Set([...(existingData.usuarios_destino || []), ...usuariosDestinoNorm])],
+          leido_por: [],
+          updated_at: serverTimestamp()
+        })
+
+        return match.id
+      }
+    } catch (e) {
+      console.warn('Dedup query failed or skipped, creating new notification:', e.message)
     }
-  } catch (e) {
-    // If query fails (missing index), just create new
-    console.warn('Dedup query failed, creating new notification:', e.message)
   }
 
   // Create new notification with 24h expiration
@@ -309,7 +387,7 @@ async function createOrUpdateNotification({ tipo, prioridad, titulo, mensaje, da
     mensaje,
     datos_adicionales: datos_adicionales || {},
     fecha_creacion: serverTimestamp(),
-    usuarios_destino: usuarios_destino || [],
+    usuarios_destino: usuariosDestinoNorm,
     leido_por: [],
     abierta_por: [], // NEW: track who has opened (clicked) the notification
     activa: true,
@@ -320,8 +398,14 @@ async function createOrUpdateNotification({ tipo, prioridad, titulo, mensaje, da
     expiraEn: Timestamp.fromDate(expiraEn) // NEW: expires after 24h
   }
 
-  const ref = await addDoc(collection(db, 'notificaciones'), notifData)
-  return ref.id
+  try {
+    const ref = await addDoc(collection(db, 'notificaciones'), notifData)
+    console.log('✅ Notificación creada exitosamente en Firestore:', ref.id)
+    return ref.id
+  } catch (error) {
+    console.error('❌ Error fatal creando documento en Firestore:', error)
+    throw error
+  }
 }
 
 // ========== TRIGGER FUNCTIONS ==========
@@ -363,26 +447,31 @@ export async function triggerStockBajo({ producto, ubicacion, stockActual, stock
  * Trigger transferencia_recibida notification
  */
 export async function triggerTransferenciaRecibida({ transferencia, productos, origen, destino, usuarioCreador, usuariosDestino }) {
+  // Asegurar que todos los campos tengan valores definidos
+  const datosAdicionales = {
+    transferencia_id: transferencia?.id || '',
+    codigo: transferencia?.codigo_legible || '',
+    accionUrl: `/movimientos?id=${transferencia?.id || ''}` // Navigate to movimiento details
+  }
+  
+  // Solo agregar campos si tienen valores definidos
+  if (origen?.id) datosAdicionales.origen_id = origen.id
+  if (origen?.nombre) datosAdicionales.origen_nombre = origen.nombre
+  if (destino?.id) datosAdicionales.destino_id = destino.id
+  if (destino?.nombre) datosAdicionales.destino_nombre = destino.nombre
+  if (usuarioCreador?.nombre) datosAdicionales.usuario_creador = usuarioCreador.nombre
+  
   return createOrUpdateNotification({
     tipo: NOTIFICATION_TYPES.TRANSFERENCIA_RECIBIDA,
     prioridad: PRIORITY.ALTA,
-    titulo: `Transferencia recibida: ${transferencia.codigo_legible || transferencia.id?.slice(0, 8)}`,
-    mensaje: `Nueva transferencia de ${origen?.nombre || 'origen'} a ${destino?.nombre || 'destino'} por ${usuarioCreador?.nombre || 'usuario'}`,
-    datos_adicionales: {
-      transferencia_id: transferencia.id,
-      codigo: transferencia.codigo_legible,
-      origen_id: origen?.id,
-      origen_nombre: origen?.nombre,
-      destino_id: destino?.id,
-      destino_nombre: destino?.nombre,
-      usuario_creador: usuarioCreador?.nombre,
-      accionUrl: `/movimientos?id=${transferencia.id}` // Navigate to movimiento details
-    },
+    titulo: `Transferencia recibida: ${transferencia?.codigo_legible || transferencia?.id?.slice(0, 8) || 'N/A'}`,
+    mensaje: `Nueva transferencia de ${origen?.nombre || 'origen'} a ${destino?.nombre || 'destino'} por ${usuarioCreador?.nombre || 'Sistema'}`,
+    datos_adicionales: datosAdicionales,
     usuarios_destino: usuariosDestino || [],
     productos_afectados: (productos || []).map(p => ({
-      producto_id: p.producto_id,
-      nombre: p.nombre,
-      cantidad: p.cantidad
+      producto_id: p.producto_id || '',
+      nombre: p.nombre || 'Producto',
+      cantidad: p.cantidad || 0
     })),
     cantidad_items: (productos || []).length
   })
@@ -446,7 +535,6 @@ export async function cleanupOldNotifications() {
   const db = getDB()
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-  const cutoff = Timestamp.fromDate(thirtyDaysAgo)
 
   try {
     const q = query(
@@ -540,6 +628,154 @@ export async function getNotificationConfig(userId) {
   }
 }
 
+/**
+ * Verificar stock bajo y crear notificación si es necesario
+ * Se ejecuta después de actualizar inventario (venta, salida, recepción, merma, conteo)
+ */
+export async function verificarStockBajo(productoId, ubicacionId) {
+  const db = getDB()
+  
+  try {
+    console.log(`🔍 Verificando stock bajo: producto=${productoId}, ubicacion=${ubicacionId}`)
+    
+    // 1. Obtener inventario actual
+    const { getDocs: getDocsImport } = await import('firebase/firestore')
+    const inventarioQuery = query(
+      collection(db, 'inventario'),
+      where('producto_id', '==', productoId),
+      where('ubicacion_id', '==', ubicacionId)
+    )
+    const inventarioSnap = await getDocsImport(inventarioQuery)
+    
+    if (inventarioSnap.empty) {
+      console.log('⚠️ No hay inventario para este producto en esta ubicación')
+      return { success: false, message: 'No inventory found' }
+    }
+    
+    const inventario = { id: inventarioSnap.docs[0].id, ...inventarioSnap.docs[0].data() }
+    const cantidadActual = inventario.stock_actual || 0
+    
+    // 2. Obtener producto y stock mínimo global
+    const { getDoc: getDocImport } = await import('firebase/firestore')
+    const productoSnap = await getDocImport(doc(db, 'productos', productoId))
+    
+    if (!productoSnap.exists()) {
+      console.log('⚠️ Producto no encontrado')
+      return { success: false, message: 'Product not found' }
+    }
+    
+    const producto = { id: productoSnap.id, ...productoSnap.data() }
+    const stockMinimo = producto.stock_minimo || 0
+    
+    // 3. Comparar stock actual vs mínimo
+    if (cantidadActual > stockMinimo) {
+      console.log(`✅ Stock OK: ${cantidadActual} > ${stockMinimo}`)
+      return { success: true, message: 'Stock above minimum' }
+    }
+    
+    console.log(`⚠️ Stock bajo detectado: ${cantidadActual} <= ${stockMinimo}`)
+    
+    // 4. Verificar si ya existe notificación activa
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    const hoySiguiente = new Date(hoy)
+    hoySiguiente.setDate(hoySiguiente.getDate() + 1)
+    
+    const notifExistenteQuery = query(
+      collection(db, 'notificaciones'),
+      where('tipo', '==', NOTIFICATION_TYPES.STOCK_BAJO),
+      where('activa', '==', true),
+      where('expiraEn', '>', Timestamp.now())
+    )
+    const notifExistenteSnap = await getDocsImport(notifExistenteQuery)
+    
+    // Verificar si alguna notificación existente es para este producto y ubicación
+    const yaExiste = notifExistenteSnap.docs.some(docSnap => {
+      const data = docSnap.data()
+      const productos = data.productos_afectados || []
+      const ubicacionMatch = data.datos_adicionales?.ubicacion_id === ubicacionId
+      const productoMatch = productos.some(p => p.producto_id === productoId)
+      return ubicacionMatch && productoMatch
+    })
+    
+    if (yaExiste) {
+      console.log('ℹ️ Ya existe notificación activa para este producto y ubicación')
+      return { success: true, message: 'Notification already exists' }
+    }
+    
+    // 5. Obtener ubicación
+    const ubicacionSnap = await getDocImport(doc(db, 'ubicaciones', ubicacionId))
+    const ubicacion = ubicacionSnap.exists() 
+      ? { id: ubicacionSnap.id, ...ubicacionSnap.data() }
+      : { id: ubicacionId, nombre: 'Ubicación' }
+    
+    // 6. Obtener usuarios con acceso a esta ubicación
+    const usuariosQuery = query(
+      collection(db, 'usuarios'),
+      where('estado', '==', 'ACTIVO')
+    )
+    const usuariosSnap = await getDocsImport(usuariosQuery)
+    
+    const usuariosDestino = []
+    usuariosSnap.forEach(docSnap => {
+      const usuario = docSnap.data()
+      let ubicacionesAsignadas = []
+      
+      if (Array.isArray(usuario.ubicaciones_asignadas)) {
+        ubicacionesAsignadas = usuario.ubicaciones_asignadas
+      } else if (typeof usuario.ubicaciones_asignadas === 'string') {
+        try {
+          ubicacionesAsignadas = JSON.parse(usuario.ubicaciones_asignadas)
+        } catch {
+          ubicacionesAsignadas = []
+        }
+      }
+      
+      // Incluir si tiene acceso a esta ubicación o es admin global
+      const tieneAcceso = ubicacionesAsignadas.includes(ubicacionId)
+      const rolNorm = String(usuario.rol || '').toUpperCase()
+      const esAdmin = rolNorm === 'ADMIN_GLOBAL' || 
+                      rolNorm === 'ADMIN GLOBAL' || 
+                      rolNorm === 'ADMINISTRADOR'
+      
+      if (tieneAcceso || esAdmin) {
+        usuariosDestino.push(docSnap.id)
+      }
+    })
+    
+    const destinatariosUnicos = [...new Set(usuariosDestino)]
+    
+    if (destinatariosUnicos.length === 0) {
+      console.log('⚠️ No hay usuarios para notificar')
+      return { success: false, message: 'No users to notify' }
+    }
+    
+    // 7. Crear notificación
+    console.log(`🔔 Creando notificación de stock bajo para ${destinatariosUnicos.length} usuarios`)
+    
+    await triggerStockBajo({
+      producto: [{
+        id: producto.id,
+        producto_id: producto.id,
+        nombre: producto.nombre,
+        stock_actual: cantidadActual,
+        stock_minimo: stockMinimo
+      }],
+      ubicacion,
+      stockActual: cantidadActual,
+      stockMinimo: stockMinimo,
+      usuariosDestino: destinatariosUnicos
+    })
+    
+    console.log('✅ Notificación de stock bajo creada exitosamente')
+    return { success: true, message: 'Notification created' }
+    
+  } catch (error) {
+    console.error('❌ Error verificando stock bajo:', error)
+    return { success: false, message: error.message }
+  }
+}
+
 export default {
   NOTIFICATION_TYPES,
   PRIORITY,
@@ -559,5 +795,6 @@ export default {
   playNotificationSound,
   sendBrowserNotification,
   saveNotificationConfig,
-  getNotificationConfig
+  getNotificationConfig,
+  verificarStockBajo
 }

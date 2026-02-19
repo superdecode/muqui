@@ -14,33 +14,63 @@ export const useAlertas = (usuarioId) => {
     alertas, alertasNoLeidas, loading, error,
     setAlertas, setUserId, setUnsubscribe, setLoading,
     marcarComoLeida, marcarComoResuelta,
-    setPopupNotifications
+    setPopupNotifications,
+    setError
   } = useAlertasStore()
-  const initialLoadDoneRef = useRef(false) // Flag to skip popups on initial load
   const seenIdsRef = useRef(new Set()) // Track which notification IDs we've already shown as popups
+  const subscribeTimeRef = useRef(null) // Timestamp when subscription started
+  const initialLoadDoneRef = useRef(false)
+
+  const RECENT_WINDOW_MS = 2 * 60 * 1000 // 2 minutos
+
+  const subscriptionKey = (() => {
+    const ids = Array.isArray(usuarioId) ? usuarioId : [usuarioId]
+    return [...new Set(ids.filter(Boolean).map(v => String(v).trim()))].sort().join('|')
+  })()
 
   // Set user ID and subscribe to real-time notifications
   useEffect(() => {
-    if (!usuarioId) return
+    const ids = Array.isArray(usuarioId) ? usuarioId : [usuarioId]
+    const userIds = [...new Set(ids.filter(Boolean).map(v => String(v).trim()))]
+    if (userIds.length === 0) return
 
-    setUserId(usuarioId)
+    const primaryUserId = userIds[0]
+
+    setUserId(primaryUserId)
     setLoading(true)
-    initialLoadDoneRef.current = false
+    setError(null)
     seenIdsRef.current.clear()
+    initialLoadDoneRef.current = false
+    // Record time BEFORE subscribing — notifications created after this are "new"
+    subscribeTimeRef.current = Date.now()
 
-    const unsub = subscribeToNotifications(usuarioId, (notifs) => {
+    const unsub = subscribeToNotifications(userIds, (notifs) => {
       // Filter active unread notifications
       const activeUnread = notifs.filter(n => {
-        if (!n.activa) return false
+        if (n.activa === false) return false
         const leidoPor = Array.isArray(n.leido_por) ? n.leido_por : []
-        return !leidoPor.includes(usuarioId)
+        return !leidoPor.includes(primaryUserId)
       })
 
-      // Detect truly NEW notifications (not seen before in this session)
-      const newNotifications = activeUnread.filter(n => !seenIdsRef.current.has(n.id))
+      const now = Date.now()
+      const isRecent = (n) => {
+        let createdMs = null
+        if (n.fecha_creacion?.toDate) createdMs = n.fecha_creacion.toDate().getTime()
+        else if (n.fecha_creacion?.seconds) createdMs = n.fecha_creacion.seconds * 1000
+        if (createdMs === null) return true // sin timestamp: tratar como reciente
+        return (now - createdMs) <= RECENT_WINDOW_MS
+      }
 
-      // Show popup for new notifications (only AFTER initial load is complete)
-      if (newNotifications.length > 0 && initialLoadDoneRef.current) {
+      // Detect NEW notifications: not seen before, and either:
+      // - initial snapshot already done, OR
+      // - it's recent (covers late first snapshot)
+      const newNotifications = activeUnread.filter(n => {
+        if (seenIdsRef.current.has(n.id)) return false
+        if (initialLoadDoneRef.current) return true
+        return isRecent(n)
+      })
+
+      if (newNotifications.length > 0) {
         console.log('🔔 New notifications detected:', newNotifications.length)
         setPopupNotifications(newNotifications)
 
@@ -61,17 +91,19 @@ export const useAlertas = (usuarioId) => {
         }
       }
 
-      // Mark all current notification IDs as seen
+      // Mark all current notification IDs as seen (prevents duplicate popups)
       activeUnread.forEach(n => seenIdsRef.current.add(n.id))
 
-      // Mark initial load as complete after first callback
       if (!initialLoadDoneRef.current) {
         initialLoadDoneRef.current = true
-        console.log('🔔 Initial notification load complete, seen IDs:', seenIdsRef.current.size)
       }
 
       setAlertas(notifs)
       setLoading(false)
+    }, (err) => {
+      // Propagar error (p. ej. permission-denied) para diagnóstico
+      setLoading(false)
+      setError(err)
     })
 
     setUnsubscribe(() => unsub)
@@ -79,12 +111,14 @@ export const useAlertas = (usuarioId) => {
     return () => {
       if (typeof unsub === 'function') unsub()
     }
-  }, [usuarioId])
+  }, [subscriptionKey])
 
   // Mark as read in Firebase + local store
   const marcarLeida = async (alertaId) => {
     marcarComoLeida(alertaId)
-    await markAsRead(alertaId, usuarioId)
+    const ids = Array.isArray(usuarioId) ? usuarioId : [usuarioId]
+    const primaryUserId = ids.filter(Boolean).map(String)[0]
+    await markAsRead(alertaId, primaryUserId)
   }
 
   // Mark as resolved in Firebase + local store
@@ -97,7 +131,9 @@ export const useAlertas = (usuarioId) => {
   const marcarTodasLeidas = async () => {
     const activas = alertas.filter(a => a.activa)
     activas.forEach(a => marcarComoLeida(a.id))
-    await markAllAsReadFB(usuarioId)
+    const ids = Array.isArray(usuarioId) ? usuarioId : [usuarioId]
+    const primaryUserId = ids.filter(Boolean).map(String)[0]
+    await markAllAsReadFB(primaryUserId)
   }
 
   return {

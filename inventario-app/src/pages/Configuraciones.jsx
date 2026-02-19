@@ -262,76 +262,78 @@ export default function Configuraciones() {
       {activeTab === 'general' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Notificaciones */}
-          <Card>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
-              <Bell size={20} className="text-primary-600" />Notificaciones
-            </h2>
-            <div className="space-y-3">
-              {[
-                { key: 'emailNotifications', label: 'Notificaciones por Email', desc: 'Recibe actualizaciones por correo' },
-                { key: 'inventoryAlerts', label: 'Alertas de Inventario', desc: 'Cambios en inventario' },
-                { key: 'lowStockAlerts', label: 'Stock Bajo', desc: 'Avisos de stock mínimo' },
-                { key: 'movementNotifications', label: 'Movimientos', desc: 'Transferencias y movimientos' }
-              ].map(item => (
-                <div key={item.key} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl">
-                  <div><p className="font-medium text-slate-900 dark:text-slate-100 text-sm">{item.label}</p><p className="text-xs text-slate-500 dark:text-slate-400">{item.desc}</p></div>
-                  <Toggle checked={notificationSettings[item.key]} onChange={v => setNotificationSettings({ ...notificationSettings, [item.key]: v })} />
-                </div>
-              ))}
-              {/* Recordatorio de Conteo */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <div><p className="font-medium text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5"><Clock size={14} className="text-purple-600" />Recordatorio de Conteo</p><p className="text-xs text-slate-500 dark:text-slate-400">Alerta diaria consolidada de productos por contar</p></div>
-                  <Toggle checked={notificationSettings.conteoReminder} onChange={v => setNotificationSettings({ ...notificationSettings, conteoReminder: v })} />
-                </div>
-                {notificationSettings.conteoReminder && (
-                  <div className="flex items-center gap-2 pl-5">
-                    <label className="text-xs text-slate-600">Hora del recordatorio:</label>
-                    <input type="time" value={notificationSettings.conteoReminderTime} onChange={e => setNotificationSettings({ ...notificationSettings, conteoReminderTime: e.target.value })} className="px-2 py-1 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-sm" />
+          <div className="space-y-6">
+            <Card>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+                <Bell size={20} className="text-primary-600" />Notificaciones
+              </h2>
+              <div className="space-y-3">
+                {[
+                  { key: 'emailNotifications', label: 'Notificaciones por Email', desc: 'Recibe actualizaciones por correo' },
+                  { key: 'inventoryAlerts', label: 'Alertas de Inventario', desc: 'Cambios en inventario' },
+                  { key: 'lowStockAlerts', label: 'Stock Bajo', desc: 'Avisos de stock mínimo' },
+                  { key: 'movementNotifications', label: 'Movimientos', desc: 'Transferencias y movimientos' }
+                ].map(item => (
+                  <div key={item.key} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl">
+                    <div><p className="font-medium text-slate-900 dark:text-slate-100 text-sm">{item.label}</p><p className="text-xs text-slate-500 dark:text-slate-400">{item.desc}</p></div>
+                    <Toggle checked={notificationSettings[item.key]} onChange={v => setNotificationSettings({ ...notificationSettings, [item.key]: v })} />
                   </div>
-                )}
-              </div>
-              {/* Sonido */}
-              <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl">
-                <div><p className="font-medium text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5"><Volume2 size={14} className="text-amber-600" />Sonido en alertas críticas</p><p className="text-xs text-slate-500 dark:text-slate-400">Reproducir sonido en stock bajo y transferencias</p></div>
-                <Toggle checked={notificationSettings.soundEnabled} onChange={v => setNotificationSettings({ ...notificationSettings, soundEnabled: v })} />
-              </div>
-              {/* Notificaciones del navegador */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <div><p className="font-medium text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5"><BellRing size={14} className="text-blue-600" />Notificaciones del Navegador</p><p className="text-xs text-slate-500 dark:text-slate-400">Recibe alertas aunque la pestaña no esté activa</p></div>
-                  {browserPermission === 'granted' ? (
-                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-semibold">Activadas</span>
-                  ) : browserPermission === 'denied' ? (
-                    <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full font-semibold">Bloqueadas</span>
-                  ) : (
-                    <Button size="sm" variant="outline" onClick={async () => {
-                      if (typeof Notification === 'undefined') { toast.error('No soportado', 'Tu navegador no soporta notificaciones'); return }
-                      const perm = await Notification.requestPermission()
-                      setBrowserPermission(perm)
-                      if (perm === 'granted') { toast.success('Activadas', 'Notificaciones del navegador activadas'); setNotificationSettings(prev => ({ ...prev, browserNotifications: true })) }
-                      else { toast.error('Denegadas', 'Permiso de notificaciones denegado') }
-                    }}>Activar</Button>
+                ))}
+                {/* Recordatorio de Conteo */}
+                <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div><p className="font-medium text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5"><Clock size={14} className="text-purple-600" />Recordatorio de Conteo</p><p className="text-xs text-slate-500 dark:text-slate-400">Alerta diaria consolidada de productos por contar</p></div>
+                    <Toggle checked={notificationSettings.conteoReminder} onChange={v => setNotificationSettings({ ...notificationSettings, conteoReminder: v })} />
+                  </div>
+                  {notificationSettings.conteoReminder && (
+                    <div className="flex items-center gap-2 pl-5">
+                      <label className="text-xs text-slate-600">Hora del recordatorio:</label>
+                      <input type="time" value={notificationSettings.conteoReminderTime} onChange={e => setNotificationSettings({ ...notificationSettings, conteoReminderTime: e.target.value })} className="px-2 py-1 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-sm" />
+                    </div>
                   )}
                 </div>
-                {browserPermission === 'denied' && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
-                    <p className="text-xs text-amber-800">Las notificaciones están bloqueadas. Para habilitarlas, haz clic en el ícono de candado en la barra de direcciones del navegador → Permisos → Notificaciones → Permitir.</p>
+                {/* Sonido */}
+                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl">
+                  <div><p className="font-medium text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5"><Volume2 size={14} className="text-amber-600" />Sonido en alertas críticas</p><p className="text-xs text-slate-500 dark:text-slate-400">Reproducir sonido en stock bajo y transferencias</p></div>
+                  <Toggle checked={notificationSettings.soundEnabled} onChange={v => setNotificationSettings({ ...notificationSettings, soundEnabled: v })} />
+                </div>
+                {/* Notificaciones del navegador */}
+                <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div><p className="font-medium text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5"><BellRing size={14} className="text-blue-600" />Notificaciones del Navegador</p><p className="text-xs text-slate-500 dark:text-slate-400">Recibe alertas aunque la pestaña no esté activa</p></div>
+                    {browserPermission === 'granted' ? (
+                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-semibold">Activadas</span>
+                    ) : browserPermission === 'denied' ? (
+                      <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full font-semibold">Bloqueadas</span>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={async () => {
+                        if (typeof Notification === 'undefined') { toast.error('No soportado', 'Tu navegador no soporta notificaciones'); return }
+                        const perm = await Notification.requestPermission()
+                        setBrowserPermission(perm)
+                        if (perm === 'granted') { toast.success('Activadas', 'Notificaciones del navegador activadas'); setNotificationSettings(prev => ({ ...prev, browserNotifications: true })) }
+                        else { toast.error('Denegadas', 'Permiso de notificaciones denegado') }
+                      }}>Activar</Button>
+                    )}
                   </div>
-                )}
+                  {browserPermission === 'denied' && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
+                      <p className="text-xs text-amber-800">Las notificaciones están bloqueadas. Para habilitarlas, haz clic en el ícono de candado en la barra de direcciones del navegador → Permisos → Notificaciones → Permitir.</p>
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-end pt-2">
+                  <Button size="sm" loading={savingNotifs} onClick={async () => {
+                    if (!user?.id) return
+                    setSavingNotifs(true)
+                    const result = await saveNotificationConfig(user.id, notificationSettings)
+                    setSavingNotifs(false)
+                    if (result.success) toast.success('Guardado', 'Preferencias de notificación actualizadas')
+                    else toast.error('Error', 'No se pudieron guardar las preferencias')
+                  }}>Guardar</Button>
+                </div>
               </div>
-              <div className="flex justify-end pt-2">
-                <Button size="sm" loading={savingNotifs} onClick={async () => {
-                  if (!user?.id) return
-                  setSavingNotifs(true)
-                  const result = await saveNotificationConfig(user.id, notificationSettings)
-                  setSavingNotifs(false)
-                  if (result.success) toast.success('Guardado', 'Preferencias de notificación actualizadas')
-                  else toast.error('Error', 'No se pudieron guardar las preferencias')
-                }}>Guardar</Button>
-              </div>
-            </div>
-          </Card>
+            </Card>
+          </div>
 
           {/* Preferencias */}
           <div className="space-y-6">

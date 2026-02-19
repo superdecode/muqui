@@ -3,8 +3,11 @@ import { useQuery } from '@tanstack/react-query'
 import Card from '../components/common/Card'
 import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import { Download, FileBarChart, TrendingUp, Package, AlertCircle, ArrowUp, ArrowDown, Printer, ChevronLeft, Filter, Lock } from 'lucide-react'
+import { Download, FileBarChart, TrendingUp, Package, AlertCircle, ArrowUp, ArrowDown, Printer, ChevronLeft, Filter, Lock, ChevronDown, ChevronUp, BarChart3, PieChart } from 'lucide-react'
 import { exportToCSV } from '../utils/exportUtils'
+import { exportConsolidatedToExcel } from '../utils/excelExport'
+import MultiSelectUbicaciones from '../components/reportes/MultiSelectUbicaciones'
+import TablaConsolidada from '../components/reportes/TablaConsolidada'
 import { useToastStore } from '../stores/toastStore'
 import { safeFormatDate, safeParseDate } from '../utils/formatters'
 import { useAuthStore } from '../stores/authStore'
@@ -37,6 +40,14 @@ const COLOR_CLASSES = {
   orange: 'bg-orange-100 text-orange-600 border-orange-200'
 }
 
+// Badge component for método values
+function MetodoBadgeInline({ value }) {
+  if (!value) return <span className="text-slate-400">—</span>
+  if (value === 'Conteo Reciente') return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">Conteo Reciente</span>
+  if (value === 'Calculado') return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">Calculado</span>
+  return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">Sin Conteo</span>
+}
+
 // Badge component for estado values
 function EstadoBadge({ value }) {
   if (!value) return <span className="text-slate-400">-</span>
@@ -60,6 +71,9 @@ export default function Reportes() {
   const [showResults, setShowResults] = useState(false)
   const [dateRange, setDateRange] = useState(getDefaultDates())
   const [filterUbicacion, setFilterUbicacion] = useState('')
+  const [filterUbicaciones, setFilterUbicaciones] = useState([])
+  const [filterProducto, setFilterProducto] = useState('')
+  const [vistaConsolidada, setVistaConsolidada] = useState(true)
 
   // Cargar datos
   const { data: inventario = [], isLoading: isLoadingInventario } = useQuery({ queryKey: ['inventario'], queryFn: () => dataService.getInventario() })
@@ -79,23 +93,189 @@ export default function Reportes() {
     return ubicaciones
   })()
 
+  const calcularStockActual = (productoId, ubicacionId) => {
+    const estadosValidos = ['COMPLETADO', 'PARCIALMENTE_COMPLETADO']
+    const estadosMovValidos = ['COMPLETADO', 'PARCIAL', 'EN_PROCESO']
+
+    const conteosUbicacion = conteos.filter(c =>
+      c.ubicacion_id === ubicacionId && estadosValidos.includes(c.estado?.toUpperCase())
+    )
+
+    // Para cada conteo, buscar el detalle del producto
+    const conteosConProducto = conteosUbicacion
+      .map(c => {
+        const det = detalleConteos.find(d => d.conteo_id === c.id && d.producto_id === productoId)
+        if (!det) return null
+        const fecha = safeParseDate(c.fecha_completado || c.fecha_programada)
+        return { conteo: c, detalle: det, fecha }
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.fecha || 0) - (a.fecha || 0)) // más reciente primero
+
+    if (conteosConProducto.length === 0) {
+      const invItem = inventario.find(i => i.producto_id === productoId && i.ubicacion_id === ubicacionId)
+      return {
+        stock_actual: invItem?.stock_actual ?? 0,
+        fecha_ultimo_conteo: null,
+        dias_desde_conteo: null,
+        metodo: 'sin_conteo',
+        stock_base: invItem?.stock_actual ?? 0,
+        entradas_posteriores: 0,
+        salidas_posteriores: 0
+      }
+    }
+
+    const ultimo = conteosConProducto[0]
+    const fechaConteo = ultimo.fecha
+    const stockBase = ultimo.detalle.cantidad_fisica ?? ultimo.detalle.cantidad_sistema ?? 0
+    const ahora = new Date()
+    const msDesdeConteo = fechaConteo ? ahora - fechaConteo : null
+    const diasDesdeConteo = msDesdeConteo !== null ? Math.floor(msDesdeConteo / (1000 * 60 * 60 * 24)) : null
+
+    // Regla 1: conteo reciente (< 24 h)
+    if (msDesdeConteo !== null && msDesdeConteo < 24 * 60 * 60 * 1000) {
+      return {
+        stock_actual: stockBase,
+        fecha_ultimo_conteo: fechaConteo,
+        dias_desde_conteo: diasDesdeConteo,
+        metodo: 'conteo_reciente',
+        stock_base: stockBase,
+        entradas_posteriores: 0,
+        salidas_posteriores: 0
+      }
+    }
+
+    // Regla 2: conteo antiguo → calcular movimientos posteriores
+    let entradas = 0
+    let salidas = 0
+
+    if (fechaConteo) {
+      movimientos.forEach(mov => {
+        const estadoMov = (mov.estado || '').toUpperCase()
+        if (!estadosMovValidos.includes(estadoMov)) return
+        const fechaMov = safeParseDate(mov.fecha_confirmacion || mov.fecha_creacion)
+        if (!fechaMov || fechaMov <= fechaConteo) return
+
+        const dets = detalleMovimientos.filter(d => d.movimiento_id === mov.id && d.producto_id === productoId)
+        dets.forEach(det => {
+          if (mov.destino_id === ubicacionId) entradas += det.cantidad_recibida ?? det.cantidad ?? 0
+          if (mov.origen_id === ubicacionId) salidas += det.cantidad_enviada ?? det.cantidad ?? 0
+        })
+      })
+    }
+
+    return {
+      stock_actual: stockBase + entradas - salidas,
+      fecha_ultimo_conteo: fechaConteo,
+      dias_desde_conteo: diasDesdeConteo,
+      metodo: 'calculado',
+      stock_base: stockBase,
+      entradas_posteriores: entradas,
+      salidas_posteriores: salidas
+    }
+  }
+
+  const METODO_PRIORITY = { conteo_reciente: 3, calculado: 2, sin_conteo: 1 }
+
+  const getConsolidatedData = () => {
+    if (filterUbicaciones.length === 0) return []
+
+    const consolidated = {}
+
+    filterUbicaciones.forEach(ubicacionId => {
+      const invUbicacion = inventario.filter(i => i.ubicacion_id === ubicacionId)
+
+      invUbicacion.forEach(item => {
+        const calc = calcularStockActual(item.producto_id, ubicacionId)
+
+        if (!consolidated[item.producto_id]) {
+          const producto = productos.find(p => p.id === item.producto_id)
+          consolidated[item.producto_id] = {
+            producto_id: item.producto_id,
+            nombre: producto?.nombre || item.producto_id,
+            stock_minimo: producto?.stock_minimo || 0,
+            total_unidades: 0,
+            por_ubicacion: [],
+            fecha_ultimo_conteo: null,
+            dias_desde_conteo: null,
+            metodo: 'sin_conteo'
+          }
+        }
+
+        consolidated[item.producto_id].total_unidades += calc.stock_actual
+        consolidated[item.producto_id].por_ubicacion.push({
+          ubicacion_id: ubicacionId,
+          cantidad: calc.stock_actual,
+          fecha_ultimo_conteo: calc.fecha_ultimo_conteo,
+          dias_desde_conteo: calc.dias_desde_conteo,
+          metodo: calc.metodo
+        })
+
+        // Conservar la fecha de conteo más reciente entre todas las ubicaciones
+        if (
+          calc.fecha_ultimo_conteo &&
+          (!consolidated[item.producto_id].fecha_ultimo_conteo ||
+            calc.fecha_ultimo_conteo > consolidated[item.producto_id].fecha_ultimo_conteo)
+        ) {
+          consolidated[item.producto_id].fecha_ultimo_conteo = calc.fecha_ultimo_conteo
+          consolidated[item.producto_id].dias_desde_conteo = calc.dias_desde_conteo
+        }
+
+        // Método con mayor prioridad entre ubicaciones
+        if (METODO_PRIORITY[calc.metodo] > METODO_PRIORITY[consolidated[item.producto_id].metodo]) {
+          consolidated[item.producto_id].metodo = calc.metodo
+        }
+      })
+    })
+
+    let result = Object.values(consolidated)
+
+    if (filterProducto.trim()) {
+      const q = filterProducto.trim().toLowerCase()
+      result = result.filter(item => item.nombre.toLowerCase().includes(q))
+    }
+
+    return result
+  }
+
   const getReportData = (reportType) => {
     const ubFilter = filterUbicacion || null
     switch (reportType) {
       case 'stock': {
         let data = inventario
         if (ubFilter) data = data.filter(i => i.ubicacion_id === ubFilter)
-        return data.map(item => {
+        else if (filterUbicaciones.length > 0) data = data.filter(i => filterUbicaciones.includes(i.ubicacion_id))
+
+        const METODO_LABEL = { conteo_reciente: 'Conteo Reciente', calculado: 'Calculado', sin_conteo: 'Sin Conteo' }
+
+        let result = data.map(item => {
           const producto = productos.find(p => p.id === item.producto_id)
           const ubicacion = ubicaciones.find(u => u.id === item.ubicacion_id)
+          const calc = calcularStockActual(item.producto_id, item.ubicacion_id)
+          const stockMin = producto?.stock_minimo || 0
           return {
             Producto: producto?.nombre || item.producto_id,
             Ubicación: ubicacion?.nombre || item.ubicacion_id,
-            Stock: item.stock_actual,
-            'Stock Mínimo': producto?.stock_minimo || 0,
-            Estado: item.stock_actual <= (producto?.stock_minimo || 0) ? 'Bajo' : 'Normal'
+            Cantidad: calc.stock_actual,
+            'Stock Mínimo': stockMin,
+            'Fecha Último Conteo': calc.fecha_ultimo_conteo ? format(calc.fecha_ultimo_conteo, 'dd/MM/yyyy') : 'Sin conteo',
+            'Días desde Conteo': calc.dias_desde_conteo ?? '—',
+            Método: METODO_LABEL[calc.metodo] || calc.metodo,
+            Estado: calc.stock_actual <= stockMin ? 'Bajo' : 'Normal'
           }
         })
+
+        if (filterProducto.trim()) {
+          const q = filterProducto.trim().toLowerCase()
+          result = result.filter(r => r.Producto.toLowerCase().includes(q))
+        }
+
+        result.sort((a, b) => {
+          const cmp = a.Producto.localeCompare(b.Producto)
+          return cmp !== 0 ? cmp : a.Ubicación.localeCompare(b.Ubicación)
+        })
+
+        return result
       }
       case 'transferencias': {
         let data = movimientos
@@ -246,6 +426,20 @@ export default function Reportes() {
 
   const handleExport = (reportType) => {
     try {
+      // Si es reporte de stock con múltiples ubicaciones, exportar a Excel consolidado
+      if (selectedReport === 'stock' && filterUbicaciones.length >= 1) {
+        const consolidatedData = getConsolidatedData()
+        if (consolidatedData.length === 0) { 
+          toast.error('Sin Datos', 'No hay datos para exportar')
+          return 
+        }
+        const ubicacionesSeleccionadas = ubicaciones.filter(u => filterUbicaciones.includes(u.id))
+        exportConsolidatedToExcel(consolidatedData, ubicacionesSeleccionadas, productos)
+        toast.success('Exportado', 'Reporte consolidado exportado a Excel')
+        return
+      }
+      
+      // Exportación normal a CSV
       const data = getReportData(reportType || selectedReport)
       if (data.length === 0) { toast.error('Sin Datos', 'No hay datos para exportar'); return }
       exportToCSV(data, `reporte_${reportType || selectedReport}_${new Date().toISOString().split('T')[0]}`)
@@ -316,6 +510,25 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
   const currentReport = REPORTS.find(r => r.id === selectedReport)
   const reportData = selectedReport && showResults ? getReportData(selectedReport) : []
   const reportHeaders = reportData.length > 0 ? Object.keys(reportData[0]) : []
+  const consolidatedData = selectedReport === 'stock' && filterUbicaciones.length >= 1 && showResults ? getConsolidatedData() : []
+  const isMultiLocation = selectedReport === 'stock' && filterUbicaciones.length >= 1
+  
+  const getConsolidatedKPIs = () => {
+    if (consolidatedData.length === 0) return { total: 0, totalUnidades: 0, stockBajo: 0 }
+    
+    const totalUnidades = consolidatedData.reduce((sum, item) => sum + item.total_unidades, 0)
+    const stockBajo = consolidatedData.filter(item => {
+      return item.por_ubicacion.some(ub => ub.cantidad <= item.stock_minimo)
+    }).length
+    
+    return {
+      total: consolidatedData.length,
+      totalUnidades,
+      stockBajo
+    }
+  }
+  
+  const consolidatedKPIs = getConsolidatedKPIs()
 
   if (isLoading) return <div className="flex items-center justify-center h-96"><LoadingSpinner size="lg" /></div>
 
@@ -340,7 +553,7 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
             <Filter size={18} className="text-primary-600" />
             <h3 className="font-semibold text-slate-900 dark:text-slate-100">Filtros del Reporte</h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className={`grid grid-cols-1 gap-4 ${selectedReport === 'stock' ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Fecha Inicio</label>
               <input type="date" value={dateRange.fechaInicio} onChange={e => setDateRange({ ...dateRange, fechaInicio: e.target.value })}
@@ -352,16 +565,38 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
                 className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Ubicación</label>
-              <select value={filterUbicacion} onChange={e => setFilterUbicacion(e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm">
-                <option value="">Todas las ubicaciones</option>
-                {userUbicaciones.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-              </select>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                {selectedReport === 'stock' ? 'Ubicaciones (Multi-selección)' : 'Ubicación'}
+              </label>
+              {selectedReport === 'stock' ? (
+                <MultiSelectUbicaciones
+                  ubicaciones={userUbicaciones}
+                  selected={filterUbicaciones}
+                  onChange={setFilterUbicaciones}
+                />
+              ) : (
+                <select value={filterUbicacion} onChange={e => setFilterUbicacion(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm">
+                  <option value="">Todas las ubicaciones</option>
+                  {userUbicaciones.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                </select>
+              )}
             </div>
+            {selectedReport === 'stock' && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Producto</label>
+                <input
+                  type="text"
+                  value={filterProducto}
+                  onChange={e => { setFilterProducto(e.target.value); setShowResults(false) }}
+                  placeholder="Buscar producto..."
+                  className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                />
+              </div>
+            )}
             <div className="flex items-end gap-2">
               <Button onClick={handleGenerateReport} className="flex-1" disabled={!canGenerarReporte}>Generar</Button>
-              <Button variant="outline" onClick={() => { setDateRange(getDefaultDates()); setFilterUbicacion(''); setShowResults(false) }}>Limpiar</Button>
+              <Button variant="outline" onClick={() => { setDateRange(getDefaultDates()); setFilterUbicacion(''); setFilterProducto(''); setShowResults(false) }}>Limpiar</Button>
             </div>
           </div>
           {isReadOnly('reportes') && (
@@ -377,17 +612,34 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
           <div ref={reportRef}>
             {/* Summary Cards */}
             {selectedReport === 'stock' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 text-center">
-                  <p className="text-3xl font-bold text-blue-600">{reportData.length}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wide">Total Registros</p>
+                  <p className="text-3xl font-bold text-blue-600">
+                    {isMultiLocation ? consolidatedKPIs.total : reportData.length}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wide">
+                    {isMultiLocation ? 'Productos Únicos' : 'Total Registros'}
+                  </p>
                 </div>
+                {isMultiLocation && (
+                  <div className="bg-white dark:bg-slate-800 rounded-xl border border-purple-200 dark:border-purple-900/30 p-5 text-center">
+                    <p className="text-3xl font-bold text-purple-600">{consolidatedKPIs.totalUnidades}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wide">Total Unidades</p>
+                  </div>
+                )}
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-green-200 dark:border-green-900/30 p-5 text-center">
-                  <p className="text-3xl font-bold text-green-600">{reportData.filter(d => d.Estado === 'Normal').length}</p>
+                  <p className="text-3xl font-bold text-green-600">
+                    {isMultiLocation 
+                      ? consolidatedKPIs.total - consolidatedKPIs.stockBajo
+                      : reportData.filter(d => d.Estado === 'Normal').length
+                    }
+                  </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wide">Stock Normal</p>
                 </div>
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-red-200 dark:border-red-900/30 p-5 text-center">
-                  <p className="text-3xl font-bold text-red-600">{reportData.filter(d => d.Estado === 'Bajo').length}</p>
+                  <p className="text-3xl font-bold text-red-600">
+                    {isMultiLocation ? consolidatedKPIs.stockBajo : reportData.filter(d => d.Estado === 'Bajo').length}
+                  </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wide">Stock Bajo</p>
                 </div>
               </div>
@@ -395,13 +647,40 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
 
             {/* Action Bar */}
             <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                <span className="font-semibold">{reportData.length}</span> registros encontrados
-                {filterUbicacion && <span> — Ubicación: <strong>{ubicaciones.find(u => u.id === filterUbicacion)?.nombre}</strong></span>}
-              </p>
+              <div>
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  <span className="font-semibold">{isMultiLocation ? consolidatedData.length : reportData.length}</span> {isMultiLocation ? 'productos' : 'registros'} encontrados
+                  {filterUbicacion && <span> — Ubicación: <strong>{ubicaciones.find(u => u.id === filterUbicacion)?.nombre}</strong></span>}
+                  {isMultiLocation && <span> — <strong>{filterUbicaciones.length}</strong> ubicaciones seleccionadas</span>}
+                </p>
+                {isMultiLocation && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <button
+                      onClick={() => setVistaConsolidada(true)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                        vistaConsolidada
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
+                      }`}
+                    >
+                      Vista Consolidada
+                    </button>
+                    <button
+                      onClick={() => setVistaConsolidada(false)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                        !vistaConsolidada
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
+                      }`}
+                    >
+                      Vista Detallada
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={() => handleExport(selectedReport)} disabled={!canGenerarReporte}>
-                  <Download size={14} className="mr-1.5" />CSV
+                  <Download size={14} className="mr-1.5" />{isMultiLocation ? 'Excel' : 'CSV'}
                 </Button>
                 <Button size="sm" variant="outline" onClick={handlePrint} disabled={!canGenerarReporte}>
                   <Printer size={14} className="mr-1.5" />Imprimir
@@ -411,12 +690,18 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
 
             {/* Data Table */}
             <Card>
-              {reportData.length === 0 ? (
+              {(isMultiLocation && consolidatedData.length === 0) || (!isMultiLocation && reportData.length === 0) ? (
                 <div className="text-center py-16">
                   <AlertCircle size={48} className="mx-auto text-yellow-400 mb-4" />
                   <p className="text-slate-700 dark:text-slate-300 font-semibold mb-1">No hay datos disponibles</p>
                   <p className="text-slate-500 dark:text-slate-400 text-sm">Ajusta los filtros e intenta de nuevo.</p>
                 </div>
+              ) : isMultiLocation && vistaConsolidada ? (
+                <TablaConsolidada 
+                  consolidatedData={consolidatedData}
+                  ubicaciones={ubicaciones}
+                  productos={productos}
+                />
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -434,7 +719,7 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
                           <td className="px-4 py-3 text-xs text-slate-400 font-mono">{idx + 1}</td>
                           {reportHeaders.map(h => (
                             <td key={h} className="px-4 py-3 text-slate-900 dark:text-slate-100">
-                              {h === 'Estado' ? <EstadoBadge value={row[h]} /> : (row[h] ?? '-')}
+                              {h === 'Estado' ? <EstadoBadge value={row[h]} /> : h === 'Método' ? <MetodoBadgeInline value={row[h]} /> : (row[h] ?? '-')}
                             </td>
                           ))}
                         </tr>

@@ -79,81 +79,7 @@ export const useMovimientos = (ubicacionId) => {
         'Movimiento Creado',
         response.message || 'El movimiento se ha creado exitosamente'
       )
-
-      // Send notification to destination bodega's responsible users + admins + creator
-      try {
-        const transferData = response?.data || { id: 'unknown', codigo_legible: 'MV-NUEVO' }
-        const origen = ubicaciones.find(u => u.id === variables.origen_id)
-        const destino = ubicaciones.find(u => u.id === variables.destino_id)
-        const creadorId = variables.usuario_creacion_id
-
-        console.log('🔔 Preparing transfer notification:', {
-          transferId: transferData.id,
-          codigo: transferData.codigo_legible,
-          origen: origen?.nombre,
-          destino: destino?.nombre,
-          creadorId,
-          totalUsuarios: usuarios.length
-        })
-
-        // Find users assigned to the destination location
-        const destinoUserIds = usuarios.filter(u => {
-          if (u.estado && u.estado !== 'ACTIVO') return false
-          let asignadas = []
-          if (Array.isArray(u.ubicaciones_asignadas)) asignadas = u.ubicaciones_asignadas
-          else if (typeof u.ubicaciones_asignadas === 'string') {
-            try { asignadas = JSON.parse(u.ubicaciones_asignadas) } catch { asignadas = [] }
-          }
-          return asignadas.includes(variables.destino_id)
-        }).map(u => u.id)
-
-        // Include ALL admin users (they should see all transfers)
-        const adminUserIds = usuarios.filter(u => {
-          if (u.estado && u.estado !== 'ACTIVO') return false
-          return u.rol === 'ADMIN_GLOBAL' || u.rol === 'ADMIN_EMPRESA'
-        }).map(u => u.id)
-
-        // Find the creator's info
-        const creador = usuarios.find(u => u.id === creadorId)
-
-        // Combine all recipients: destination users + admins + creator (so they see their own transfer)
-        const allRecipients = [...new Set([...destinoUserIds, ...adminUserIds, creadorId].filter(Boolean))]
-
-        console.log(`📨 Transfer notification recipients:`, {
-          destinoUsers: destinoUserIds.length,
-          admins: adminUserIds.length,
-          creadorIncluded: !!creadorId,
-          totalRecipients: allRecipients.length,
-          recipientIds: allRecipients
-        })
-
-        if (allRecipients.length > 0) {
-          const notifId = await triggerTransferenciaRecibida({
-            transferencia: transferData,
-            productos: variables.productos || [],
-            origen,
-            destino,
-            usuarioCreador: { nombre: creador?.nombre || 'Usuario' },
-            usuariosDestino: allRecipients
-          })
-          console.log('✅ Transfer notification created with ID:', notifId)
-        } else {
-          // Fallback: if no recipients found, at least notify the creator
-          console.warn('⚠️ No recipients found, using creator as fallback')
-          if (creadorId) {
-            await triggerTransferenciaRecibida({
-              transferencia: transferData,
-              productos: variables.productos || [],
-              origen,
-              destino,
-              usuarioCreador: { nombre: creador?.nombre || 'Usuario' },
-              usuariosDestino: [creadorId]
-            })
-          }
-        }
-      } catch (notifError) {
-        console.error('❌ Error sending transfer notification:', notifError)
-      }
+      // Notificaciones ahora se crean automáticamente en el backend (firestoreService.createTransferencia)
     },
     onError: (error) => {
       toast.error(
@@ -231,21 +157,15 @@ export const useMovimientos = (ubicacionId) => {
                 try { asignadas = JSON.parse(u.ubicaciones_asignadas) } catch { asignadas = [] }
               }
               return asignadas.includes(movimiento.origen_id)
-            }).map(u => u.id)
+            }).map(u => u.codigo || u.id)
 
             // Include admin users
             const adminUserIds = usuarios.filter(u => {
               if (u.estado && u.estado !== 'ACTIVO') return false
               return u.rol === 'ADMIN_GLOBAL' || u.rol === 'ADMIN_EMPRESA'
-            }).map(u => u.id)
+            }).map(u => u.codigo || u.id)
 
             const stockBajoRecipients = [...new Set([...usuariosOrigen, ...adminUserIds])]
-
-            console.log('📦 Stock bajo alert:', {
-              productos: productosStockBajo.length,
-              ubicacion: origenUbicacion?.nombre,
-              recipients: stockBajoRecipients.length
-            })
 
             await triggerStockBajo({
               producto: productosStockBajo,

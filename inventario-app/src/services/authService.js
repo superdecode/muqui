@@ -122,12 +122,13 @@ export const authService = {
     
     const user = JSON.parse(userStr)
     // Ensure consistency: if user has codigo field but id doesn't match, update id
+    // and preserve the previous id as firestoreId (sessions antiguas guardaban doc.id en user.id)
     if (user.codigo && user.id !== user.codigo) {
-      user.id = user.codigo
-      // Ensure firestoreId is preserved
-      if (!user.firestoreId && user.codigo !== user.id) {
-        user.firestoreId = user.id
+      const previousId = user.id
+      if (!user.firestoreId) {
+        user.firestoreId = previousId
       }
+      user.id = user.codigo
       localStorage.setItem('user', JSON.stringify(user))
     }
     return user

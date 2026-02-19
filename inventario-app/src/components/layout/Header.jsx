@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useRef, useMemo } from 'react'
 import { Bell } from 'lucide-react'
 import { useAlertasStore } from '../../stores/alertasStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -8,14 +8,19 @@ import AlertsPanel from '../common/AlertsPanel'
 import UserMenu from '../common/UserMenu'
 
 export default function Header() {
-  const [showAlertsPanel, setShowAlertsPanel] = useState(false)
   const bellRef = useRef(null)
-  const { alertasNoLeidas } = useAlertasStore()
+  const { alertasNoLeidas, showPanel, setShowPanel } = useAlertasStore()
   const { user } = useAuthStore()
   const { timezone } = useThemeStore()
 
+  const alertUserIds = useMemo(() => {
+    if (!user?.id) return null
+    if (user.firestoreId) return [user.id, user.firestoreId]
+    return user.id
+  }, [user?.id, user?.firestoreId])
+
   // Initialize alerts subscription for real-time notifications
-  useAlertas(user?.id)
+  useAlertas(alertUserIds)
 
   return (
     <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-3">
@@ -36,7 +41,7 @@ export default function Header() {
           <div className="relative">
             <button
               ref={bellRef}
-              onClick={() => setShowAlertsPanel(!showAlertsPanel)}
+              onClick={() => setShowPanel(!showPanel)}
               className="relative p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
             >
               <Bell size={24} />
@@ -49,8 +54,8 @@ export default function Header() {
 
             {/* Alerts Panel */}
             <AlertsPanel
-              isOpen={showAlertsPanel}
-              onClose={() => setShowAlertsPanel(false)}
+              isOpen={showPanel}
+              onClose={() => setShowPanel(false)}
               anchorRef={bellRef}
             />
           </div>

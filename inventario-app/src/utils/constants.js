@@ -2,7 +2,7 @@
 
 export const TIPO_UBICACION = {
   BODEGA: 'BODEGA',
-  PUNTO_VENTA: 'PUNTO_VENTA'
+  PUNTO_VENTA: 'PUNTO VENTA'
 }
 
 export const ESTADO_TRANSFERENCIA = {

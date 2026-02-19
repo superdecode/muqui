@@ -96,11 +96,15 @@ export default function NotificationPopups() {
   }
 
   const handleClose = (popupId) => {
-    setVisiblePopups(prev => prev.filter(p => p.id !== popupId))
-    // If last popup, clear all
-    if (visiblePopups.length <= 1) {
-      clearPopupNotifications()
+    // Mark notification as read when dismissed via X — prevents it from
+    // reappearing as a popup on the next snapshot and keeps the panel consistent
+    if (popupId !== 'consolidated') {
+      marcarComoLeida(popupId)
+      markAsRead(popupId, userId)
     }
+
+    setVisiblePopups(prev => prev.filter(p => p.id !== popupId))
+    clearPopupNotifications()
   }
 
   const handleClick = async (popup) => {

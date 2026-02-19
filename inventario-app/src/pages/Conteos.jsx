@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ClipboardCheck, Plus, Play, Download, CheckCircle, Clock, AlertCircle, Trash2, Printer, Search, Filter } from 'lucide-react'
 import Card from '../components/common/Card'
-import Table from '../components/common/Table'
+import DataTable from '../components/common/DataTable'
 import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ConteoForm from '../components/conteos/ConteoForm'
@@ -60,8 +60,7 @@ export default function Conteos() {
     ejecutarConteo,
     isEjecutando,
     eliminarConteo,
-    isEliminando,
-    estadisticas
+    isEliminando
   } = useConteos()
 
   // Función para obtener nombre del usuario
@@ -246,31 +245,43 @@ export default function Conteos() {
   // Auto-set sede filter for single-location users
   const effectiveSedeFilter = (Array.isArray(allowedUbicacionIds) && allowedUbicacionIds.length === 1 && !sedeFilter) ? allowedUbicacionIds[0] : sedeFilter
 
+  // Filter for user permissions (applies to both stats and table data)
+  const conteosAccessibles = conteos.filter(c => {
+    const matchUserAssignments = user?.rol === 'ADMIN_GLOBAL' ||
+      allowedUbicacionIds.length === 0 ||
+      (c.ubicacion_id && allowedUbicacionIds.includes(c.ubicacion_id))
+    return matchUserAssignments
+  })
+
+  // Estadísticas basadas en conteos accesibles (antes de otros filtros)
+  const estadisticasCalculadas = {
+    total: conteosAccessibles.length,
+    pendientes: conteosAccessibles.filter(c => c.estado === 'PENDIENTE').length,
+    enProgreso: conteosAccessibles.filter(c => c.estado === 'EN_PROGRESO').length,
+    completados: conteosAccessibles.filter(c => c.estado === 'COMPLETADO' || c.estado === 'PARCIALMENTE_COMPLETADO').length
+  }
+
   // Filtrar conteos según el tab activo, búsqueda, sede y asignaciones de usuario
-  const conteosFiltrados = conteos.filter(c => {
+  const conteosFiltrados = conteosAccessibles.filter(c => {
     const matchTab = activeTab === 'todos' ? true
       : activeTab === 'pendientes' ? c.estado === 'PENDIENTE'
       : activeTab === 'enProgreso' ? c.estado === 'EN_PROGRESO'
       : activeTab === 'completados' ? (c.estado === 'COMPLETADO' || c.estado === 'PARCIALMENTE_COMPLETADO')
       : true
-    const matchSearch = !searchTerm || 
+    const matchSearch = !searchTerm ||
       (c.codigo_legible || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (c.ubicacion_nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (c.tipo_conteo || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchSede = !effectiveSedeFilter || c.ubicacion_id === effectiveSedeFilter
-    
-    // Filter by user assignments (if not admin)
-    const matchUserAssignments = user?.rol === 'ADMIN_GLOBAL' || 
-      allowedUbicacionIds.length === 0 || 
-      (c.ubicacion_id && allowedUbicacionIds.includes(c.ubicacion_id))
-    
-    return matchTab && matchSearch && matchSede && matchUserAssignments
+
+    return matchTab && matchSearch && matchSede
   })
 
   const columns = [
     {
       header: 'Código',
       accessor: 'codigo_legible',
+      sortKey: 'codigo_legible',
       render: (value, row) => (
         <span className="font-mono text-sm font-semibold text-primary-600">{value || formatDisplayId(row, 'CT')}</span>
       )
@@ -278,11 +289,13 @@ export default function Conteos() {
     {
       header: 'Fecha Programada',
       accessor: 'fecha_programada',
+      sortKey: 'fecha_programada',
       render: (value) => (value ? format(new Date(value), "d MMM yyyy", { locale: es }) : '-')
     },
     {
       header: 'Ubicación',
       accessor: 'ubicacion_nombre',
+      sortKey: 'ubicacion_nombre',
       render: (value) => (
         <span className="text-sm font-medium">{value}</span>
       )
@@ -290,6 +303,7 @@ export default function Conteos() {
     {
       header: 'Tipo',
       accessor: 'tipo_conteo',
+      sortKey: 'tipo_conteo',
       render: (value) => (
         <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
           {formatLabel(value)}
@@ -299,13 +313,15 @@ export default function Conteos() {
     {
       header: 'Responsable',
       accessor: 'usuario_responsable_id',
-      render: (value) => (
-        <span className="text-sm font-medium">{getUsuarioNombre(value)}</span>
+      sortKey: 'usuario_responsable_id',
+      render: (_value, row) => (
+        <span className="text-sm font-medium">{getUsuarioNombre(row.usuario_responsable_id)}</span>
       )
     },
     {
       header: 'Estado',
       accessor: 'estado',
+      sortKey: 'estado',
       render: (value) => {
         const estados = {
           PENDIENTE: { color: 'bg-yellow-100 text-yellow-800', icon: Clock },
@@ -509,7 +525,7 @@ export default function Conteos() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Total Conteos</p>
-              <p className="text-3xl font-bold text-purple-600">{estadisticas.total}</p>
+              <p className="text-3xl font-bold text-purple-600">{estadisticasCalculadas.total}</p>
             </div>
             <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
               <ClipboardCheck className="text-purple-600" size={24} />
@@ -521,7 +537,7 @@ export default function Conteos() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Pendientes</p>
-              <p className="text-3xl font-bold text-yellow-600">{estadisticas.pendientes}</p>
+              <p className="text-3xl font-bold text-yellow-600">{estadisticasCalculadas.pendientes}</p>
             </div>
             <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center">
               <Clock className="text-yellow-600" size={24} />
@@ -533,7 +549,7 @@ export default function Conteos() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">En Progreso</p>
-              <p className="text-3xl font-bold text-blue-600">{estadisticas.enProgreso}</p>
+              <p className="text-3xl font-bold text-blue-600">{estadisticasCalculadas.enProgreso}</p>
             </div>
             <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
               <AlertCircle className="text-blue-600" size={24} />
@@ -545,7 +561,7 @@ export default function Conteos() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Completados</p>
-              <p className="text-3xl font-bold text-green-600">{estadisticas.completados}</p>
+              <p className="text-3xl font-bold text-green-600">{estadisticasCalculadas.completados}</p>
             </div>
             <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
               <CheckCircle className="text-green-600" size={24} />
@@ -588,10 +604,10 @@ export default function Conteos() {
         <div className="border-b border-slate-200 dark:border-slate-700">
           <nav className="flex gap-8 px-6">
             {[
-              { id: 'todos', label: 'Todos', count: estadisticas.total },
-              { id: 'pendientes', label: 'Pendientes', count: estadisticas.pendientes },
-              { id: 'enProgreso', label: 'En Progreso', count: estadisticas.enProgreso },
-              { id: 'completados', label: 'Completados', count: estadisticas.completados }
+              { id: 'todos', label: 'Todos', count: estadisticasCalculadas.total },
+              { id: 'pendientes', label: 'Pendientes', count: estadisticasCalculadas.pendientes },
+              { id: 'enProgreso', label: 'En Progreso', count: estadisticasCalculadas.enProgreso },
+              { id: 'completados', label: 'Completados', count: estadisticasCalculadas.completados }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -624,9 +640,11 @@ export default function Conteos() {
               </p>
             </div>
           ) : (
-            <Table
+            <DataTable
               columns={columns}
               data={conteosFiltrados}
+              defaultSortKey="fecha_programada"
+              defaultSortDir="desc"
             />
           )}
         </div>

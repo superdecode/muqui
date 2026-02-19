@@ -1,6 +1,6 @@
 // Firebase configuration para Firestore
 import { initializeApp } from 'firebase/app'
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore'
+import { initializeFirestore, connectFirestoreEmulator } from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'
 
 // Configuración de Firebase (obtener desde Firebase Console)
@@ -22,7 +22,9 @@ export const initializeFirebase = () => {
   if (!app) {
     try {
       app = initializeApp(firebaseConfig)
-      db = getFirestore(app)
+      db = initializeFirestore(app, {
+        experimentalForceLongPolling: true // Fix for Safari ITP blocking WebChannel
+      })
       auth = getAuth(app)
 
       // Usar emulador en desarrollo si está configurado

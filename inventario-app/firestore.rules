@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // NOTA: Este sistema usa autenticación personalizada sin Firebase Auth
+    // Por lo tanto, permitimos acceso abierto a nivel de Firestore
+    // El control de acceso se maneja en el frontend mediante roles
+    
+    // Permitir acceso completo a todas las colecciones
+    // La seguridad se maneja a nivel de aplicación
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

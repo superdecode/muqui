@@ -20,6 +20,7 @@ import {
   Timestamp
 } from 'firebase/firestore'
 import { getDB } from '../config/firebase.config'
+import { triggerTransferenciaRecibida, triggerStockBajo, verificarStockBajo } from './notificationService'
 
 /**
  * Genera un ID único personalizado
@@ -794,6 +795,141 @@ const firestoreService = {
 
       await batch.commit()
 
+      // ========== NOTIFICACIONES ==========
+      // Disparar notificación SOLO para TRANSFERENCIAS (no ventas ni mermas)
+      console.log('🔍 VERIFICANDO TIPO MOVIMIENTO:', {
+        tipo_movimiento: data.tipo_movimiento,
+        deberia_crear_notif: data.tipo_movimiento === 'TRANSFERENCIA' || !data.tipo_movimiento
+      })
+      
+      if (data.tipo_movimiento === 'TRANSFERENCIA' || !data.tipo_movimiento) {
+        try {
+          console.log('🔔 ===== INICIANDO CREACIÓN DE NOTIFICACIÓN =====')
+          console.log('🔔 Transferencia ID:', movimientoRef.id)
+          console.log('🔔 Código legible:', codigoLegible)
+          console.log('🔔 Datos completos:', data)
+
+          // Obtener ubicaciones para nombres
+          console.log('📍 Obteniendo ubicaciones...')
+          const ubicaciones = await firestoreService.getAll('ubicaciones')
+          console.log('📍 Ubicaciones obtenidas:', ubicaciones.length)
+          
+          const origen = ubicaciones.find(u => u.id === data.origen_id)
+          const destino = ubicaciones.find(u => u.id === data.destino_id)
+          console.log('📍 Origen encontrado:', origen?.nombre || 'NO ENCONTRADO')
+          console.log('📍 Destino encontrado:', destino?.nombre || 'NO ENCONTRADO')
+
+          // Obtener TODOS los usuarios activos
+          console.log('👥 Obteniendo usuarios...')
+          const todosUsuarios = await firestoreService.getAll('usuarios')
+          console.log('👥 Total usuarios en BD:', todosUsuarios.length)
+          console.log('👥 Usuarios activos:', todosUsuarios.filter(u => !u.estado || u.estado === 'ACTIVO').length)
+          
+          // Filtrar usuarios destino: asignados a ubicación destino
+          const usuariosDestino = todosUsuarios.filter(u => {
+            if (u.estado && u.estado !== 'ACTIVO') return false
+            
+            let ubicacionesAsignadas = []
+            if (Array.isArray(u.ubicaciones_asignadas)) {
+              ubicacionesAsignadas = u.ubicaciones_asignadas
+            } else if (typeof u.ubicaciones_asignadas === 'string') {
+              try {
+                ubicacionesAsignadas = JSON.parse(u.ubicaciones_asignadas)
+              } catch {
+                ubicacionesAsignadas = []
+              }
+            }
+            
+            return ubicacionesAsignadas.includes(data.destino_id)
+          })
+          console.log('👥 Usuarios asignados a destino:', usuariosDestino.length, usuariosDestino.map(u => u.id))
+
+          // Filtrar admins globales (que NO estén ya en destino)
+          const usuariosDestinoIds = usuariosDestino.map(u => u.id)
+          const adminsGlobales = todosUsuarios.filter(u => {
+            if (u.estado && u.estado !== 'ACTIVO') return false
+            if (usuariosDestinoIds.includes(u.id)) return false // Ya está en destino
+            
+            const rolNorm = String(u.rol || '').toUpperCase()
+            return rolNorm === 'ADMIN_GLOBAL' || 
+                   rolNorm === 'ADMIN GLOBAL' || 
+                   rolNorm === 'ADMINISTRADOR' ||
+                   rolNorm === 'ADMIN_EMPRESA' ||
+                   rolNorm === 'ADMIN EMPRESA'
+          })
+          console.log('👥 Admins globales:', adminsGlobales.length, adminsGlobales.map(u => u.id))
+
+          // Combinar destinatarios (usar user.id que es el codigo)
+          const todosDestinatarios = [
+            ...usuariosDestino.map(u => u.id),
+            ...adminsGlobales.map(u => u.id)
+          ]
+          console.log('📨 TOTAL DESTINATARIOS:', todosDestinatarios.length)
+          console.log('📨 IDs destinatarios:', todosDestinatarios)
+
+          // Obtener usuario creador
+          const usuarioCreador = todosUsuarios.find(u => u.id === data.usuario_creacion_id)
+          console.log('👤 Usuario creador:', usuarioCreador?.nombre || 'NO ENCONTRADO')
+
+          if (todosDestinatarios.length > 0) {
+            console.log('🚀 LLAMANDO A triggerTransferenciaRecibida...')
+            
+            // Obtener productos completos con nombres
+            const productosCompletos = await Promise.all(
+              (data.productos || []).map(async (p) => {
+                try {
+                  const producto = await firestoreService.getById('productos', p.producto_id)
+                  return {
+                    producto_id: p.producto_id,
+                    nombre: producto?.nombre || 'Producto',
+                    cantidad: p.cantidad || 0
+                  }
+                } catch (err) {
+                  console.warn('Error obteniendo producto:', p.producto_id, err)
+                  return {
+                    producto_id: p.producto_id,
+                    nombre: 'Producto',
+                    cantidad: p.cantidad || 0
+                  }
+                }
+              })
+            )
+            
+            const notifId = await triggerTransferenciaRecibida({
+              transferencia: { 
+                id: movimientoRef.id, 
+                codigo_legible: codigoLegible 
+              },
+              productos: productosCompletos,
+              origen: {
+                id: origen?.id || data.origen_id,
+                nombre: origen?.nombre || 'Origen'
+              },
+              destino: {
+                id: destino?.id || data.destino_id,
+                nombre: destino?.nombre || 'Destino'
+              },
+              usuarioCreador: { 
+                nombre: usuarioCreador?.nombre || 'Sistema' 
+              },
+              usuariosDestino: todosDestinatarios
+            })
+            console.log('✅ ===== NOTIFICACIÓN CREADA EXITOSAMENTE =====')
+            console.log('✅ ID de notificación:', notifId)
+          } else {
+            console.warn('⚠️ ===== NO HAY DESTINATARIOS PARA NOTIFICACIÓN =====')
+            console.warn('⚠️ Verifica que haya usuarios asignados a la ubicación destino')
+          }
+        } catch (notifError) {
+          console.error('❌ ===== ERROR CREANDO NOTIFICACIÓN =====')
+          console.error('❌ Error completo:', notifError)
+          console.error('❌ Stack:', notifError.stack)
+          // No fallar la transferencia si falla la notificación
+        }
+      } else {
+        console.log('ℹ️ No se crea notificación (tipo movimiento no es TRANSFERENCIA):', data.tipo_movimiento)
+      }
+
       return {
         success: true,
         message: 'Transferencia creada exitosamente',
@@ -897,6 +1033,22 @@ const firestoreService = {
       })
 
       await batch.commit()
+
+      // ========== VERIFICAR STOCK BAJO DESPUÉS DE TRANSFERENCIA ==========
+      try {
+        console.log('🔍 Verificando stock bajo después de confirmar transferencia...')
+        
+        for (const detalle of detalles) {
+          // Verificar origen
+          await verificarStockBajo(detalle.producto_id, movimiento.origen_id)
+          // Verificar destino
+          await verificarStockBajo(detalle.producto_id, movimiento.destino_id)
+        }
+        
+        console.log('✅ Verificación de stock bajo completada')
+      } catch (stockError) {
+        console.error('❌ Error verificando stock bajo (no afecta transferencia):', stockError)
+      }
 
       return {
         success: true,
@@ -1110,6 +1262,19 @@ const firestoreService = {
       }
 
       await batch.commit()
+
+      // ========== VERIFICAR STOCK BAJO DESPUÉS DE CONTEO ==========
+      try {
+        if (data.productos && data.productos.length > 0) {
+          console.log('🔍 Verificando stock bajo después de conteo...')
+          for (const prod of data.productos) {
+            await verificarStockBajo(prod.producto_id, data.ubicacion_id)
+          }
+          console.log('✅ Verificación de stock bajo completada')
+        }
+      } catch (stockError) {
+        console.error('❌ Error verificando stock bajo (no afecta conteo):', stockError)
+      }
 
       return { success: true, message: 'Conteo ejecutado exitosamente' }
     } catch (error) {

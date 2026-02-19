@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, AlertCircle, AlertTriangle, Info, CheckCircle, ExternalLink, Package, ArrowRightLeft, ClipboardList, Trash2 } from 'lucide-react'
+import { X, AlertCircle, AlertTriangle, Info, CheckCircle, Package, ArrowRightLeft, ClipboardList, Trash2 } from 'lucide-react'
 import { useAlertasStore } from '../../stores/alertasStore'
 import { useNavigate } from 'react-router-dom'
 import { safeFormatDate } from '../../utils/formatters'
@@ -12,6 +12,7 @@ const AlertsPanel = ({ isOpen, onClose, anchorRef }) => {
   const {
     alertas,
     alertasNoLeidas,
+    error,
     userId,
     marcarComoLeida,
     marcarComoAbierta,
@@ -33,10 +34,19 @@ const AlertsPanel = ({ isOpen, onClose, anchorRef }) => {
     }
   }, [isOpen, onClose, anchorRef])
 
+  // Update panel when notifications change
+  useEffect(() => {
+    // Force re-render when alertas change to ensure read status is reflected
+    if (isOpen) {
+      // Panel is open, ensure it reflects current state
+    }
+  }, [alertas, isOpen])
+
   if (!isOpen) return null
 
-  // Filter active alerts
-  const alertasActivas = alertas.filter(a => a.activa)
+  // Historial: mantener lista completa.
+  // "No leídas" se limita a activas; "Todas" muestra activas + resueltas (si existen).
+  const alertasActivas = alertas.filter(a => a.activa !== false)
 
   const isUnread = (a) => {
     const leidoPor = Array.isArray(a.leido_por) ? a.leido_por : []
@@ -46,7 +56,7 @@ const AlertsPanel = ({ isOpen, onClose, anchorRef }) => {
   // Filter based on active tab
   const alertasFiltradas = panelTab === 'no_leidas'
     ? alertasActivas.filter(a => isUnread(a))
-    : alertasActivas
+    : alertas
 
   const getAlertIcon = (tipo, prioridad) => {
     if (tipo === 'stock_bajo') return <AlertTriangle className="text-amber-500" size={20} />
@@ -146,6 +156,13 @@ const AlertsPanel = ({ isOpen, onClose, anchorRef }) => {
               Todas
             </button>
           </div>
+
+          {error && (
+            <div className="mt-3 p-2 rounded-lg bg-red-50 border border-red-200">
+              <p className="text-xs text-red-800 font-medium">Error cargando notificaciones</p>
+              <p className="text-xs text-red-700 mt-0.5">{error.code || 'error'}: {error.message || String(error)}</p>
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto">

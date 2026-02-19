@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
+import { useAlertasStore } from '../stores/alertasStore'
 import useInventario from '../hooks/useInventario'
-import useAlertas from '../hooks/useAlertas'
 import useMovimientos from '../hooks/useMovimientos'
 import useConteos from '../hooks/useConteos'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -12,13 +12,13 @@ export default function Dashboard() {
   const { user } = useAuthStore()
 
   const { inventario, productos, isLoading: loadingInventario } = useInventario()
-  const { alertas, isLoading: loadingAlertas } = useAlertas(user?.id)
+  const { alertas, loading: loadingAlertas } = useAlertasStore()
   const { movimientos, isLoading: loadingMovimientos } = useMovimientos()
   const { conteos, isLoading: loadingConteos } = useConteos()
 
   const stats = {
     totalProductos: productos?.length || 0,
-    productosAlertas: alertas?.filter(a => a.tipo === 'STOCK_MINIMO').length || 0,
+    productosAlertas: alertas?.filter(a => a.tipo === 'stock_bajo').length || 0,
     transferenciasPendientes: movimientos?.filter(m => m.estado === 'PENDIENTE').length || 0,
     conteosPendientes: conteos?.filter(c => c.estado === 'PENDIENTE').length || 0
   }

@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Package, Plus, ArrowRightLeft, Download, CheckCircle, Clock, XCircle, Trash2, AlertTriangle, RefreshCw, Search, ArrowUpRight, ArrowDownLeft, Loader, PackageCheck, Info, ShoppingCart, TrendingDown } from 'lucide-react'
 import Card from '../components/common/Card'
-import Table from '../components/common/Table'
+import DataTable from '../components/common/DataTable'
 import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import TransferenciaForm from '../components/transferencias/TransferenciaForm'
@@ -70,7 +70,7 @@ export default function Movimientos() {
   // Estadísticas para AMBAS direcciones (tarjetas interactivas)
   const allStats = useMemo(() => {
     return getAllDirectionStats(userUbicacionIds)
-  }, [userUbicacionIds, getAllDirectionStats])
+  }, [userUbicacionIds, movimientos])
 
   // Estado para tarjeta seleccionada (feedback visual)
   const [selectedCard, setSelectedCard] = useState(null)
@@ -250,6 +250,7 @@ export default function Movimientos() {
     {
       header: 'Código',
       accessor: 'codigo_legible',
+      sortKey: 'codigo_legible',
       render: (value, row) => (
         <span className="font-mono text-sm font-semibold text-primary-600">{value || formatDisplayId(row, 'MV')}</span>
       )
@@ -257,6 +258,7 @@ export default function Movimientos() {
     {
       header: 'Fecha',
       accessor: 'fecha_creacion',
+      sortKey: 'fecha_creacion',
       render: (value) => safeFormatDate(value, "d MMM yyyy")
     },
     {
@@ -279,13 +281,15 @@ export default function Movimientos() {
       }
     },
     {
-      header: 'Origen',
+      header: 'Bodega Origen',
       accessor: 'origen_nombre',
+      sortKey: 'origen_nombre',
       render: (value) => <span className="text-sm font-medium">{value}</span>
     },
     {
-      header: 'Destino',
+      header: 'Bodega Destino',
       accessor: 'destino_nombre',
+      sortKey: 'destino_nombre',
       render: (value, row) => {
         if (row.tipo_movimiento === 'VENTA') return <span className="text-sm font-medium">{row.beneficiario_nombre || value}</span>
         if (row.tipo_movimiento === 'MERMA') return <span className="text-sm font-medium">{row.causa_merma_nombre || '—'}</span>
@@ -295,6 +299,7 @@ export default function Movimientos() {
     {
       header: 'Estado',
       accessor: 'estado',
+      sortKey: 'estado',
       render: (value) => getEstadoBadge(value, directionTab)
     },
     {
@@ -405,8 +410,7 @@ export default function Movimientos() {
       console.error('handleConfirmarDesdeTabla: movimiento inválido', movimiento)
       return
     }
-    
-    console.log('Abriendo modal de confirmación para movimiento:', movimiento.id)
+
     // Abrir el modal de detalle para confirmar desde ahí
     setSelectedMovimiento(movimiento)
     setShowDetail(true)
@@ -661,9 +665,11 @@ export default function Movimientos() {
               </p>
             </div>
           ) : (
-            <Table
+            <DataTable
               columns={columns}
               data={movimientosFiltrados}
+              defaultSortKey="fecha_creacion"
+              defaultSortDir="desc"
               rowClassName={(row) => {
                 const estado = normalizeEstado(row.estado)
                 if (estado === 'CANCELADA') {
