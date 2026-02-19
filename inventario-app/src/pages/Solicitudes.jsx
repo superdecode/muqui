@@ -376,19 +376,27 @@ export default function Solicitudes() {
   }
 
   const handleSaveSolicitud = async (data, enviar = false) => {
+    console.log('📝 handleSaveSolicitud called with:', { data, enviar, editMode })
+    
     if (editMode && selectedSolicitud) {
+      console.log('📝 Updating existing solicitud:', selectedSolicitud.id)
       // Update existing
       actualizarSolicitud({
         solicitudId: selectedSolicitud.id,
         data
       }, {
         onSuccess: () => {
+          console.log('📝 Solicitud updated successfully')
           if (enviar) {
+            console.log('📝 Sending solicitud...')
             enviarSolicitud({
               solicitudId: selectedSolicitud.id,
               usuarioId: user?.id || user?.codigo
             }, {
-              onSuccess: () => setShowForm(false)
+              onSuccess: () => {
+                console.log('📝 Solicitud sent successfully')
+                setShowForm(false)
+              }
             })
           } else {
             setShowForm(false)
@@ -396,18 +404,24 @@ export default function Solicitudes() {
         }
       })
     } else {
+      console.log('📝 Creating new solicitud')
       // Create new
       crearSolicitud({
         ...data,
         usuario_creacion_id: user?.id || user?.codigo
       }, {
         onSuccess: (response) => {
+          console.log('📝 Solicitud created successfully:', response)
           if (enviar && response?.data?.id) {
+            console.log('📝 Sending new solicitud...')
             enviarSolicitud({
               solicitudId: response.data.id,
               usuarioId: user?.id || user?.codigo
             }, {
-              onSuccess: () => setShowForm(false)
+              onSuccess: () => {
+                console.log('📝 New solicitud sent successfully')
+                setShowForm(false)
+              }
             })
           } else {
             setShowForm(false)
@@ -697,8 +711,9 @@ export default function Solicitudes() {
       {/* Form Modal */}
       {showForm && (
         <SolicitudForm
-          solicitud={editMode ? selectedSolicitud : null}
+          editData={editMode ? selectedSolicitud : null}
           onSave={handleSaveSolicitud}
+          onEnviar={handleSaveSolicitud}
           onClose={handleCloseForm}
           isLoading={isCreando || isActualizando || isEnviando}
         />

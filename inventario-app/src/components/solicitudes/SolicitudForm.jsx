@@ -153,6 +153,12 @@ export default function SolicitudForm({ onClose, onSave, onEnviar, isLoading = f
 
   // Validar y guardar
   const handleSave = (enviar = false) => {
+    console.log('🔘 handleSave called with enviar:', enviar)
+    console.log('🔘 Form data:', formData)
+    console.log('🔘 Selected productos:', selectedProductos)
+    console.log('🔘 onEnviar function:', typeof onEnviar)
+    console.log('🔘 onSave function:', typeof onSave)
+
     setError('')
 
     if (!formData.ubicacion_destino_id) {
@@ -187,10 +193,14 @@ export default function SolicitudForm({ onClose, onSave, onEnviar, isLoading = f
       }))
     }
 
+    console.log('🔘 Data prepared:', data)
+
     if (enviar) {
-      onEnviar?.(data)
+      console.log('🔘 Calling onEnviar with data...')
+      onEnviar?.(data, true)
     } else {
-      onSave?.(data)
+      console.log('🔘 Calling onSave with data...')
+      onSave?.(data, false)
     }
   }
 
