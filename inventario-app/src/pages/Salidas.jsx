@@ -43,13 +43,7 @@ export default function Salidas() {
   const [showDetail, setShowDetail] = useState(false)
   const [selectedMovimiento, setSelectedMovimiento] = useState(null)
 
-  // Debug logs
-  console.log('🔍 Salidas - estado inicial:', {
-    tipoSalidaFilter,
-    statusTab,
-    location: location.search
-  })
-
+  
   const { user } = useAuthStore()
   const { canEdit, isReadOnly, isAdmin } = usePermissions()
   const toast = useToastStore()
@@ -108,22 +102,11 @@ export default function Salidas() {
     const params = new URLSearchParams(location.search)
     const movimientoId = params.get('id')
     
-    console.log('🔍 URL params recibidos en Salidas:', {
-      movimientoId,
-      search: location.search,
-      totalMovimientos: movimientos?.length,
-      movimientosIds: movimientos?.map(m => m.id).slice(0, 5)
-    })
-    
     if (movimientoId && movimientos && movimientos.length > 0) {
       const movimiento = movimientos.find(m => m.id === movimientoId)
-      console.log('🔍 Movimiento encontrado:', movimiento)
       if (movimiento) {
-        console.log('📍 Opening movement from URL:', movimientoId)
         setSelectedMovimiento(movimiento)
         setShowDetail(true)
-      } else {
-        console.log('❌ Movimiento no encontrado con ID:', movimientoId)
       }
     }
   }, [location.search, movimientos])

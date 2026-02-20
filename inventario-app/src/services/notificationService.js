@@ -689,8 +689,7 @@ export async function verificarStockBajo(productoId, ubicacionId) {
   const db = getDB()
   
   try {
-    console.log(`🔍 Verificando stock bajo: producto=${productoId}, ubicacion=${ubicacionId}`)
-    
+        
     // 1. Obtener inventario actual
     const { getDocs: getDocsImport } = await import('firebase/firestore')
     const inventarioQuery = query(

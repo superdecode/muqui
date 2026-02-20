@@ -77,9 +77,7 @@ export const checkAndFixAdminAccess = () => {
   console.log('Checking admin access...')
   const fixed = fixAdminAccess()
   if (fixed) {
-    console.log('✅ Admin access fixed! Please refresh the page.')
   } else {
-    console.log('❌ Could not fix admin access automatically')
   }
 }
 

@@ -32,10 +32,7 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
   const productosParaConteo = useMemo(() => {
     if (!formData.ubicacion_id || !formData.tipo_conteo) return []
     
-    console.log('🔍 CALCULANDO PRODUCTOS PARA CONTEO')
-    console.log('📍 Ubicación:', formData.ubicacion_id)
     console.log('📅 Tipo de conteo:', formData.tipo_conteo)
-    console.log('📦 Total productos disponibles:', todosProductos.length)
     
     const productosFiltrados = todosProductos.filter(producto => {
       if (producto.estado === 'INACTIVO' || producto.estado === 'ELIMINADO') return false
@@ -48,21 +45,13 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
       
       const pasaFiltro = matchUbicacion && matchFrecuencia
       
-      // Log de cada producto que pasa o no el filtro
       if (pasaFiltro || !matchFrecuencia) {
-        console.log(`${pasaFiltro ? '✅' : '❌'} ${producto.nombre}:`, {
-          frecuencia_inventario: frecuencia || 'SIN DEFINIR',
-          tipo_conteo: tipoConteo,
-          matchFrecuencia,
-          matchUbicacion,
-          pasaFiltro
-        })
+        return producto
       }
       
       return pasaFiltro
     })
     
-    console.log('✅ Productos que se incluirán en el conteo:', productosFiltrados.length)
     return productosFiltrados
   }, [todosProductos, formData.ubicacion_id, formData.tipo_conteo])
 

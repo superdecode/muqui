@@ -85,11 +85,9 @@ export default function Productos() {
   // Mutation para crear producto
   const createMutation = useMutation({
     mutationFn: (data) => {
-      console.log('🔍 Creando producto con datos:', data)
       return dataService.createProducto(data)
     },
     onSuccess: (response) => {
-      console.log('✅ Respuesta de creación:', response)
       queryClient.invalidateQueries({ queryKey: ['productos'] })
       queryClient.invalidateQueries({ queryKey: ['inventario'] })
       toast.success('Producto Creado', response.message || 'El producto se ha creado correctamente')
@@ -104,11 +102,9 @@ export default function Productos() {
   // Mutation para actualizar producto
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => {
-      console.log('🔍 Actualizando producto:', { id, data })
       return dataService.updateProducto(id, data)
     },
     onSuccess: (response) => {
-      console.log('✅ Respuesta de actualización:', response)
       queryClient.invalidateQueries({ queryKey: ['productos'] })
       queryClient.invalidateQueries({ queryKey: ['inventario'] })
       toast.success('Producto Actualizado', response.message || 'El producto se ha actualizado correctamente')

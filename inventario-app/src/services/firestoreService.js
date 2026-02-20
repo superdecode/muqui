@@ -535,7 +535,6 @@ const firestoreService = {
           }
           if (usersWithRole.length > 0) {
             await batch.commit()
-            console.log(`✅ Permisos propagados a ${usersWithRole.length} usuarios con rol ${data.nombre}`)
           }
         } catch (propError) {
           console.error('Error propagando permisos a usuarios:', propError)
@@ -602,14 +601,10 @@ const firestoreService = {
 
   updateProducto: async (productoId, productoData) => {
     try {
-      console.log('🔧 INICIANDO ACTUALIZACIÓN DE PRODUCTO')
-      console.log('📋 ID del producto:', productoId)
-      console.log('📦 Datos a actualizar:', productoData)
       
       const db = getDB()
       const productoRef = doc(db, 'productos', productoId)
       
-      console.log('🗂️ Referencia del documento:', productoRef.path)
 
       const datosActualizados = {
         ...productoData,
@@ -617,11 +612,9 @@ const firestoreService = {
         updated_at: serverTimestamp()
       }
 
-      console.log('📝 Datos finales a guardar:', datosActualizados)
 
       await updateDoc(productoRef, datosActualizados)
 
-      console.log('✅ Producto actualizado exitosamente')
       return {
         success: true,
         message: 'Producto actualizado exitosamente',
@@ -657,8 +650,6 @@ const firestoreService = {
   // Actualizar todos los productos para establecer tipo de conteo por defecto
   actualizarTodosLosProductosTipoConteo: async (tipoConteoPorDefecto = 'diario') => {
     try {
-      console.log('🔄 INICIANDO ACTUALIZACIÓN MASIVA DE TIPO DE CONTEO')
-      console.log('📋 Tipo de conteo por defecto:', tipoConteoPorDefecto)
       
       const db = getDB()
       const productosRef = collection(db, 'productos')
@@ -679,22 +670,14 @@ const firestoreService = {
             updated_at: serverTimestamp()
           })
           actualizados++
-          console.log(`✅ Actualizando: ${producto.nombre} -> ${tipoConteoPorDefecto}`)
         } else {
           omitidos++
-          console.log(`⏭️ Omitido: ${producto.nombre} (ya tiene: ${producto.frecuencia_inventario})`)
         }
       }
       
       // Ejecutar el batch
       await batch.commit()
       
-      console.log('═══════════════════════════════════════════════════')
-      console.log('✅ ACTUALIZACIÓN MASIVA COMPLETADA')
-      console.log('📊 Productos actualizados:', actualizados)
-      console.log('📊 Productos omitidos:', omitidos)
-      console.log('📊 Total procesados:', snapshot.size)
-      console.log('═══════════════════════════════════════════════════')
       
       return {
         success: true,
@@ -712,7 +695,6 @@ const firestoreService = {
   // Limpiar empresas asignadas de todos los productos
   limpiarEmpresasAsignadasProductos: async () => {
     try {
-      console.log('🔄 INICIANDO LIMPIEZA DE EMPRESAS ASIGNADAS')
       
       const db = getDB()
       const productosRef = collection(db, 'productos')
@@ -731,17 +713,11 @@ const firestoreService = {
           updated_at: serverTimestamp()
         })
         actualizados++
-        console.log(`✅ Limpiando empresas de: ${producto.nombre}`)
       }
       
       // Ejecutar el batch
       await batch.commit()
       
-      console.log('═══════════════════════════════════════════════════')
-      console.log('✅ LIMPIEZA DE EMPRESAS COMPLETADA')
-      console.log('📊 Productos actualizados:', actualizados)
-      console.log('📊 Total procesados:', snapshot.size)
-      console.log('═══════════════════════════════════════════════════')
       
       return {
         success: true,
@@ -946,34 +922,17 @@ const firestoreService = {
 
       // ========== NOTIFICACIONES ==========
       // Disparar notificación SOLO para TRANSFERENCIAS (no ventas ni mermas)
-      console.log('🔍 VERIFICANDO TIPO MOVIMIENTO:', {
-        tipo_movimiento: data.tipo_movimiento,
-        deberia_crear_notif: data.tipo_movimiento === 'TRANSFERENCIA' || !data.tipo_movimiento
-      })
-      
+            
       if (data.tipo_movimiento === 'TRANSFERENCIA' || !data.tipo_movimiento) {
         try {
-          console.log('🔔 ===== INICIANDO CREACIÓN DE NOTIFICACIÓN =====')
-          console.log('🔔 Transferencia ID:', movimientoRef.id)
-          console.log('🔔 Código legible:', codigoLegible)
-          console.log('🔔 Datos completos:', data)
-
           // Obtener ubicaciones para nombres
-          console.log('📍 Obteniendo ubicaciones...')
           const ubicaciones = await firestoreService.getAll('ubicaciones')
-          console.log('📍 Ubicaciones obtenidas:', ubicaciones.length)
           
           const origen = ubicaciones.find(u => u.id === data.origen_id)
           const destino = ubicaciones.find(u => u.id === data.destino_id)
-          console.log('📍 Origen encontrado:', origen?.nombre || 'NO ENCONTRADO')
-          console.log('📍 Destino encontrado:', destino?.nombre || 'NO ENCONTRADO')
-
           // Obtener TODOS los usuarios activos
-          console.log('👥 Obteniendo usuarios...')
           const todosUsuarios = await firestoreService.getAll('usuarios')
-          console.log('👥 Total usuarios en BD:', todosUsuarios.length)
-          console.log('👥 Usuarios activos:', todosUsuarios.filter(u => !u.estado || u.estado === 'ACTIVO').length)
-          
+                    
           // Filtrar usuarios destino: asignados a ubicación destino
           const usuariosDestino = todosUsuarios.filter(u => {
             if (u.estado && u.estado !== 'ACTIVO') return false
@@ -991,7 +950,6 @@ const firestoreService = {
             
             return ubicacionesAsignadas.includes(data.destino_id)
           })
-          console.log('👥 Usuarios asignados a destino:', usuariosDestino.length, usuariosDestino.map(u => u.id))
 
           // Filtrar admins globales (que NO estén ya en destino)
           const usuariosDestinoIds = usuariosDestino.map(u => u.id)
@@ -1006,22 +964,17 @@ const firestoreService = {
                    rolNorm === 'ADMIN_EMPRESA' ||
                    rolNorm === 'ADMIN EMPRESA'
           })
-          console.log('👥 Admins globales:', adminsGlobales.length, adminsGlobales.map(u => u.id))
 
           // Combinar destinatarios (usar user.id que es el codigo)
           const todosDestinatarios = [
             ...usuariosDestino.map(u => u.id),
             ...adminsGlobales.map(u => u.id)
           ]
-          console.log('📨 TOTAL DESTINATARIOS:', todosDestinatarios.length)
-          console.log('📨 IDs destinatarios:', todosDestinatarios)
 
           // Obtener usuario creador
           const usuarioCreador = todosUsuarios.find(u => u.id === data.usuario_creacion_id)
-          console.log('👤 Usuario creador:', usuarioCreador?.nombre || 'NO ENCONTRADO')
 
           if (todosDestinatarios.length > 0) {
-            console.log('🚀 LLAMANDO A triggerTransferenciaRecibida...')
             
             // Obtener productos completos con nombres
             const productosCompletos = await Promise.all(
@@ -1063,8 +1016,6 @@ const firestoreService = {
               },
               usuariosDestino: todosDestinatarios
             })
-            console.log('✅ ===== NOTIFICACIÓN CREADA EXITOSAMENTE =====')
-            console.log('✅ ID de notificación:', notifId)
           } else {
             console.warn('⚠️ ===== NO HAY DESTINATARIOS PARA NOTIFICACIÓN =====')
             console.warn('⚠️ Verifica que haya usuarios asignados a la ubicación destino')
@@ -1076,7 +1027,6 @@ const firestoreService = {
           // No fallar la transferencia si falla la notificación
         }
       } else {
-        console.log('ℹ️ No se crea notificación (tipo movimiento no es TRANSFERENCIA):', data.tipo_movimiento)
       }
 
       return {
@@ -1273,8 +1223,7 @@ const firestoreService = {
 
       // ========== VERIFICAR STOCK BAJO DESPUÉS DE TRANSFERENCIA ==========
       try {
-        console.log('🔍 Verificando stock bajo después de confirmar transferencia...')
-        
+                
         for (const detalle of detalles) {
           // Verificar origen
           await verificarStockBajo(detalle.producto_id, movimiento.origen_id)
@@ -1282,8 +1231,7 @@ const firestoreService = {
           await verificarStockBajo(detalle.producto_id, movimiento.destino_id)
         }
         
-        console.log('✅ Verificación de stock bajo completada')
-      } catch (stockError) {
+              } catch (stockError) {
         console.error('❌ Error verificando stock bajo (no afecta transferencia):', stockError)
       }
 
@@ -1504,12 +1452,10 @@ const firestoreService = {
       // ========== VERIFICAR STOCK BAJO DESPUÉS DE CONTEO ==========
       try {
         if (data.productos && data.productos.length > 0) {
-          console.log('🔍 Verificando stock bajo después de conteo...')
-          for (const prod of data.productos) {
+                    for (const prod of data.productos) {
             await verificarStockBajo(prod.producto_id, data.ubicacion_id)
           }
-          console.log('✅ Verificación de stock bajo completada')
-        }
+                  }
       } catch (stockError) {
         console.error('❌ Error verificando stock bajo (no afecta conteo):', stockError)
       }
@@ -2507,7 +2453,6 @@ const firestoreService = {
       const batch = writeBatch(db)
 
       // Validar datos requeridos
-      console.log('🔄 Procesar solicitud - data recibida:', data)
       
       if (!data.solicitud_id) {
         return { success: false, message: 'ID de solicitud es requerido' }
@@ -2528,7 +2473,6 @@ const firestoreService = {
 
       // Generar código legible para el movimiento
       const codigoMovimiento = await getNextSequentialCode('MV')
-      console.log('🔄 Código generado para movimiento:', codigoMovimiento)
 
       // Crear movimiento de TRANSFERENCIA (invirtiendo origen/destino según lógica de solicitud)
       // En solicitud: ubicacion_origen = desde donde despachan, ubicacion_destino = donde llega
@@ -2590,29 +2534,18 @@ const firestoreService = {
         updated_at: serverTimestamp()
       }
       
-      console.log('🔄 Actualizando solicitud procesada con:', {
-        solicitud_id: data.solicitud_id,
-        salida_id: movimientoRef.id,
-        codigo_salida: codigoMovimiento
-      })
-      
+            
       batch.update(solicitudRefForBatch, updateData)
 
       await batch.commit()
 
-      console.log('✅ Batch commit completado. Obteniendo código del movimiento creado...')
-      
+            
       // Obtener el documento del movimiento recién creado para obtener su código
       const movimientoCreado = await getDoc(movimientoRef)
       const movimientoData = movimientoCreado.data()
       const codigoMovimientoReal = movimientoData?.codigo_legible || codigoMovimiento
       
-      console.log('🔍 Movimiento creado obtenido:', {
-        movimientoId: movimientoRef.id,
-        codigo_legible: codigoMovimientoReal,
-        todosLosCampos: Object.keys(movimientoData)
-      })
-      
+            
       // Actualizar solicitud con el código real del movimiento
       const solicitudRefForUpdate = doc(db, 'solicitudes', data.solicitud_id)
       await updateDoc(solicitudRefForUpdate, {
@@ -2621,13 +2554,7 @@ const firestoreService = {
       
       // Verificación final
       const solicitudActualizada = await firestoreService.getById('solicitudes', data.solicitud_id)
-      console.log('🔍 Verificación final - solicitud actualizada:', {
-        id: solicitudActualizada.id,
-        estado: solicitudActualizada.estado,
-        salida_id: solicitudActualizada.salida_id,
-        codigo_salida: solicitudActualizada.codigo_salida
-      })
-
+      
       return {
         success: true,
         message: 'Solicitud procesada y salida creada exitosamente',
@@ -2703,7 +2630,6 @@ const firestoreService = {
   actualizarSolicitudesProcesadasSinCodigo: async () => {
     try {
       const db = getDB()
-      console.log('🔄 Buscando solicitudes procesadas sin codigo_salida...')
       
       // Obtener todas las solicitudes procesadas
       const solicitudesRef = collection(db, 'solicitudes')
@@ -2715,11 +2641,6 @@ const firestoreService = {
       for (const docSnap of snapshot.docs) {
         const solicitud = docSnap.data()
         if (solicitud.salida_id && !solicitud.codigo_salida) {
-          console.log('🔍 Solicitud encontrada sin código:', {
-            id: docSnap.id,
-            codigo_legible: solicitud.codigo_legible,
-            salida_id: solicitud.salida_id
-          })
           
           // Obtener el movimiento para obtener su código
           try {
@@ -2732,8 +2653,7 @@ const firestoreService = {
                 solicitudId: docSnap.id,
                 codigo_salida: movimiento.codigo_legible
               })
-              console.log('✅ Código encontrado:', movimiento.codigo_legible)
-            }
+                          }
           } catch (error) {
             console.error('Error obteniendo movimiento:', error)
           }
@@ -2742,17 +2662,13 @@ const firestoreService = {
       
       // Actualizar las solicitudes encontradas
       if (solicitudesParaActualizar.length > 0) {
-        console.log(`🔄 Actualizando ${solicitudesParaActualizar.length} solicitudes...`)
-        
+                
         for (const { solicitudId, codigo_salida } of solicitudesParaActualizar) {
           const solicitudRef = doc(db, 'solicitudes', solicitudId)
           await updateDoc(solicitudRef, { codigo_salida })
-          console.log(`✅ Actualizada solicitud ${solicitudId} con código ${codigo_salida}`)
         }
         
-        console.log(`✅ Se actualizaron ${solicitudesParaActualizar.length} solicitudes exitosamente`)
       } else {
-        console.log('✅ No se encontraron solicitudes para actualizar')
       }
       
       return {
@@ -2829,7 +2745,6 @@ const firestoreService = {
   actualizarSolicitudesProcesadasSinCodigo: async () => {
     try {
       const db = getDB()
-      console.log('🔄 Buscando solicitudes procesadas sin codigo_salida...')
       
       // Obtener todas las solicitudes procesadas
       const solicitudesRef = collection(db, 'solicitudes')
@@ -2841,11 +2756,6 @@ const firestoreService = {
       for (const docSnap of snapshot.docs) {
         const solicitud = docSnap.data()
         if (solicitud.salida_id && !solicitud.codigo_salida) {
-          console.log('🔍 Solicitud encontrada sin código:', {
-            id: docSnap.id,
-            codigo_legible: solicitud.codigo_legible,
-            salida_id: solicitud.salida_id
-          })
           
           // Obtener el movimiento para obtener su código
           try {
@@ -2858,8 +2768,7 @@ const firestoreService = {
                 solicitudId: docSnap.id,
                 codigo_salida: movimiento.codigo_legible
               })
-              console.log('✅ Código encontrado:', movimiento.codigo_legible)
-            }
+                          }
           } catch (error) {
             console.error('Error obteniendo movimiento:', error)
           }
@@ -2868,17 +2777,13 @@ const firestoreService = {
       
       // Actualizar las solicitudes encontradas
       if (solicitudesParaActualizar.length > 0) {
-        console.log(`🔄 Actualizando ${solicitudesParaActualizar.length} solicitudes...`)
-        
+                
         for (const { solicitudId, codigo_salida } of solicitudesParaActualizar) {
           const solicitudRef = doc(db, 'solicitudes', solicitudId)
           await updateDoc(solicitudRef, { codigo_salida })
-          console.log(`✅ Actualizada solicitud ${solicitudId} con código ${codigo_salida}`)
         }
         
-        console.log(`✅ Se actualizaron ${solicitudesParaActualizar.length} solicitudes exitosamente`)
       } else {
-        console.log('✅ No se encontraron solicitudes para actualizar')
       }
       
       return {
@@ -2899,7 +2804,6 @@ const firestoreService = {
   actualizarUrlsNotificacionesSolicitudes: async () => {
     try {
       const db = getDB()
-      console.log('🔄 Actualizando URLs de notificaciones de solicitudes...')
       
       const notificacionesRef = collection(db, 'notificaciones')
       const snapshot = await getDocs(notificacionesRef)
@@ -2925,12 +2829,10 @@ const firestoreService = {
             datos_adicionales: datosActualizados
           })
           
-          console.log(`✅ Actualizada notificación ${docSnap.id}: ${accionUrlActual} → ${nuevaUrl}`)
           actualizadas++
         }
       }
       
-      console.log(`✅ Se actualizaron ${actualizadas} notificaciones exitosamente`)
       
       return {
         success: true,

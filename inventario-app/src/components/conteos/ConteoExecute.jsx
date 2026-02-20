@@ -87,7 +87,6 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
     try {
       localStorage.setItem(progressKey, JSON.stringify(progressData))
       setLastSaved(new Date())
-      console.log('✅ Progreso guardado automáticamente')
     } catch (error) {
       console.error('Error guardando progreso:', error)
     }
@@ -122,7 +121,6 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
           if (mismoContexto) {
             setProductosConteo(savedProductos)
             setLastSaved(new Date(timestamp))
-            console.log('✅ Progreso anterior cargado:', timestamp)
             return
           } else {
             console.log('⚠️ Progreso guardado no coincide con el conteo actual, regenerando...')
@@ -134,12 +132,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
       }
 
       // Inicializar productos filtrados por ubicación y tipo de conteo
-      console.log('═══════════════════════════════════════════════════')
-      console.log('🔍 INICIANDO FILTRADO DE PRODUCTOS PARA CONTEO')
-      console.log('📍 Ubicación del conteo:', conteo.ubicacion_id)
       console.log('📅 Tipo de conteo:', conteo.tipo_conteo)
-      console.log('📦 Total productos disponibles:', productos.length)
-      console.log('═══════════════════════════════════════════════════')
 
       const productosUbicacion = productos.filter(producto => {
         if (producto.estado === 'INACTIVO' || producto.estado === 'ELIMINADO') return false
@@ -159,24 +152,14 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
 
         const pasaFiltro = matchUbicacion && matchFrecuencia
 
-        // Log detallado de cada producto
         if (pasaFiltro || !matchFrecuencia) {
-          console.log(`${pasaFiltro ? '✅' : '❌'} ${producto.nombre}:`, {
-            frecuencia_inventario: frecuencia || 'SIN DEFINIR',
-            tipo_conteo: tipoConteo,
-            matchFrecuencia,
-            matchUbicacion,
-            pasaFiltro
-          })
+          return producto
         }
 
         return pasaFiltro
       })
 
-      console.log('═══════════════════════════════════════════════════')
-      console.log('✅ PRODUCTOS FILTRADOS:', productosUbicacion.length)
-      console.log('═══════════════════════════════════════════════════')
-
+      
       const productosIniciales = productosUbicacion.map(producto => {
         const inventarioItem = inventario.find(inv => String(inv.producto_id) === String(producto.id))
 
@@ -217,7 +200,6 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
       // Si existe un detalle, eliminarlo de la base de datos
       if (detalleExistente) {
         await dataService.deleteDetalleConteo(detalleExistente.id)
-        console.log('✅ Detalle eliminado de la base de datos')
       }
       
       // Eliminar del estado local
@@ -236,7 +218,6 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
       // Mostrar notificación de éxito
       toast.success('Producto Eliminado', `"${productoNombre}" ha sido eliminado del conteo`)
       
-      console.log('✅ Producto eliminado del conteo:', productoNombre)
       setConfirmEliminar(null)
       setEliminandoId(null)
     } catch (error) {

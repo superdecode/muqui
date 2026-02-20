@@ -207,7 +207,7 @@ export default function ConteoDetail({ conteo, onClose }) {
                 </div>
                 <div>
                   <p className="text-sm text-slate-600 dark:text-slate-400">Tipo de Conteo</p>
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">{conteo.tipo_conteo?.toUpperCase()}</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{conteo.tipo_conteo?.charAt(0).toUpperCase() + conteo.tipo_conteo?.slice(1)}</p>
                 </div>
               </div>
 
@@ -235,19 +235,36 @@ export default function ConteoDetail({ conteo, onClose }) {
                       <p className="font-semibold text-slate-900 dark:text-slate-100">
                         {(() => {
                           try {
+                            // Si no hay fecha_completado, no mostrar nada
+                            if (!conteo.fecha_completado) {
+                              return '';
+                            }
+                            
                             let date;
+                            
                             if (conteo.fecha_completado?.seconds) {
                               // Firestore Timestamp
                               date = new Date(conteo.fecha_completado.seconds * 1000);
+                            } else if (conteo.fecha_completado?.toDate && typeof conteo.fecha_completado.toDate === 'function') {
+                              // Firestore Timestamp con método toDate
+                              date = conteo.fecha_completado.toDate();
                             } else if (typeof conteo.fecha_completado === 'string') {
                               // ISO String
                               date = new Date(conteo.fecha_completado);
                             } else if (conteo.fecha_completado instanceof Date) {
                               // Date object
                               date = conteo.fecha_completado;
+                            } else if (typeof conteo.fecha_completado === 'object' && conteo.fecha_completado !== null) {
+                              // Objeto con nanoseconds o timestamp
+                              if (conteo.fecha_completado.nanoseconds) {
+                                date = new Date(conteo.fecha_completado.seconds * 1000 + conteo.fecha_completado.nanoseconds / 1000000);
+                              } else {
+                                // Intentar convertir el objeto directamente
+                                date = new Date(conteo.fecha_completado);
+                              }
                             } else {
-                              // Fallback
-                              date = new Date();
+                              // Fallback - no mostrar nada si no podemos procesar
+                              return '';
                             }
                             
                             if (isNaN(date.getTime())) {
@@ -256,8 +273,8 @@ export default function ConteoDetail({ conteo, onClose }) {
                             
                             return format(date, "d 'de' MMMM 'de' yyyy' 'a las' HH:mm", { locale: es });
                           } catch (error) {
-                            console.error('Error formateando fecha:', error);
-                            return 'Error en fecha';
+                            console.error('Error formateando fecha_completado:', error, 'Valor:', conteo.fecha_completado);
+                            return 'Fecha inválida';
                           }
                         })()}
                       </p>
