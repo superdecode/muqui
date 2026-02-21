@@ -347,6 +347,7 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
                 value={formData.stock_minimo}
                 onChange={handleChange}
                 min="0"
+                step="0.01"
                 error={errors.stock_minimo}
                 required
               />

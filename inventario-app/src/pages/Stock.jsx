@@ -196,7 +196,7 @@ export default function Stock() {
 
   // Inline stock_minimo save
   const handleSaveStockMin = (productoId) => {
-    const val = parseInt(stockMinValue)
+    const val = parseFloat(stockMinValue)
     if (isNaN(val) || val < 0) {
       toast.error('Valor inválido', 'El stock mínimo debe ser un número >= 0')
       return
@@ -389,6 +389,7 @@ export default function Stock() {
                         <input
                           type="number"
                           min="0"
+                          step="0.01"
                           value={stockMinValue}
                           onChange={(e) => setStockMinValue(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') handleSaveStockMin(row.producto_id); if (e.key === 'Escape') setEditingStockMin(null) }}

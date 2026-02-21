@@ -268,8 +268,8 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
     setSelectedProductos(selectedProductos.map(p => {
       if (p.id === productoId) {
         // Si el producto no tiene stock, permitir 0 como mínimo
-        // Si tiene stock, el mínimo es 1
-        const minCantidad = p.stock > 0 ? 1 : 0
+        // Si tiene stock, el mínimo es 0.01
+        const minCantidad = p.stock > 0 ? 0.01 : 0
         const cantidadValida = Math.max(minCantidad, Math.min(cantidad, p.stock > 0 ? p.stock : 9999))
         return { ...p, cantidad: cantidadValida }
       }
@@ -718,10 +718,11 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
                       <td className="px-4 py-3">
                         <input
                           type="number"
-                          min={producto.stock > 0 ? "1" : "0"}
+                          min="0.01"
+                          step="0.01"
                           max={producto.stock > 0 ? producto.stock : undefined}
                           value={producto.cantidad}
-                          onChange={(e) => handleCantidadChange(producto.id, parseInt(e.target.value))}
+                          onChange={(e) => handleCantidadChange(producto.id, parseFloat(e.target.value) || 0)}
                           className="w-24 px-3 py-2 border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-center font-bold focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                         />
                       </td>

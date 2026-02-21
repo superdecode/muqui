@@ -560,9 +560,10 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
                                   ref={el => { inputRefs.current[index] = el }}
                                   type="number"
                                   min="0"
+                                  step="0.01"
                                   value={cantidadesRecibidas[detalle.id] || cantEnviada}
                                   onChange={(e) => {
-                                    const val = Math.max(0, parseInt(e.target.value) || 0)
+                                    const val = Math.max(0, parseFloat(e.target.value) || 0)
                                     setCantidadesRecibidas(prev => ({ ...prev, [detalle.id]: val }))
                                   }}
                                   onKeyDown={(e) => {
@@ -573,8 +574,8 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
                                     }
                                   }}
                                   className={`w-20 px-2 py-1.5 text-center border rounded-lg text-sm font-bold focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                                    (cantidadesRecibidas[detalle.id] || cantEnviada) > cantEnviada 
-                                      ? 'border-orange-300 bg-orange-50 text-orange-700' 
+                                    (cantidadesRecibidas[detalle.id] || cantEnviada) > cantEnviada
+                                      ? 'border-orange-300 bg-orange-50 text-orange-700'
                                       : (cantidadesRecibidas[detalle.id] || cantEnviada) < cantEnviada
                                         ? 'border-blue-300 bg-blue-50 text-blue-700'
                                         : 'border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100'

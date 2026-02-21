@@ -70,7 +70,7 @@ export default function ProcesarSolicitudModal({ solicitud, onClose, onProcesar,
 
   // Actualizar cantidad aprobada
   const handleCantidadChange = (productoId, cantidad) => {
-    const cantidadNum = parseInt(cantidad) || 0
+    const cantidadNum = parseFloat(cantidad) || 0
     if (cantidadNum < 0) return
 
     setProductosAprobados(prev =>
@@ -303,6 +303,7 @@ export default function ProcesarSolicitudModal({ solicitud, onClose, onProcesar,
                                 <input
                                   type="number"
                                   min="0"
+                                  step="0.01"
                                   max={stock}
                                   value={prod.cantidad_aprobada}
                                   onChange={(e) => handleCantidadChange(prod.producto_id, e.target.value)}
