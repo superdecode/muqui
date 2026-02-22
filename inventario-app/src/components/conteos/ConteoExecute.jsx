@@ -237,7 +237,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
   // Manejar cambio de stock con onBlur (actualiza valores reales y afecta filtros)
   const handleStockBlur = (index, productoId, value) => {
     const newProductos = [...productosConteo]
-    newProductos[index].stock_fisico = value === '' ? '' : parseInt(value)
+    newProductos[index].stock_fisico = value === '' ? '' : parseFloat(value)
     setProductosConteo(newProductos)
 
     // Limpiar valor temporal
@@ -280,7 +280,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
       productos: productosConteo.map(p => ({
         producto_id: p.producto_id,
         cantidad_sistema: p.stock_sistema,
-        cantidad_fisica: parseInt(p.stock_fisico)
+        cantidad_fisica: parseFloat(p.stock_fisico)
       }))
     }
 
@@ -308,7 +308,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
       productos: productosContados.map(p => ({
         producto_id: p.producto_id,
         cantidad_sistema: p.stock_sistema,
-        cantidad_fisica: parseInt(p.stock_fisico)
+        cantidad_fisica: parseFloat(p.stock_fisico)
       }))
     }
 
@@ -324,7 +324,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
 
   const getDiferencia = (producto) => {
     if (producto.stock_fisico === '' || producto.stock_fisico === null) return null
-    return parseInt(producto.stock_fisico) - producto.stock_sistema
+    return parseFloat(producto.stock_fisico) - producto.stock_sistema
   }
 
   if (isLoading) {
