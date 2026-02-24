@@ -1398,8 +1398,81 @@ const firestoreService = {
       const db = getDB()
       const batch = writeBatch(db)
 
-      // Actualizar conteo - soporta COMPLETADO y PARCIALMENTE_COMPLETADO
       const conteoRef = doc(db, 'conteos', data.conteo_id)
+      const conteoDoc = await getDoc(conteoRef)
+
+      // ========== MODO EDICIÓN ==========
+      if (data.es_edicion) {
+        // Obtener el conteo actual para incrementar el contador de ediciones
+        const conteoData = conteoDoc.exists() ? conteoDoc.data() : {}
+        const edicionesActuales = conteoData.ediciones_count || 0
+
+        // Verificar límite de 3 ediciones
+        if (edicionesActuales >= 3) {
+          return { success: false, message: 'Este conteo ya alcanzó el límite máximo de 3 ediciones' }
+        }
+
+        // Actualizar conteo con datos de edición (mantener estado original)
+        const updateData = {
+          fecha_edicion: serverTimestamp(),
+          usuario_editor_id: data.usuario_ejecutor_id,
+          ediciones_count: edicionesActuales + 1
+        }
+        batch.update(conteoRef, updateData)
+
+        // Actualizar detalles existentes
+        if (data.productos && data.productos.length > 0) {
+          // Obtener detalles existentes
+          const detallesExistentes = await firestoreService.getDetalleConteos(data.conteo_id)
+
+          for (const prod of data.productos) {
+            // Buscar el detalle existente para este producto
+            const detalleExistente = detallesExistentes.find(d => d.producto_id === prod.producto_id)
+
+            if (detalleExistente) {
+              // Actualizar detalle existente
+              const detalleRef = doc(db, 'detalle_conteos', detalleExistente.id)
+              batch.update(detalleRef, {
+                cantidad_fisica: prod.cantidad_fisica,
+                diferencia: prod.cantidad_fisica - prod.cantidad_sistema,
+                editado: true,
+                fecha_edicion: serverTimestamp()
+              })
+            }
+
+            // Actualizar inventario con las nuevas cantidades
+            const inventarioExistente = await firestoreService.queryWithFilters('inventario', [
+              where('producto_id', '==', prod.producto_id),
+              where('ubicacion_id', '==', data.ubicacion_id)
+            ])
+
+            if (inventarioExistente.length > 0) {
+              const invRef = doc(db, 'inventario', inventarioExistente[0].id)
+              batch.update(invRef, {
+                stock_actual: prod.cantidad_fisica,
+                ultima_actualizacion: serverTimestamp()
+              })
+            }
+          }
+        }
+
+        await batch.commit()
+
+        // Verificar stock bajo después de edición
+        try {
+          if (data.productos && data.productos.length > 0) {
+            for (const prod of data.productos) {
+              await verificarStockBajo(prod.producto_id, data.ubicacion_id)
+            }
+          }
+        } catch (stockError) {
+          console.error('❌ Error verificando stock bajo (no afecta edición):', stockError)
+        }
+
+        return { success: true, message: 'Conteo editado exitosamente' }
+      }
+
+      // ========== MODO NORMAL (Completar conteo) ==========
       const estadoFinal = data.estado || 'COMPLETADO'
 
       const updateData = {
@@ -1408,7 +1481,6 @@ const firestoreService = {
         usuario_ejecutor_id: data.usuario_ejecutor_id
       }
       // Si no tenía fecha_inicio, ponerla ahora
-      const conteoDoc = await getDoc(conteoRef)
       if (conteoDoc.exists() && !conteoDoc.data().fecha_inicio) {
         updateData.fecha_inicio = serverTimestamp()
       }
@@ -1452,10 +1524,10 @@ const firestoreService = {
       // ========== VERIFICAR STOCK BAJO DESPUÉS DE CONTEO ==========
       try {
         if (data.productos && data.productos.length > 0) {
-                    for (const prod of data.productos) {
+          for (const prod of data.productos) {
             await verificarStockBajo(prod.producto_id, data.ubicacion_id)
           }
-                  }
+        }
       } catch (stockError) {
         console.error('❌ Error verificando stock bajo (no afecta conteo):', stockError)
       }

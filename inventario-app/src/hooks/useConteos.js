@@ -73,24 +73,35 @@ export const useConteos = (ubicacionId) => {
     }
   })
 
-  // Ejecutar conteo (completar)
+  // Ejecutar conteo (completar o editar)
   const ejecutarConteo = useMutation({
     mutationFn: async (data) => {
       return await dataService.ejecutarConteo(data)
     },
-    onSuccess: (response) => {
+    onSuccess: (response, variables) => {
       queryClient.invalidateQueries({ queryKey: ['conteos'] })
       queryClient.invalidateQueries({ queryKey: ['inventario'] })
       queryClient.invalidateQueries({ queryKey: ['alertas'] })
-      toast.success(
-        'Conteo Completado',
-        response.message || 'El conteo se ha ejecutado exitosamente'
-      )
+      queryClient.invalidateQueries({ queryKey: ['conteo-detalle'] })
+
+      // Mensaje diferente para edición vs ejecución normal
+      if (variables.es_edicion) {
+        toast.success(
+          'Conteo Editado',
+          response.message || 'Los cambios han sido guardados correctamente'
+        )
+      } else {
+        toast.success(
+          'Conteo Completado',
+          response.message || 'El conteo se ha ejecutado exitosamente'
+        )
+      }
     },
-    onError: (error) => {
+    onError: (error, variables) => {
+      const errorTitle = variables.es_edicion ? 'Error al Editar Conteo' : 'Error al Ejecutar Conteo'
       toast.error(
-        'Error al Ejecutar Conteo',
-        error.message || 'No se pudo ejecutar el conteo. Intenta nuevamente.'
+        errorTitle,
+        error.message || 'No se pudo procesar el conteo. Intenta nuevamente.'
       )
     }
   })

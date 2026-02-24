@@ -3,12 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
 import Alert from '../common/Alert'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { Package, CheckCircle, AlertCircle, X, Search, Save, Clock, Trash2 } from 'lucide-react'
+import { Package, CheckCircle, AlertCircle, X, Search, Clock, Trash2 } from 'lucide-react'
 import dataService from '../../services/dataService'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useToastStore } from '../../stores/toastStore'
 
-export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSaving = false }) {
+export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSaving = false, editMode = false }) {
   const { canEdit } = usePermissions()
   const toast = useToastStore()
   const [productosConteo, setProductosConteo] = useState([])
@@ -17,7 +17,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
   const [filterStatus, setFilterStatus] = useState('todos')
   const [showPartialModal, setShowPartialModal] = useState(false)
   const [lastSaved, setLastSaved] = useState(null)
-  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true)
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(!editMode) // Desactivar autoguardado en modo edición
   const [tempValues, setTempValues] = useState({}) // Valores temporales mientras se edita
   const [confirmEliminar, setConfirmEliminar] = useState(null) // Producto a confirmar eliminación
   const [eliminandoId, setEliminandoId] = useState(null)
@@ -36,7 +36,14 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
     enabled: !!conteo.ubicacion_id
   })
 
-  const isLoading = isLoadingProductos || isLoadingInventario
+  // Cargar detalles del conteo (para modo edición)
+  const { data: detallesConteo = [], isLoading: isLoadingDetalles } = useQuery({
+    queryKey: ['conteo-detalle', conteo.id],
+    queryFn: () => dataService.getDetalleConteos(conteo.id),
+    enabled: editMode && !!conteo.id
+  })
+
+  const isLoading = isLoadingProductos || isLoadingInventario || (editMode && isLoadingDetalles)
 
   // Calcular estadísticas y filtrar productos con useMemo para optimizar rendimiento
   const estadisticas = useMemo(() => {
@@ -110,10 +117,28 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
   // Cargar progreso guardado o inicializar productos
   useEffect(() => {
     if (!isLoading && productos.length > 0) {
+      // MODO EDICIÓN: Cargar los detalles ya contados
+      if (editMode && detallesConteo.length > 0) {
+        const productosEditables = detallesConteo.map(detalle => {
+          const producto = productos.find(p => String(p.id) === String(detalle.producto_id))
+          return {
+            producto_id: detalle.producto_id,
+            nombre: producto?.nombre || `Producto ${detalle.producto_id}`,
+            especificacion: producto?.especificacion || '',
+            stock_sistema: detalle.cantidad_sistema || 0,
+            stock_fisico: detalle.cantidad_fisica,
+            unidad_medida: producto?.unidad_medida || ''
+          }
+        })
+        setProductosConteo(productosEditables)
+        return
+      }
+
+      // MODO NORMAL: Buscar progreso guardado
       const progressKey = `conteo_progress_${conteo.id}`
       const savedProgress = localStorage.getItem(progressKey)
 
-      if (savedProgress) {
+      if (savedProgress && !editMode) {
         try {
           const { productos: savedProductos, timestamp, ubicacion_id: savedUbic, tipo_conteo: savedTipo } = JSON.parse(savedProgress)
           // Validar que el progreso guardado corresponde al mismo conteo/tipo
@@ -159,7 +184,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
         return pasaFiltro
       })
 
-      
+
       const productosIniciales = productosUbicacion.map(producto => {
         const inventarioItem = inventario.find(inv => String(inv.producto_id) === String(producto.id))
 
@@ -175,7 +200,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
 
       setProductosConteo(productosIniciales)
     }
-  }, [isLoading, productos, inventario, conteo.ubicacion_id, conteo.tipo_conteo]) // Agregado tipo_conteo para evitar inconsistencias
+  }, [isLoading, productos, inventario, conteo.ubicacion_id, conteo.tipo_conteo, editMode, detallesConteo]) // Agregado editMode y detallesConteo
 
   // Función para mostrar modal de confirmación de eliminación
   const handleEliminarProducto = (productoId) => {
@@ -362,13 +387,18 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-card-hover max-w-7xl w-full max-h-[95vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="relative overflow-hidden bg-gradient-ocean p-6 flex-shrink-0">
+        <div className={`relative overflow-hidden ${editMode ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-ocean'} p-6 flex-shrink-0`}>
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16"></div>
           <div className="relative z-10">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-bold text-white">Ejecutar Conteo</h2>
+                <h2 className="text-2xl font-bold text-white">
+                  {editMode ? 'Editar Conteo' : 'Ejecutar Conteo'}
+                </h2>
                 <p className="text-white/90">{conteo.ubicacion || conteo.ubicacion_id} - {conteo.tipo_conteo}</p>
+                {editMode && (
+                  <p className="text-white/80 text-sm mt-1">Modifica las cantidades y confirma los cambios</p>
+                )}
               </div>
               <button
                 onClick={onClose}
@@ -379,6 +409,19 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
             </div>
           </div>
         </div>
+
+        {/* Banner de advertencia - Última edición */}
+        {editMode && (conteo.ediciones_count || 0) === 2 && (
+          <div className="bg-red-600 text-white px-6 py-4 flex items-center gap-3 flex-shrink-0">
+            <AlertCircle size={24} className="flex-shrink-0" />
+            <div className="flex-1">
+              <p className="font-bold text-lg">⚠️ ÚLTIMA OPORTUNIDAD DE EDICIÓN</p>
+              <p className="text-sm text-white/90">
+                Este conteo ya ha sido editado 2 veces. Esta es tu última edición permitida. Después no podrás realizar más cambios.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Indicador de Progreso */}
         <div className="bg-gradient-to-r from-primary-500 to-primary-600 px-6 py-4 flex-shrink-0">
@@ -526,7 +569,9 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
                         </div>
                         <div className="flex-1 min-w-0">
                           <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-sm truncate">{producto.nombre}</h4>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">{producto.producto_id} • {producto.unidad_medida}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {producto.especificacion || 'Sin especificación'} ({producto.unidad_medida})
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -618,25 +663,99 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
               >
                 Cancelar
               </Button>
-              <Button
-                type="button"
-                variant="warning"
-                onClick={() => setShowPartialModal(true)}
-                className="flex-1"
-                disabled={isSaving || estadisticas.productosContados === 0}
-              >
-                <Save size={20} className="mr-2" />
-                Finalizar Parcial
-              </Button>
-              <Button
-                type="submit"
-                variant="success"
-                loading={isSaving}
-                className="flex-1"
-              >
-                <CheckCircle size={20} className="mr-2" />
-                {isSaving ? 'Completando...' : 'Completar Conteo'}
-              </Button>
+              {editMode ? (
+                // MODO EDICIÓN: Botón para confirmar edición
+                <Button
+                  type="button"
+                  variant={(conteo.ediciones_count || 0) === 2 ? 'danger' : 'warning'}
+                  onClick={() => {
+                    // Si es la última edición, pedir confirmación adicional
+                    if ((conteo.ediciones_count || 0) === 2) {
+                      const confirmar = window.confirm(
+                        '⚠️ CONFIRMACIÓN FINAL\n\n' +
+                        'Esta es tu ÚLTIMA edición permitida. Después de confirmar, ' +
+                        'NO PODRÁS editar este conteo nuevamente.\n\n' +
+                        '¿Estás completamente seguro de que los datos son correctos?'
+                      )
+                      if (!confirmar) return
+                    }
+
+                    // Validar que no haya valores inválidos
+                    const invalidValues = productosConteo.filter(p =>
+                      p.stock_fisico === '' || p.stock_fisico === null || isNaN(p.stock_fisico) || p.stock_fisico < 0
+                    )
+                    if (invalidValues.length > 0) {
+                      setError('Todos los valores de stock físico deben ser números válidos y positivos')
+                      return
+                    }
+                    // Enviar como edición de conteo
+                    const datosConteo = {
+                      estado: conteo.estado, // Mantener el estado original
+                      es_edicion: true,
+                      productos: productosConteo.map(p => ({
+                        producto_id: p.producto_id,
+                        cantidad_sistema: p.stock_sistema,
+                        cantidad_fisica: parseFloat(p.stock_fisico)
+                      }))
+                    }
+                    onSave(datosConteo).then(() => {
+                      toast.success('Conteo Editado', 'Los cambios han sido guardados correctamente')
+                    }).catch(() => {
+                      setError('Error al guardar la edición. Por favor intenta nuevamente.')
+                    })
+                  }}
+                  loading={isSaving}
+                  className="flex-1"
+                  disabled={isSaving}
+                >
+                  <CheckCircle size={20} className="mr-2" />
+                  {isSaving ? 'Guardando...' : (conteo.ediciones_count || 0) === 2 ? '⚠️ Confirmar ÚLTIMA Edición' : 'Confirmar Edición'}
+                </Button>
+              ) : (
+                // MODO NORMAL: Botón para finalizar conteo
+                <Button
+                  type="button"
+                  variant="success"
+                  onClick={() => {
+                    // Si está al 100%, finalizar como completo
+                    if (estadisticas.porcentajeCompletado === 100) {
+                      // Validar que no haya valores inválidos
+                      const invalidValues = productosConteo.filter(p => isNaN(p.stock_fisico) || p.stock_fisico < 0)
+                      if (invalidValues.length > 0) {
+                        setError('Los valores de stock físico deben ser números positivos')
+                        return
+                      }
+                      // Enviar como conteo completo
+                      const datosConteo = {
+                        estado: 'COMPLETADO',
+                        productos: productosConteo.map(p => ({
+                          producto_id: p.producto_id,
+                          cantidad_sistema: p.stock_sistema,
+                          cantidad_fisica: parseFloat(p.stock_fisico)
+                        }))
+                      }
+                      onSave(datosConteo).then(() => {
+                        localStorage.removeItem(`conteo_progress_${conteo.id}`)
+                      }).catch(() => {
+                        setError('Error al completar el conteo. Por favor intenta nuevamente.')
+                      })
+                    } else {
+                      // Si es menos del 100%, mostrar modal de confirmación parcial
+                      if (estadisticas.productosContados === 0) {
+                        setError('Debes contar al menos un producto para finalizar el conteo')
+                        return
+                      }
+                      setShowPartialModal(true)
+                    }
+                  }}
+                  loading={isSaving}
+                  className="flex-1"
+                  disabled={isSaving || estadisticas.productosContados === 0}
+                >
+                  <CheckCircle size={20} className="mr-2" />
+                  {isSaving ? 'Finalizando...' : 'Finalizar'}
+                </Button>
+              )}
             </div>
           </div>
         </form>

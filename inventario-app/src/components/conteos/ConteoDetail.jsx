@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Button from '../common/Button'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { Package, MapPin, Calendar, User, CheckCircle, AlertCircle, X, Download, Trash2 } from 'lucide-react'
+import { Package, MapPin, Calendar, User, CheckCircle, AlertCircle, X, Download, Trash2, Pencil } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import dataService from '../../services/dataService'
 import { useToastStore } from '../../stores/toastStore'
 import { exportConteoToExcel } from '../../utils/exportUtils'
-import { formatDisplayId } from '../../utils/formatters'
+import { formatDisplayId, safeFormatDate } from '../../utils/formatters'
 import { usePermissions } from '../../hooks/usePermissions'
 
 export default function ConteoDetail({ conteo, onClose }) {
@@ -145,13 +145,15 @@ export default function ConteoDetail({ conteo, onClose }) {
               </div>
               <div className="flex items-center gap-2">
                 <span className={`px-4 py-2 rounded-full text-sm font-semibold ${
-                  conteo.estado === 'PROGRAMADO' 
-                    ? 'bg-blue-500 text-white' 
+                  conteo.estado === 'PROGRAMADO'
+                    ? 'bg-blue-500 text-white'
                     : conteo.estado === 'COMPLETADO'
                     ? 'bg-green-500 text-white'
+                    : conteo.estado === 'PARCIALMENTE_COMPLETADO'
+                    ? 'bg-orange-500 text-white'
                     : 'bg-yellow-500 text-white'
                 }`}>
-                  {conteo.estado}
+                  {conteo.estado === 'PARCIALMENTE_COMPLETADO' ? 'PARCIAL' : conteo.estado}
                 </span>
                 {(conteo.estado === 'COMPLETADO' || conteo.estado === 'PARCIALMENTE_COMPLETADO') && detalles.length > 0 && (
                   <button
@@ -233,50 +235,7 @@ export default function ConteoDetail({ conteo, onClose }) {
                     <div>
                       <p className="text-sm text-slate-600 dark:text-slate-400">Completado el</p>
                       <p className="font-semibold text-slate-900 dark:text-slate-100">
-                        {(() => {
-                          try {
-                            // Si no hay fecha_completado, no mostrar nada
-                            if (!conteo.fecha_completado) {
-                              return '';
-                            }
-                            
-                            let date;
-                            
-                            if (conteo.fecha_completado?.seconds) {
-                              // Firestore Timestamp
-                              date = new Date(conteo.fecha_completado.seconds * 1000);
-                            } else if (conteo.fecha_completado?.toDate && typeof conteo.fecha_completado.toDate === 'function') {
-                              // Firestore Timestamp con método toDate
-                              date = conteo.fecha_completado.toDate();
-                            } else if (typeof conteo.fecha_completado === 'string') {
-                              // ISO String
-                              date = new Date(conteo.fecha_completado);
-                            } else if (conteo.fecha_completado instanceof Date) {
-                              // Date object
-                              date = conteo.fecha_completado;
-                            } else if (typeof conteo.fecha_completado === 'object' && conteo.fecha_completado !== null) {
-                              // Objeto con nanoseconds o timestamp
-                              if (conteo.fecha_completado.nanoseconds) {
-                                date = new Date(conteo.fecha_completado.seconds * 1000 + conteo.fecha_completado.nanoseconds / 1000000);
-                              } else {
-                                // Intentar convertir el objeto directamente
-                                date = new Date(conteo.fecha_completado);
-                              }
-                            } else {
-                              // Fallback - no mostrar nada si no podemos procesar
-                              return '';
-                            }
-                            
-                            if (isNaN(date.getTime())) {
-                              return 'Fecha no válida';
-                            }
-                            
-                            return format(date, "d 'de' MMMM 'de' yyyy' 'a las' HH:mm", { locale: es });
-                          } catch (error) {
-                            console.error('Error formateando fecha_completado:', error, 'Valor:', conteo.fecha_completado);
-                            return 'Fecha inválida';
-                          }
-                        })()}
+                        {safeFormatDate(conteo.fecha_completado, "d 'de' MMMM 'de' yyyy 'a las' HH:mm", 'Fecha no disponible')}
                       </p>
                     </div>
                   </div>
@@ -289,6 +248,35 @@ export default function ConteoDetail({ conteo, onClose }) {
                   <div>
                     <p className="text-sm text-slate-600 dark:text-slate-400">Ejecutado por</p>
                     <p className="font-semibold text-slate-900 dark:text-slate-100">{getUsuarioNombre(conteo.usuario_ejecutor_id)}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Cuarta fila: Edición (solo si fue editado) */}
+            {conteo.fecha_edicion && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-amber-100 rounded-lg">
+                    <Pencil className="text-amber-600" size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      Editado el {conteo.ediciones_count > 1 ? `(${conteo.ediciones_count} veces)` : ''}
+                    </p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">
+                      {safeFormatDate(conteo.fecha_edicion, "d 'de' MMMM 'de' yyyy 'a las' HH:mm", 'Fecha no disponible')}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-amber-100 rounded-lg">
+                    <User className="text-amber-600" size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Editado por</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{getUsuarioNombre(conteo.usuario_editor_id)}</p>
                   </div>
                 </div>
               </div>
@@ -317,10 +305,8 @@ export default function ConteoDetail({ conteo, onClose }) {
                   <table className="w-full">
                     <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
                       <tr>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">ID Producto</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Nombre</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Especificación</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Unidad de Medida</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Producto</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Especificación (Unidad)</th>
                         <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Sistema</th>
                         <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Físico</th>
                         <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">Diferencia</th>
@@ -340,23 +326,18 @@ export default function ConteoDetail({ conteo, onClose }) {
                                 <div className="p-2 bg-primary-100 rounded-lg">
                                   <Package size={16} className="text-primary-600" />
                                 </div>
-                                <span className="font-mono text-sm font-medium text-slate-900 dark:text-slate-100">
-                                  {productoInfo.id}
-                                </span>
+                                <p className="font-semibold text-slate-900 dark:text-slate-100">{productoInfo.nombre}</p>
                               </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <p className="font-semibold text-slate-900 dark:text-slate-100">{productoInfo.nombre}</p>
                             </td>
                             <td className="px-6 py-4">
                               <p className="text-slate-700 dark:text-slate-300">
                                 {productoInfo.especificacion || <span className="text-slate-400 italic">Sin especificación</span>}
+                                {productoInfo.unidad_medida && (
+                                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    ({productoInfo.unidad_medida})
+                                  </span>
+                                )}
                               </p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                                {productoInfo.unidad_medida || 'N/A'}
-                              </span>
                             </td>
                             <td className="px-6 py-4 text-center">
                               <span className="text-lg font-bold text-slate-900 dark:text-slate-100">

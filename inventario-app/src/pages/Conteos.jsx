@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ClipboardCheck, Plus, Play, Download, CheckCircle, Clock, AlertCircle, Trash2, Printer, Search, Filter, Eye } from 'lucide-react'
+import { ClipboardCheck, Plus, Play, Download, CheckCircle, Clock, AlertCircle, Trash2, Printer, Search, Eye, Pencil } from 'lucide-react'
 import Card from '../components/common/Card'
 import DataTable from '../components/common/DataTable'
 import Button from '../components/common/Button'
@@ -27,9 +27,10 @@ export default function Conteos() {
   const [selectedConteo, setSelectedConteo] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [sedeFilter, setSedeFilter] = useState('')
+  const [editMode, setEditMode] = useState(false) // Modo edición para conteos completados
 
   const { user, canWrite: canWriteModule } = useAuthStore()
-  const { isReadOnly } = usePermissions()
+  const { isReadOnly, getPermissionLevel, isAdmin } = usePermissions()
   const isReadOnlyConteos = isReadOnly('conteos')
   const toast = useToastStore()
 
@@ -73,6 +74,28 @@ export default function Conteos() {
       usuario = usuarios.find(u => u.codigo === usuarioId)
     }
     return usuario ? usuario.nombre : usuarioId
+  }
+
+  // Verificar si el usuario puede editar conteos completados (permiso Total + ubicación asignada + máximo 3 ediciones)
+  const canEditCompletedConteo = (conteo) => {
+    // Solo conteos COMPLETADO o PARCIALMENTE_COMPLETADO pueden editarse
+    if (conteo.estado !== 'COMPLETADO' && conteo.estado !== 'PARCIALMENTE_COMPLETADO') return false
+
+    // Verificar límite de 3 ediciones
+    const edicionesCount = conteo.ediciones_count || 0
+    if (edicionesCount >= 3) return false
+
+    // Admin Global siempre puede editar (si no excede el límite)
+    if (isAdmin()) return true
+
+    // Verificar permiso Total en conteos
+    const level = getPermissionLevel('conteos')
+    if (level !== 'total') return false
+
+    // Verificar que la ubicación esté asignada al usuario
+    if (!allowedUbicacionIds.includes(conteo.ubicacion_id)) return false
+
+    return true
   }
 
   // Función para imprimir conteo
@@ -409,7 +432,7 @@ export default function Conteos() {
               {isEjecutando ? 'Completando...' : 'Completar'}
             </Button>
           )}
-          {row.estado === 'COMPLETADO' && (
+          {(row.estado === 'COMPLETADO' || row.estado === 'PARCIALMENTE_COMPLETADO') && (
             <button
               onClick={() => handleImprimir(row)}
               className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -418,14 +441,31 @@ export default function Conteos() {
               <Printer size={18} />
             </button>
           )}
-          <Button
-            size="sm"
-            variant="outline"
+          {/* Botón editar - Solo usuarios con permiso Total y ubicación asignada */}
+          {canEditCompletedConteo(row) && (
+            <button
+              onClick={() => handleEditar(row)}
+              className={`p-2 rounded-lg transition-colors ${
+                (row.ediciones_count || 0) === 2
+                  ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
+                  : 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20'
+              }`}
+              title={
+                (row.ediciones_count || 0) === 2
+                  ? '⚠️ Última edición permitida'
+                  : `Editar conteo${row.ediciones_count ? ` (${row.ediciones_count}/3 ediciones)` : ''}`
+              }
+            >
+              <Pencil size={18} />
+            </button>
+          )}
+          <button
             onClick={() => handleVer(row)}
+            className="p-2 text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+            title="Ver detalles"
           >
-            <Eye size={14} className="mr-1" />
-            Ver Detalle
-          </Button>
+            <Eye size={18} />
+          </button>
           {/* SUPER-PRIVILEGIO: Solo Admin Global puede eliminar permanentemente */}
           {user?.rol === 'ADMIN_GLOBAL' && (
             <button
@@ -506,6 +546,30 @@ export default function Conteos() {
     setShowDetail(true)
   }
 
+  // Manejador para editar conteo completado
+  const handleEditar = (conteo) => {
+    const edicionesActuales = conteo.ediciones_count || 0
+    const esUltimaEdicion = edicionesActuales === 2
+
+    if (esUltimaEdicion) {
+      // Mostrar advertencia si es la última edición
+      const confirmar = window.confirm(
+        '⚠️ ADVERTENCIA: Esta es tu ÚLTIMA oportunidad de edición\n\n' +
+        'Este conteo ya ha sido editado 2 veces. Después de esta edición, ' +
+        'no podrás realizar más cambios.\n\n' +
+        '¿Estás seguro de que deseas continuar?'
+      )
+
+      if (!confirmar) {
+        return
+      }
+    }
+
+    setSelectedConteo(conteo)
+    setEditMode(true)
+    setShowExecute(true)
+  }
+
   const handleCloseForm = () => {
     setShowForm(false)
   }
@@ -513,6 +577,7 @@ export default function Conteos() {
   const handleCloseExecute = () => {
     setShowExecute(false)
     setSelectedConteo(null)
+    setEditMode(false)
   }
 
   const handleCloseDetail = () => {
@@ -711,13 +776,14 @@ export default function Conteos() {
         />
       )}
 
-      {/* Modal Ejecutar */}
+      {/* Modal Ejecutar / Editar */}
       {showExecute && selectedConteo && (
         <ConteoExecute
           conteo={selectedConteo}
           onSave={handleSaveEjecucion}
           onClose={handleCloseExecute}
           isLoading={isEjecutando}
+          editMode={editMode}
         />
       )}
 
