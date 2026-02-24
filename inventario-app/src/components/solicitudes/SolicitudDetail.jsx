@@ -86,15 +86,15 @@ export default function SolicitudDetail({
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#004AFF] to-[#002980] p-6">
+        <div className="bg-gradient-to-r from-[#004AFF] to-[#002980] p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-white/20 rounded-xl">
-                <Triangle className="text-white" size={20} />
+                <Triangle className="text-white" size={18} />
               </div>
               <div>
                 <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-bold text-white">
+                  <h2 className="text-lg font-bold text-white">
                     {solicitud.codigo_legible || 'Solicitud'}
                   </h2>
                   <span className={`px-3 py-1 rounded-full text-xs font-medium ${config.color}`}>
@@ -132,13 +132,13 @@ export default function SolicitudDetail({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-5">
           {loadingDetalles ? (
             <div className="flex items-center justify-center py-12">
               <LoadingSpinner size="lg" />
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {/* Información general */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4">

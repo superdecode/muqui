@@ -76,28 +76,6 @@ export default function Conteos() {
     return usuario ? usuario.nombre : usuarioId
   }
 
-  // Verificar si el usuario puede editar conteos completados (permiso Total + ubicación asignada + máximo 3 ediciones)
-  const canEditCompletedConteo = (conteo) => {
-    // Solo conteos COMPLETADO o PARCIALMENTE_COMPLETADO pueden editarse
-    if (conteo.estado !== 'COMPLETADO' && conteo.estado !== 'PARCIALMENTE_COMPLETADO') return false
-
-    // Verificar límite de 3 ediciones
-    const edicionesCount = conteo.ediciones_count || 0
-    if (edicionesCount >= 3) return false
-
-    // Admin Global siempre puede editar (si no excede el límite)
-    if (isAdmin()) return true
-
-    // Verificar permiso Total en conteos
-    const level = getPermissionLevel('conteos')
-    if (level !== 'total') return false
-
-    // Verificar que la ubicación esté asignada al usuario
-    if (!allowedUbicacionIds.includes(conteo.ubicacion_id)) return false
-
-    return true
-  }
-
   // Función para imprimir conteo
   const handleImprimir = (conteo) => {
     const detalles = conteos.find(c => c.id === conteo.id)
@@ -269,6 +247,69 @@ export default function Conteos() {
 
   // Get user's allowed locations based on both ubicaciones_asignadas and empresas_asignadas
   const allowedUbicacionIds = getUserAllowedUbicacionIds(user, ubicaciones, empresas)
+
+  // Verificar si el usuario puede editar conteos completados (permiso Total + ubicación asignada + máximo 3 ediciones + máximo 1 mes desde creación)
+  const canEditCompletedConteo = (conteo) => {
+    // Solo conteos COMPLETADO o PARCIALMENTE_COMPLETADO pueden editarse
+    if (conteo.estado !== 'COMPLETADO' && conteo.estado !== 'PARCIALMENTE_COMPLETADO') {
+      return false
+    }
+
+    // Verificar límite de 3 ediciones
+    const edicionesCount = conteo.ediciones_count || 0
+    if (edicionesCount >= 3) {
+      return false
+    }
+
+    // Verificar que no haya pasado más de 1 mes desde la fecha de completado
+    if (conteo.fecha_completado) {
+      const fechaCompletado = conteo.fecha_completado?.toDate ? conteo.fecha_completado.toDate() : new Date(conteo.fecha_completado.seconds * 1000)
+      const unMesDespues = new Date(fechaCompletado)
+      unMesDespues.setMonth(unMesDespues.getMonth() + 1)
+      const ahora = new Date()
+
+      if (ahora > unMesDespues) {
+        return false
+      }
+    }
+
+    // Admin Global siempre puede editar (si no excede el límite de ediciones y tiempo)
+    if (isAdmin()) {
+      return true
+    }
+
+    // Verificar permiso Total en conteos
+    const level = getPermissionLevel('conteos')
+    if (level !== 'total') {
+      return false
+    }
+
+    // Verificar que la ubicación esté asignada al usuario
+    // Si allowedUbicacionIds está vacío, significa sin restricciones de ubicación
+    // (típicamente para admins o usuarios sin asignaciones específicas)
+    if (allowedUbicacionIds.length === 0) {
+      // Si el usuario tiene ubicaciones asignadas pero el array está vacío,
+      // hay un problema con getUserAllowedUbicacionIds
+      if (user?.ubicaciones_asignadas && Array.isArray(user.ubicaciones_asignadas) && user.ubicaciones_asignadas.length > 0) {
+        // Usar directamente las ubicaciones del usuario como fallback
+        if (user.ubicaciones_asignadas.includes(conteo.ubicacion_id)) {
+          return true
+        } else {
+          return false
+        }
+      }
+
+      // Si genuinamente no hay restricciones, permitir
+      return true
+    }
+
+    // Si hay restricciones específicas, verificar que la ubicación esté incluida
+    if (!allowedUbicacionIds.includes(conteo.ubicacion_id)) {
+      return false
+    }
+
+    return true
+  }
 
   // Auto-set sede filter for single-location users
   const effectiveSedeFilter = (Array.isArray(allowedUbicacionIds) && allowedUbicacionIds.length === 1 && !sedeFilter) ? allowedUbicacionIds[0] : sedeFilter
@@ -461,7 +502,7 @@ export default function Conteos() {
           )}
           <button
             onClick={() => handleVer(row)}
-            className="p-2 text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+            className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
             title="Ver detalles"
           >
             <Eye size={18} />

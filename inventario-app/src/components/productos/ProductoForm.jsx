@@ -57,8 +57,8 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
     queryFn: () => dataService.getUbicaciones()
   })
 
-  const categoriasOptions = (categoriasDB || []).filter(i => i.estado !== 'INACTIVO' && i.estado !== 'ELIMINADO').map(i => i.nombre).filter(Boolean)
-  const unidadesOptions = (unidadesDB || []).filter(i => i.estado !== 'INACTIVO' && i.estado !== 'ELIMINADO').map(i => i.nombre).filter(Boolean)
+  const categoriasOptions = [...new Set((categoriasDB || []).filter(i => i.estado !== 'INACTIVO' && i.estado !== 'ELIMINADO').map(i => i.nombre).filter(Boolean))]
+  const unidadesOptions = [...new Set((unidadesDB || []).filter(i => i.estado !== 'INACTIVO' && i.estado !== 'ELIMINADO').map(i => i.nombre).filter(Boolean))]
 
   // Función para generar el siguiente ID disponible
   const generarNuevoID = () => {

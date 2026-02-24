@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
 import Alert from '../common/Alert'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { Package, CheckCircle, AlertCircle, X, Search, Clock, Trash2 } from 'lucide-react'
+import { Package, CheckCircle, AlertCircle, X, Search, Trash2 } from 'lucide-react'
 import dataService from '../../services/dataService'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useToastStore } from '../../stores/toastStore'
@@ -97,7 +97,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
     } catch (error) {
       console.error('Error guardando progreso:', error)
     }
-  }, [autoSaveEnabled, conteo.id, conteo.ubicacion_id, conteo.tipo_conteo]) // Quitamos productosConteo para evitar bucles
+  }, [autoSaveEnabled, productosConteo, conteo.id, conteo.ubicacion_id, conteo.tipo_conteo])
 
   // Auto-guardar cada 30 segundos
   useEffect(() => {
@@ -148,7 +148,6 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
             setLastSaved(new Date(timestamp))
             return
           } else {
-            console.log('⚠️ Progreso guardado no coincide con el conteo actual, regenerando...')
             localStorage.removeItem(progressKey)
           }
         } catch (error) {
@@ -157,7 +156,6 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
       }
 
       // Inicializar productos filtrados por ubicación y tipo de conteo
-      console.log('📅 Tipo de conteo:', conteo.tipo_conteo)
 
       const productosUbicacion = productos.filter(producto => {
         if (producto.estado === 'INACTIVO' || producto.estado === 'ELIMINADO') return false
@@ -386,26 +384,49 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-card-hover max-w-7xl w-full max-h-[95vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className={`relative overflow-hidden ${editMode ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-ocean'} p-6 flex-shrink-0`}>
+        {/* Header con Progreso Integrado */}
+        <div className={`relative overflow-hidden ${editMode ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-ocean'} p-5 flex-shrink-0`}>
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16"></div>
           <div className="relative z-10">
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col gap-1.5">
+              {/* Primera línea: Título + Botón Cerrar */}
+              <div className="flex items-start justify-between gap-4">
                 <h2 className="text-2xl font-bold text-white">
                   {editMode ? 'Editar Conteo' : 'Ejecutar Conteo'}
                 </h2>
-                <p className="text-white/90">{conteo.ubicacion || conteo.ubicacion_id} - {conteo.tipo_conteo}</p>
-                {editMode && (
-                  <p className="text-white/80 text-sm mt-1">Modifica las cantidades y confirma los cambios</p>
-                )}
+                <button
+                  onClick={onClose}
+                  className="p-1.5 hover:bg-white/20 rounded-lg transition-colors flex-shrink-0"
+                >
+                  <X className="text-white" size={20} />
+                </button>
               </div>
-              <button
-                onClick={onClose}
-                className="p-2 hover:bg-white/20 rounded-xl transition-colors"
-              >
-                <X className="text-white" size={24} />
-              </button>
+
+              {/* Segunda línea: Info ubicación izquierda + Porcentaje y hora derecha */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-white/90 text-sm">Ubicacion: {conteo.ubicacion_nombre || conteo.ubicacion_id}</p>
+                  <p className="text-white/90 text-sm">Tipo: {conteo.tipo_conteo}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-white font-bold text-base">
+                    {estadisticas.porcentajeCompletado}%
+                  </p>
+                  <p className="text-white/70 text-xs mt-0.5">
+                    {lastSaved ? lastSaved.toLocaleTimeString() : new Date().toLocaleTimeString()}
+                  </p>
+                </div>
+              </div>
+
+              {/* Tercera línea: Barra de Progreso (solo en lado derecho) */}
+              <div className="flex justify-end">
+                <div className="w-64 bg-white/30 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-white h-full rounded-full transition-all duration-300 shadow-lg"
+                    style={{ width: `${estadisticas.porcentajeCompletado}%` }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -422,31 +443,6 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
             </div>
           </div>
         )}
-
-        {/* Indicador de Progreso */}
-        <div className="bg-gradient-to-r from-primary-500 to-primary-600 px-6 py-4 flex-shrink-0">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Package className="text-white" size={20} />
-              <span className="text-white font-semibold">
-                {estadisticas.productosContados}/{estadisticas.totalProductos} productos contados
-              </span>
-            </div>
-            <span className="text-white font-bold text-xl">{estadisticas.porcentajeCompletado}%</span>
-          </div>
-          <div className="w-full bg-white/30 rounded-full h-3 overflow-hidden">
-            <div
-              className="bg-white h-full rounded-full transition-all duration-300 shadow-lg"
-              style={{ width: `${estadisticas.porcentajeCompletado}%` }}
-            />
-          </div>
-          {lastSaved && (
-            <div className="flex items-center gap-1 mt-2 text-white/90 text-xs">
-              <Clock size={12} />
-              <span>Último guardado: {lastSaved.toLocaleTimeString()}</span>
-            </div>
-          )}
-        </div>
 
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
           <div className="p-6 space-y-4 flex-shrink-0">

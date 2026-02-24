@@ -372,13 +372,13 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-3xl shadow-card-hover max-w-6xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="relative overflow-hidden bg-gradient-ocean p-6">
+        <div className="relative overflow-hidden bg-gradient-ocean p-4">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16"></div>
           <div className="relative z-10">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-bold text-white">Detalle de Movimiento</h2>
-                <p className="text-white/90 mt-1">Código: {formatDisplayId(transferencia, 'MV')}</p>
+                <h2 className="text-xl font-bold text-white">Detalle de Movimiento</h2>
+                <p className="text-white/90 text-sm mt-0.5">Código: {formatDisplayId(transferencia, 'MV')}</p>
                 {onConfirmar && normalizeEstado(transferencia.estado) === 'PENDIENTE' && (
                   <p className="text-white/80 text-sm mt-2 flex items-center gap-2">
                     <CheckCircle size={16} />
@@ -410,12 +410,12 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)] space-y-6">
+        <div className="p-5 overflow-y-auto max-h-[calc(90vh-200px)] space-y-4">
           {/* Info General */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-primary-100 rounded-lg">
-                <Calendar className="text-primary-600" size={20} />
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <Calendar className="text-purple-600" size={20} />
               </div>
               <div>
                 <p className="text-sm text-slate-600 dark:text-slate-400">Fecha Creación</p>
@@ -424,8 +424,8 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
             </div>
 
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-primary-100 rounded-lg">
-                <User className="text-primary-600" size={20} />
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <User className="text-purple-600" size={20} />
               </div>
               <div>
                 <p className="text-sm text-slate-600 dark:text-slate-400">Creado por</p>
@@ -437,7 +437,7 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
               <>
                 <div className="flex items-start gap-3">
                   <div className="p-2 bg-green-100 rounded-lg">
-                    <CheckCircle className="text-green-600" size={20} />
+                    <Calendar className="text-green-600" size={20} />
                   </div>
                   <div>
                     <p className="text-sm text-slate-600 dark:text-slate-400">Fecha Confirmación</p>

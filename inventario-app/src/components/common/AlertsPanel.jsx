@@ -201,6 +201,11 @@ const AlertsPanel = ({ isOpen, onClose, anchorRef }) => {
                         {alerta.titulo && alerta.mensaje && alerta.titulo !== alerta.mensaje && (
                           <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">{alerta.mensaje}</p>
                         )}
+                        {alerta.datos_adicionales?.usuario_creador && (
+                          <p className="text-xs text-slate-500 dark:text-slate-500 mb-1">
+                            <span className="font-medium">Por:</span> {alerta.datos_adicionales.usuario_creador}
+                          </p>
+                        )}
                         {alerta.agrupada && alerta.cantidad_items > 0 && (
                           <span className="inline-flex items-center gap-1 text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full mb-1">
                             <Package size={10} />{alerta.cantidad_items} productos
@@ -231,6 +236,11 @@ const AlertsPanel = ({ isOpen, onClose, anchorRef }) => {
               <div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{detailModal.titulo}</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{detailModal.mensaje}</p>
+                {detailModal.datos_adicionales?.usuario_creador && (
+                  <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
+                    <span className="font-medium">Creado por:</span> {detailModal.datos_adicionales.usuario_creador}
+                  </p>
+                )}
               </div>
               <button onClick={() => setDetailModal(null)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"><X size={20} className="text-slate-500 dark:text-slate-400" /></button>
             </div>

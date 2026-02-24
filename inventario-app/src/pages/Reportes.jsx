@@ -285,11 +285,20 @@ export default function Reportes() {
         return data.map(mov => {
           const origen = ubicaciones.find(u => u.id === mov.origen_id)
           const destino = ubicaciones.find(u => u.id === mov.destino_id)
+
+          // Calcular cantidad de items (productos únicos) y cantidad total
+          const detalles = detalleMovimientos.filter(d => d.movimiento_id === mov.id)
+          const cantidadItems = detalles.length
+          const cantidadTotal = detalles.reduce((sum, d) => sum + (d.cantidad_enviada || d.cantidad || 0), 0)
+
           return {
             ID: mov.id,
+            Tipo: mov.tipo_movimiento || 'TRANSFERENCIA',
             Fecha: safeFormatDate(mov.fecha_creacion, 'dd/MM/yyyy'),
             Origen: origen?.nombre || mov.origen_id,
             Destino: destino?.nombre || mov.destino_id,
+            'Cant. Items': cantidadItems,
+            'Cant. Productos': cantidadTotal,
             Estado: mov.estado
           }
         })

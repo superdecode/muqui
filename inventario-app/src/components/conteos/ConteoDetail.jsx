@@ -120,7 +120,7 @@ export default function ConteoDetail({ conteo, onClose }) {
   const formatDate = (dateString) => {
     if (!dateString) return '-'
     try {
-      return format(new Date(dateString), "d 'de' MMMM, yyyy", { locale: es })
+      return format(new Date(dateString), "d 'de' MMMM 'de' yyyy 'a las' HH:mm", { locale: es })
     } catch {
       return '-'
     }
@@ -135,13 +135,13 @@ export default function ConteoDetail({ conteo, onClose }) {
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-3xl shadow-card-hover max-w-6xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="relative overflow-hidden bg-gradient-ocean p-6">
+        <div className="relative overflow-hidden bg-gradient-ocean p-4">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16"></div>
           <div className="relative z-10">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-bold text-white">Detalle de Conteo</h2>
-                <p className="text-white/90 mt-1">Código: {formatDisplayId(conteo, 'CT')}</p>
+                <h2 className="text-xl font-bold text-white">Detalle de Conteo</h2>
+                <p className="text-white/90 text-sm mt-0.5">Código: {formatDisplayId(conteo, 'CT')}</p>
               </div>
               <div className="flex items-center gap-2">
                 <span className={`px-4 py-2 rounded-full text-sm font-semibold ${
@@ -175,14 +175,14 @@ export default function ConteoDetail({ conteo, onClose }) {
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)] space-y-6">
+        <div className="p-5 overflow-y-auto max-h-[calc(90vh-200px)] space-y-4">
           {/* Info General */}
-          <div className="space-y-6">
+          <div className="space-y-3">
             {/* Primera fila: Fecha Programada y Responsable */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-primary-100 rounded-lg">
-                  <Calendar className="text-primary-600" size={20} />
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Calendar className="text-purple-600" size={20} />
                 </div>
                 <div>
                   <p className="text-sm text-slate-600 dark:text-slate-400">Fecha Creación</p>
@@ -191,8 +191,8 @@ export default function ConteoDetail({ conteo, onClose }) {
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <User className="text-green-600" size={20} />
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <User className="text-purple-600" size={20} />
                 </div>
                 <div>
                   <p className="text-sm text-slate-600 dark:text-slate-400">Responsable</p>
@@ -202,7 +202,7 @@ export default function ConteoDetail({ conteo, onClose }) {
             </div>
 
             {/* Segunda fila: Tipo de Conteo y Ubicación */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex items-start gap-3">
                 <div className="p-2 bg-blue-100 rounded-lg">
                   <Package className="text-blue-600" size={20} />
@@ -214,8 +214,8 @@ export default function ConteoDetail({ conteo, onClose }) {
               </div>
 
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <MapPin className="text-purple-600" size={20} />
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <MapPin className="text-red-500" size={20} />
                 </div>
                 <div>
                   <p className="text-sm text-slate-600 dark:text-slate-400">Ubicación</p>
@@ -226,11 +226,11 @@ export default function ConteoDetail({ conteo, onClose }) {
 
             {/* Tercera fila: Ejecución (solo si existe) */}
             {conteo.usuario_ejecutor_id && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {conteo.fecha_completado && (
                   <div className="flex items-start gap-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <Calendar className="text-blue-600" size={20} />
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <Calendar className="text-green-600" size={20} />
                     </div>
                     <div>
                       <p className="text-sm text-slate-600 dark:text-slate-400">Completado el</p>

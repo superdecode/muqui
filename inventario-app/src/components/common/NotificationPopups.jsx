@@ -197,6 +197,11 @@ export default function NotificationPopups() {
                   <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">
                     {popup.mensaje}
                   </p>
+                  {popup.datos_adicionales?.usuario_creador && (
+                    <p className="text-xs text-slate-500 dark:text-slate-500 mt-0.5">
+                      <span className="font-medium">Por:</span> {popup.datos_adicionales.usuario_creador}
+                    </p>
+                  )}
                   {(popup.accionUrl || popup.datos_adicionales?.accionUrl) && (
                     <p className="text-xs text-primary-600 mt-1 flex items-center gap-1">
                       Click para ver detalles <ExternalLink size={10} />
