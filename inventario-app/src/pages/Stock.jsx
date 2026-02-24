@@ -5,6 +5,7 @@ import { PackageCheck, Search, Download, AlertTriangle, Edit2, Check, X, Package
 import Card from '../components/common/Card'
 import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import DataTable from '../components/common/DataTable'
 import MultiSelectUbicaciones from '../components/reportes/MultiSelectUbicaciones'
 import ProductoForm from '../components/productos/ProductoForm'
 import { useToastStore } from '../stores/toastStore'
@@ -135,27 +136,56 @@ export default function Stock() {
     if (filterUbicaciones.length === 0) return []
 
     const rows = []
+    
+    // Include all products for selected locations, even if they don't have inventory records
     filterUbicaciones.forEach(ubicacionId => {
-      const invUbicacion = inventario.filter(i => i.ubicacion_id === ubicacionId)
       const ubicacion = ubicaciones.find(u => u.id === ubicacionId)
-
-      invUbicacion.forEach(item => {
-        const producto = productos.find(p => p.id === item.producto_id)
-        if (!producto) return
-        const calc = calcularStockActual(item.producto_id, ubicacionId)
+      const ubicacionNombre = ubicacion?.nombre || ubicacionId
+      
+      // Get inventory items for this location
+      const invUbicacion = inventario.filter(i => i.ubicacion_id === ubicacionId)
+      
+      // Create a set of all product IDs that have inventory records for this location
+      const productIdsWithInventory = new Set(invUbicacion.map(i => i.producto_id))
+      
+      // Add all active products to ensure complete coverage
+      productos.forEach(producto => {
+        // Skip inactive products
+        if (producto.estado === 'INACTIVO' || producto.estado === 'ELIMINADO') return
+        
+        // Check if this product should be shown for this location
+        // Either it has inventory, or we should create a default entry
+        let stockActual = 0
+        let hasInventoryRecord = false
+        
+        if (productIdsWithInventory.has(producto.id)) {
+          // Use existing inventory record
+          const invItem = invUbicacion.find(i => i.producto_id === producto.id)
+          if (invItem) {
+            const calc = calcularStockActual(producto.id, ubicacionId)
+            stockActual = calc.stock_actual
+            hasInventoryRecord = true
+          }
+        } else {
+          // No inventory record - calculate stock anyway or default to 0
+          const calc = calcularStockActual(producto.id, ubicacionId)
+          stockActual = calc.stock_actual
+        }
+        
         const stockMin = parseInt(producto.stock_minimo) || 0
-
+        
         rows.push({
-          id: `${item.producto_id}_${ubicacionId}`,
-          producto_id: item.producto_id,
+          id: `${producto.id}_${ubicacionId}`,
+          producto_id: producto.id,
           ubicacion_id: ubicacionId,
-          nombre: producto.nombre || item.producto_id,
+          nombre: producto.nombre || producto.id,
           especificacion: producto.especificacion || '',
           categoria: producto.categoria || '',
-          ubicacion_nombre: ubicacion?.nombre || ubicacionId,
-          stock_actual: calc.stock_actual,
+          ubicacion_nombre: ubicacionNombre,
+          stock_actual: stockActual,
           stock_minimo: stockMin,
-          estado: calc.stock_actual <= 0 ? 'Agotado' : calc.stock_actual <= stockMin ? 'Bajo' : 'Normal'
+          estado: stockActual <= 0 ? 'Agotado' : stockActual <= stockMin ? 'Bajo' : 'Normal',
+          hasInventoryRecord
         })
       })
     })
@@ -232,6 +262,115 @@ export default function Stock() {
       toast.error('Error', err.message)
     }
   }
+
+  // Define columns for DataTable
+  const columns = [
+    {
+      header: 'Producto',
+      accessor: 'nombre',
+      sortKey: 'nombre',
+      render: (value) => (
+        <span className="font-medium text-slate-900 dark:text-slate-100">{value}</span>
+      )
+    },
+    {
+      header: 'Especificación',
+      accessor: 'especificacion',
+      sortKey: 'especificacion',
+      render: (value) => (
+        <span className="text-xs text-slate-600 dark:text-slate-400">{value || '—'}</span>
+      )
+    },
+    {
+      header: 'Categoría',
+      accessor: 'categoria',
+      sortKey: 'categoria',
+      render: (value) => (
+        <span className="text-xs text-slate-600 dark:text-slate-400">{value || '—'}</span>
+      )
+    },
+    {
+      header: 'Ubicación',
+      accessor: 'ubicacion_nombre',
+      sortKey: 'ubicacion_nombre',
+      render: (value) => (
+        <span className="text-slate-700 dark:text-slate-300">{value}</span>
+      )
+    },
+    {
+      header: 'Stock',
+      accessor: 'stock_actual',
+      sortKey: 'stock_actual',
+      render: (value) => (
+        <span className="font-semibold text-slate-900 dark:text-slate-100 text-center block">{value}</span>
+      )
+    },
+    {
+      header: 'Stock Mín.',
+      accessor: 'stock_minimo',
+      sortKey: 'stock_minimo',
+      render: (value, row) => (
+        <div className="text-center">
+          {editingStockMin === row.id ? (
+            <div className="flex items-center justify-center gap-1">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={stockMinValue}
+                onChange={(e) => setStockMinValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSaveStockMin(row.producto_id); if (e.key === 'Escape') setEditingStockMin(null) }}
+                autoFocus
+                className="w-16 px-2 py-1 border border-primary-400 rounded text-center text-sm font-bold focus:ring-2 focus:ring-primary-500"
+              />
+              <button onClick={() => handleSaveStockMin(row.producto_id)} className="p-1 hover:bg-green-50 rounded text-green-600"><Check size={14} /></button>
+              <button onClick={() => setEditingStockMin(null)} className="p-1 hover:bg-red-50 rounded text-red-600"><X size={14} /></button>
+            </div>
+          ) : (
+            <span
+              className={`cursor-pointer hover:underline text-slate-600 dark:text-slate-400 ${canWriteStock ? 'hover:text-primary-600' : ''}`}
+              onClick={() => { if (canWriteStock) { setEditingStockMin(row.id); setStockMinValue(String(row.stock_minimo)) } }}
+              title={canWriteStock ? 'Click para editar' : ''}
+            >
+              {value}
+            </span>
+          )}
+        </div>
+      )
+    },
+    {
+      header: 'Estado',
+      accessor: 'estado',
+      sortKey: 'estado',
+      render: (value) => {
+        if (value === 'Agotado') {
+          return <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">Agotado</span>
+        }
+        if (value === 'Bajo') {
+          return <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">Bajo</span>
+        }
+        return <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">Normal</span>
+      }
+    },
+    ...(canWriteStock ? [{
+      header: 'Acciones',
+      accessor: 'id',
+      render: (value, row) => (
+        <div className="text-center">
+          <button
+            onClick={() => {
+              const prod = productos.find(p => p.id === row.producto_id)
+              if (prod) setEditingProducto(prod)
+            }}
+            className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600 transition-colors"
+            title="Editar producto"
+          >
+            <Edit2 size={14} />
+          </button>
+        </div>
+      )
+    }] : [])
+  ]
 
   const isLoading = isLoadingInv
 
@@ -350,90 +489,15 @@ export default function Stock() {
       </Card>
 
       {/* Table */}
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-card border border-slate-100 dark:border-slate-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">#</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Producto</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Especificación</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Categoría</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Ubicación</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Stock</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Stock Mín.</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Estado</th>
-                {canWriteStock && <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider w-20">Acciones</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {stockData.length === 0 ? (
-                <tr>
-                  <td colSpan={canWriteStock ? 9 : 8} className="px-4 py-12 text-center">
-                    <Package size={48} className="mx-auto text-slate-300 mb-3" />
-                    <p className="text-slate-500 font-medium">No se encontraron productos</p>
-                    <p className="text-sm text-slate-400">Ajusta los filtros para ver resultados</p>
-                  </td>
-                </tr>
-              ) : stockData.map((row, idx) => (
-                <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-                  <td className="px-4 py-3 text-xs text-slate-400 font-mono">{idx + 1}</td>
-                  <td className="px-4 py-3 text-slate-900 dark:text-slate-100 font-medium">{row.nombre}</td>
-                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs">{row.especificacion || '—'}</td>
-                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-xs">{row.categoria || '—'}</td>
-                  <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{row.ubicacion_nombre}</td>
-                  <td className="px-4 py-3 text-center font-semibold text-slate-900 dark:text-slate-100">{row.stock_actual}</td>
-                  <td className="px-4 py-3 text-center">
-                    {editingStockMin === row.id ? (
-                      <div className="flex items-center justify-center gap-1">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={stockMinValue}
-                          onChange={(e) => setStockMinValue(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') handleSaveStockMin(row.producto_id); if (e.key === 'Escape') setEditingStockMin(null) }}
-                          autoFocus
-                          className="w-16 px-2 py-1 border border-primary-400 rounded text-center text-sm font-bold focus:ring-2 focus:ring-primary-500"
-                        />
-                        <button onClick={() => handleSaveStockMin(row.producto_id)} className="p-1 hover:bg-green-50 rounded text-green-600"><Check size={14} /></button>
-                        <button onClick={() => setEditingStockMin(null)} className="p-1 hover:bg-red-50 rounded text-red-600"><X size={14} /></button>
-                      </div>
-                    ) : (
-                      <span
-                        className={`cursor-pointer hover:underline text-slate-600 dark:text-slate-400 ${canWriteStock ? 'hover:text-primary-600' : ''}`}
-                        onClick={() => { if (canWriteStock) { setEditingStockMin(row.id); setStockMinValue(String(row.stock_minimo)) } }}
-                        title={canWriteStock ? 'Click para editar' : ''}
-                      >
-                        {row.stock_minimo}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {row.estado === 'Agotado' && <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">Agotado</span>}
-                    {row.estado === 'Bajo' && <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">Bajo</span>}
-                    {row.estado === 'Normal' && <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">Normal</span>}
-                  </td>
-                  {canWriteStock && (
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => {
-                          const prod = productos.find(p => p.id === row.producto_id)
-                          if (prod) setEditingProducto(prod)
-                        }}
-                        className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600 transition-colors"
-                        title="Editar producto"
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <Card>
+        <DataTable
+          columns={columns}
+          data={stockData}
+          defaultSortKey="nombre"
+          defaultSortDir="asc"
+          className="border-0"
+        />
+      </Card>
 
       {/* Product Edit Modal */}
       {editingProducto && (

@@ -370,9 +370,9 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-3xl shadow-card-hover max-w-6xl w-full max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-card-hover max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="relative overflow-hidden bg-gradient-ocean p-4">
+        <div className="relative overflow-hidden bg-gradient-ocean p-4 flex-shrink-0">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16"></div>
           <div className="relative z-10">
             <div className="flex items-center justify-between">
@@ -410,7 +410,7 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
           </div>
         </div>
 
-        <div className="p-5 overflow-y-auto max-h-[calc(90vh-200px)] space-y-4">
+        <div className="p-5 overflow-y-auto flex-1 space-y-4">
           {/* Info General */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex items-start gap-3">
@@ -648,7 +648,11 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
           )}
 
           {/* Botones */}
-          <div className="flex justify-between gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+          </div>
+
+        {/* Footer Sticky */}
+        <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex-shrink-0">
+          <div className="flex justify-between gap-4">
             {/* Cancel button - left side */}
             <div>
               {canCancel && normalizeEstado(transferencia.estado) !== 'CANCELADA' && normalizeEstado(transferencia.estado) !== 'COMPLETADO' && (
@@ -664,7 +668,7 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
             </div>
 
             {/* Action buttons - right side */}
-            <div className="flex gap-4">
+            <div className="flex gap-3">
               <Button variant="ghost" onClick={() => { setModoRecepcion(null); onClose() }}>
                 Cerrar
               </Button>

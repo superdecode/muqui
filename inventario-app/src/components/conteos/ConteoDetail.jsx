@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Button from '../common/Button'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { Package, MapPin, Calendar, User, CheckCircle, AlertCircle, X, Download, Trash2, Pencil } from 'lucide-react'
+import { Package, MapPin, Calendar, User, CheckCircle, AlertCircle, X, Download, Trash2, Pencil, Edit3 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import dataService from '../../services/dataService'
@@ -11,12 +11,51 @@ import { exportConteoToExcel } from '../../utils/exportUtils'
 import { formatDisplayId, safeFormatDate } from '../../utils/formatters'
 import { usePermissions } from '../../hooks/usePermissions'
 
-export default function ConteoDetail({ conteo, onClose }) {
+export default function ConteoDetail({ conteo, onClose, onEdit }) {
   const toast = useToastStore()
   const queryClient = useQueryClient()
-  const { canEdit } = usePermissions()
+  const { canEdit, getPermissionLevel, isAdmin } = usePermissions()
   const [eliminandoId, setEliminandoId] = useState(null)
   const [confirmDetalle, setConfirmDetalle] = useState(null)
+
+  // Verificar si el usuario puede editar conteos completados (permiso Total + ubicación asignada + máximo 3 ediciones + máximo 1 mes desde creación)
+  const canEditCompletedConteo = (conteo) => {
+    // Solo conteos COMPLETADO o PARCIALMENTE_COMPLETADO pueden editarse
+    if (conteo.estado !== 'COMPLETADO' && conteo.estado !== 'PARCIALMENTE_COMPLETADO') {
+      return false
+    }
+
+    // Verificar límite de 3 ediciones
+    const edicionesCount = conteo.ediciones_count || 0
+    if (edicionesCount >= 3) {
+      return false
+    }
+
+    // Verificar que no haya pasado más de 1 mes desde la fecha de completado
+    if (conteo.fecha_completado) {
+      const fechaCompletado = conteo.fecha_completado?.toDate ? conteo.fecha_completado.toDate() : new Date(conteo.fecha_completado.seconds * 1000)
+      const unMesDespues = new Date(fechaCompletado)
+      unMesDespues.setMonth(unMesDespues.getMonth() + 1)
+      const ahora = new Date()
+
+      if (ahora > unMesDespues) {
+        return false
+      }
+    }
+
+    // Admin Global siempre puede editar (si no excede el límite de ediciones y tiempo)
+    if (isAdmin()) {
+      return true
+    }
+
+    // Verificar permiso Total en conteos
+    const level = getPermissionLevel('conteos')
+    if (level !== 'total') {
+      return false
+    }
+
+    return true
+  }
 
   const eliminarDetalleMutation = useMutation({
     mutationFn: (detalleId) => dataService.deleteDetalleConteo(detalleId),
@@ -133,9 +172,9 @@ export default function ConteoDetail({ conteo, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-3xl shadow-card-hover max-w-6xl w-full max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-card-hover max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="relative overflow-hidden bg-gradient-ocean p-4">
+        <div className="relative overflow-hidden bg-gradient-ocean p-4 flex-shrink-0">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16"></div>
           <div className="relative z-10">
             <div className="flex items-center justify-between">
@@ -175,7 +214,7 @@ export default function ConteoDetail({ conteo, onClose }) {
           </div>
         </div>
 
-        <div className="p-5 overflow-y-auto max-h-[calc(90vh-200px)] space-y-4">
+        <div className="p-5 overflow-y-auto flex-1 space-y-4">
           {/* Info General */}
           <div className="space-y-3">
             {/* Primera fila: Fecha Programada y Responsable */}
@@ -401,10 +440,33 @@ export default function ConteoDetail({ conteo, onClose }) {
           )}
 
           {/* Botones */}
-          <div className="flex justify-end gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-            <Button variant="ghost" onClick={onClose}>
-              Cerrar
-            </Button>
+          </div>
+
+        {/* Footer Sticky */}
+        <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex-shrink-0">
+          <div className="flex justify-between gap-3">
+            <div>
+              {canEditCompletedConteo(conteo) && onEdit && (
+                <Button
+                  variant="outline"
+                  onClick={() => onEdit(conteo)}
+                  className={(conteo.ediciones_count || 0) === 2 ? 'text-red-600 border-red-300 hover:bg-red-50' : ''}
+                >
+                  <Edit3 size={16} className="mr-1.5" />
+                  Editar
+                  {(conteo.ediciones_count || 0) > 0 && (
+                    <span className="ml-2 text-xs">
+                      ({conteo.ediciones_count || 0}/3 ediciones)
+                    </span>
+                  )}
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <Button variant="ghost" onClick={onClose}>
+                Cerrar
+              </Button>
+            </div>
           </div>
         </div>
       </div>

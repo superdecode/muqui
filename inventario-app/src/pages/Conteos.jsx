@@ -626,6 +626,12 @@ export default function Conteos() {
     setSelectedConteo(null)
   }
 
+  // Handler para editar desde el modal de detalle
+  const handleEditarDesdeDetalle = (conteo) => {
+    handleEditar(conteo)
+    setShowDetail(false)
+  }
+
   const handleExportar = () => {
     try {
       exportConteosToCSV(conteosFiltrados)
@@ -833,6 +839,7 @@ export default function Conteos() {
         <ConteoDetail
           conteo={selectedConteo}
           onClose={handleCloseDetail}
+          onEdit={handleEditarDesdeDetalle}
         />
       )}
     </div>
