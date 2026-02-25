@@ -13,7 +13,7 @@ import {
   ChevronDown,
   Shield,
   Settings,
-  Triangle,
+  Circle,
   PackageCheck,
   ArrowUpRight,
   ArrowDownLeft
@@ -63,7 +63,7 @@ export default function Sidebar() {
       label: 'Movimientos',
       permission: 'movimientos.ver',
       submenu: [
-        { to: '/movimientos/solicitudes', label: 'Solicitudes', icon: Triangle },
+        { to: '/movimientos/solicitudes', label: 'Solicitudes', icon: Circle },
         { to: '/movimientos/salidas', label: 'Salidas', icon: ArrowUpRight },
         { to: '/movimientos/entradas', label: 'Entradas', icon: ArrowDownLeft }
       ]
@@ -179,27 +179,26 @@ export default function Sidebar() {
                       )}
                     </button>
                     {/* Submenu items */}
-                    {(isExpanded || isCollapsed) && (
-                      <div className={`mt-1 space-y-1 ${isCollapsed ? 'lg:hidden' : 'ml-4'}`}>
-                        {item.submenu.map((subitem) => (
-                          <NavLink
-                            key={subitem.to}
-                            to={subitem.to}
-                            onClick={() => setIsOpen(false)}
-                            className={({ isActive }) =>
-                              `flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-sm ${
-                                isActive
-                                  ? 'bg-white/20 text-white'
-                                  : 'text-white/70 hover:bg-white/10 hover:text-white'
-                              }`
-                            }
-                          >
-                            <subitem.icon size={16} />
-                            <span>{subitem.label}</span>
-                          </NavLink>
-                        ))}
-                      </div>
-                    )}
+                    <div className={`mt-1 space-y-1 ${isCollapsed ? 'lg:flex lg:flex-col lg:items-center lg:space-y-2 lg:px-2' : 'ml-4'}`}>
+                      {item.submenu.map((subitem) => (
+                        <NavLink
+                          key={subitem.to}
+                          to={subitem.to}
+                          onClick={() => setIsOpen(false)}
+                          className={({ isActive }) =>
+                            `flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors text-sm ${
+                              isActive
+                                ? 'bg-white/20 text-white'
+                                : 'text-white/60 hover:bg-white/10 hover:text-white/80'
+                            } ${isCollapsed ? 'lg:justify-center lg:px-2 lg:py-2' : ''}`
+                          }
+                          title={isCollapsed ? subitem.label : ''}
+                        >
+                          <subitem.icon size={isCollapsed ? 18 : 16} />
+                          <span className={`${isCollapsed ? 'lg:hidden' : 'block'}`}>{subitem.label}</span>
+                        </NavLink>
+                      ))}
+                    </div>
                   </div>
                 )
               }

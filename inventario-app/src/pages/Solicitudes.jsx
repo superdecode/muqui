@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Triangle,
+  Circle,
   Plus,
   Download,
   CheckCircle,
@@ -552,6 +552,29 @@ export default function Solicitudes() {
     })
   }
 
+  const handleDetailEditarInline = async ({ detalles, observaciones }) => {
+    if (!selectedSolicitud) return
+
+    try {
+      // Actualizar solicitud con datos editados
+      await dataService.updateSolicitudDetalles({
+        solicitud_id: selectedSolicitud.id,
+        detalles: detalles,
+        observaciones_creacion: observaciones,
+        fecha_ultima_edicion: new Date(),
+        editado_por: user?.id || user?.codigo,
+        ediciones_count_increment: 1
+      })
+
+      toast.success('Solicitud Editada', 'Los cambios han sido guardados')
+      refetch()
+      setShowDetail(false)
+      setSelectedSolicitud(null)
+    } catch (error) {
+      toast.error('Error', error.message || 'No se pudo editar la solicitud')
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -585,7 +608,7 @@ export default function Solicitudes() {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-3 mb-2">
-                <Triangle className="text-white" size={25} />
+                <Circle className="text-white" size={25} />
                 <h1 className="text-3xl font-bold text-white">Solicitudes de Transferencia</h1>
               </div>
               <p className="text-white/90">Solicita productos desde otras ubicaciones</p>
@@ -732,7 +755,7 @@ export default function Solicitudes() {
         <div className="p-6">
           {solicitudesFiltrados.length === 0 ? (
             <div className="text-center py-12">
-              <Triangle className="mx-auto text-slate-300 dark:text-slate-600 mb-4" size={41} />
+              <Circle className="mx-auto text-slate-300 dark:text-slate-600 mb-4" size={41} />
               <p className="text-slate-600 dark:text-slate-400 font-medium">
                 {mainTab === 'recibidas'
                   ? 'No tienes solicitudes recibidas'
@@ -800,7 +823,7 @@ export default function Solicitudes() {
             (selectedSolicitud.usuario_creacion_id === user?.id || selectedSolicitud.usuario_creacion_id === user?.codigo) &&
             canWriteSolicitudes
               ? handleDetailEditar
-              : null
+              : handleDetailEditarInline
           }
           onProcesar={
             (normalizeEstado(selectedSolicitud.estado) === 'enviada' || normalizeEstado(selectedSolicitud.estado) === 'recibida') &&
@@ -816,6 +839,9 @@ export default function Solicitudes() {
               ? handleDetailCancelar
               : null
           }
+          isOwner={selectedSolicitud.usuario_creacion_id === user?.id || selectedSolicitud.usuario_creacion_id === user?.codigo}
+          canProcess={esAdmin || userUbicacionesAsignadas.includes(selectedSolicitud.ubicacion_origen_id)}
+          canEdit={canWriteSolicitudes}
           isLoading={isEnviando || isCancelando}
         />
       )}

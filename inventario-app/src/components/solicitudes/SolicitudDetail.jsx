@@ -26,6 +26,7 @@ export default function SolicitudDetail({
   onProcesar,
   isOwner = false,
   canProcess = false,
+  canEdit = false,
   isLoading = false
 }) {
   const navigate = useNavigate()
@@ -33,6 +34,11 @@ export default function SolicitudDetail({
   const [loadingDetalles, setLoadingDetalles] = useState(true)
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [motivoCancelacion, setMotivoCancelacion] = useState('')
+
+  // Edit mode state
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [editedDetalles, setEditedDetalles] = useState([])
+  const [editedObservaciones, setEditedObservaciones] = useState('')
   
   
   
@@ -70,10 +76,37 @@ export default function SolicitudDetail({
     if (!fecha) return '-'
     try {
       const date = fecha.toDate ? fecha.toDate() : new Date(fecha.seconds ? fecha.seconds * 1000 : fecha)
-      return format(date, "d 'de' MMMM, yyyy HH:mm", { locale: es })
+      return format(date, "dd-MM-yyyy HH:mm", { locale: es })
     } catch {
       return '-'
     }
+  }
+
+  // Initialize edit mode with current data
+  useEffect(() => {
+    if (isEditMode && detalles.length > 0) {
+      setEditedDetalles(detalles.map(d => ({
+        ...d,
+        cantidad_solicitada: d.cantidad_solicitada
+      })))
+      setEditedObservaciones(solicitud.observaciones_creacion || '')
+    }
+  }, [isEditMode, detalles, solicitud.observaciones_creacion])
+
+  const handleSaveEdit = () => {
+    if (onEditar) {
+      onEditar({
+        detalles: editedDetalles,
+        observaciones: editedObservaciones
+      })
+      setIsEditMode(false)
+    }
+  }
+
+  const handleCantidadChange = (detalleId, newCantidad) => {
+    setEditedDetalles(prev =>
+      prev.map(d => d.id === detalleId ? { ...d, cantidad_solicitada: Math.max(0, newCantidad) } : d)
+    )
   }
 
   const handleCancelar = () => {
@@ -186,6 +219,36 @@ export default function SolicitudDetail({
                 )}
               </div>
 
+              {/* Información de Edición */}
+              {solicitud.fecha_ultima_edicion && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+                  <h3 className="font-semibold text-amber-800 dark:text-amber-200 flex items-center gap-2 mb-3">
+                    <Edit size={20} />
+                    Información de Edición
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <p className="text-amber-700/70 dark:text-amber-300/70 mb-1">Última edición</p>
+                      <p className="font-medium text-amber-900 dark:text-amber-100">
+                        {formatFecha(solicitud.fecha_ultima_edicion)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-amber-700/70 dark:text-amber-300/70 mb-1">Editado por</p>
+                      <p className="font-medium text-amber-900 dark:text-amber-100">
+                        {solicitud.editado_por_nombre || solicitud.editado_por || '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-amber-700/70 dark:text-amber-300/70 mb-1">Total de ediciones</p>
+                      <p className="font-medium text-amber-900 dark:text-amber-100">
+                        {solicitud.ediciones_count || 1}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Ubicaciones */}
               <div className="flex items-center justify-center gap-4 py-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl">
                 <div className="text-center">
@@ -212,8 +275,15 @@ export default function SolicitudDetail({
               {/* Productos */}
               <div>
                 <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
-                  Productos solicitados ({detalles.length})
+                  Productos solicitados ({isEditMode ? editedDetalles.length : detalles.length})
                 </h3>
+                {isEditMode && (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 mb-3">
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      <strong>Modo de Edición:</strong> Modifica las cantidades según sea necesario.
+                    </p>
+                  </div>
+                )}
                 <div className="border border-slate-200 dark:border-slate-600 rounded-xl overflow-hidden">
                   <table className="w-full">
                     <thead className="bg-slate-50 dark:bg-slate-700">
@@ -226,7 +296,7 @@ export default function SolicitudDetail({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-600">
-                      {detalles.map(detalle => {
+                      {(isEditMode ? editedDetalles : detalles).map(detalle => {
                         const producto = productos.find(p => p.id === detalle.producto_id)
                         return (
                           <tr key={detalle.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
@@ -239,7 +309,18 @@ export default function SolicitudDetail({
                               </div>
                             </td>
                             <td className="px-4 py-3 text-center font-medium text-slate-700 dark:text-slate-200">
-                              {detalle.cantidad_solicitada}
+                              {isEditMode ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={detalle.cantidad_solicitada}
+                                  onChange={(e) => handleCantidadChange(detalle.id, parseFloat(e.target.value) || 0)}
+                                  className="w-24 px-3 py-2 text-center border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                />
+                              ) : (
+                                detalle.cantidad_solicitada
+                              )}
                             </td>
                             {estadoNorm === 'procesada' && (
                               <td className="px-4 py-3 text-center font-medium text-green-600">
@@ -255,16 +336,26 @@ export default function SolicitudDetail({
               </div>
 
               {/* Observaciones */}
-              {(solicitud.observaciones_creacion || solicitud.observaciones_procesamiento) && (
+              {(isEditMode || solicitud.observaciones_creacion || solicitud.observaciones_procesamiento) && (
                 <div className="space-y-3">
-                  {solicitud.observaciones_creacion && (
+                  {(isEditMode || solicitud.observaciones_creacion) && (
                     <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4">
-                      <div className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase mb-1">
+                      <div className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase mb-2">
                         Observaciones del solicitante
                       </div>
-                      <div className="text-slate-700 dark:text-slate-200">
-                        {solicitud.observaciones_creacion}
-                      </div>
+                      {isEditMode ? (
+                        <textarea
+                          value={editedObservaciones}
+                          onChange={(e) => setEditedObservaciones(e.target.value)}
+                          placeholder="Observaciones de la solicitud..."
+                          rows={3}
+                          className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                        />
+                      ) : (
+                        <div className="text-slate-700 dark:text-slate-200">
+                          {solicitud.observaciones_creacion}
+                        </div>
+                      )}
                     </div>
                   )}
                   {solicitud.observaciones_procesamiento && (
@@ -297,40 +388,62 @@ export default function SolicitudDetail({
         </div>
 
         {/* Footer con acciones */}
-        <div className="border-t border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-800/50">
+        <div className="border-t border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-800/50 sticky bottom-0">
           <div className="flex flex-wrap gap-3 justify-end">
-            <Button variant="outline" onClick={onClose}>
-              Cerrar
-            </Button>
-
-            {/* Acciones para el creador (owner) */}
-            {isOwner && estadoNorm === 'iniciada' && (
+            {isEditMode ? (
               <>
-                <Button variant="secondary" onClick={onEditar} disabled={isLoading}>
+                <Button variant="outline" onClick={() => setIsEditMode(false)}>
+                  Cancelar Edición
+                </Button>
+                <Button variant="success" onClick={handleSaveEdit} loading={isLoading}>
                   <Edit size={16} className="mr-2" />
-                  Editar
-                </Button>
-                <Button variant="outline" onClick={() => setShowCancelModal(true)} disabled={isLoading}>
-                  <XCircle size={16} className="mr-2" />
-                  Cancelar
-                </Button>
-                <Button onClick={onEnviar} loading={isLoading}>
-                  <Send size={16} className="mr-2" />
-                  Enviar Solicitud
+                  Guardar Cambios
                 </Button>
               </>
-            )}
-
-            {/* Acciones para quien procesa */}
-            {canProcess && (estadoNorm === 'enviada' || estadoNorm === 'recibida') && (
+            ) : (
               <>
-                <Button variant="outline" onClick={() => setShowCancelModal(true)} disabled={isLoading}>
-                  <XCircle size={16} className="mr-2" />
-                  Rechazar
+                <Button variant="outline" onClick={onClose}>
+                  Cerrar
                 </Button>
-                <Button onClick={onProcesar} loading={isLoading}>
-                  Procesar Solicitud
-                </Button>
+
+                {/* Acciones para el creador (owner) */}
+                {isOwner && estadoNorm === 'iniciada' && (
+                  <>
+                    <Button variant="secondary" onClick={onEditar} disabled={isLoading}>
+                      <Edit size={16} className="mr-2" />
+                      Editar
+                    </Button>
+                    <Button variant="outline" onClick={() => setShowCancelModal(true)} disabled={isLoading}>
+                      <XCircle size={16} className="mr-2" />
+                      Cancelar
+                    </Button>
+                    <Button onClick={onEnviar} loading={isLoading}>
+                      <Send size={16} className="mr-2" />
+                      Enviar Solicitud
+                    </Button>
+                  </>
+                )}
+
+                {/* Botón Editar para solicitudes en proceso (creada o enviada) */}
+                {canEdit && (estadoNorm === 'creada' || estadoNorm === 'enviada') && !isOwner && (
+                  <Button variant="secondary" onClick={() => setIsEditMode(true)} disabled={isLoading}>
+                    <Edit size={16} className="mr-2" />
+                    Editar
+                  </Button>
+                )}
+
+                {/* Acciones para quien procesa */}
+                {canProcess && (estadoNorm === 'enviada' || estadoNorm === 'recibida') && (
+                  <>
+                    <Button variant="outline" onClick={() => setShowCancelModal(true)} disabled={isLoading}>
+                      <XCircle size={16} className="mr-2" />
+                      Rechazar
+                    </Button>
+                    <Button onClick={onProcesar} loading={isLoading}>
+                      Procesar Solicitud
+                    </Button>
+                  </>
+                )}
               </>
             )}
           </div>

@@ -368,6 +368,47 @@ export default function Entradas() {
     })
   }
 
+  const handleEditarEntrada = async (action) => {
+    if (!selectedMovimiento) return
+
+    if (action === 'change_to_recibiendo') {
+      // Cambiar estado de completada a recibiendo
+      try {
+        await dataService.updateMovimientoEstado({
+          movimiento_id: selectedMovimiento.id,
+          estado: 'RECIBIENDO',
+          fecha_ultima_edicion: new Date(),
+          editado_por: user?.id || 'USR001',
+          ediciones_count_increment: 1
+        })
+
+        toast.success('Estado Actualizado', 'Ahora puedes editar las cantidades')
+        refetch()
+        // No cerrar el modal, el usuario continuará editando
+      } catch (error) {
+        toast.error('Error', error.message || 'No se pudo cambiar el estado')
+      }
+    } else {
+      // Guardar cantidades editadas (es un array de productos)
+      try {
+        await dataService.updateMovimientoDetalles({
+          movimiento_id: selectedMovimiento.id,
+          productos: action, // action es el array de productos editados
+          fecha_ultima_edicion: new Date(),
+          editado_por: user?.id || 'USR001',
+          ediciones_count_increment: 1
+        })
+
+        toast.success('Entrada Editada', 'Las cantidades han sido actualizadas')
+        refetch()
+        setShowDetail(false)
+        setSelectedMovimiento(null)
+      } catch (error) {
+        toast.error('Error', error.message || 'No se pudo editar la entrada')
+      }
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -570,6 +611,9 @@ export default function Entradas() {
           isConfirmando={isConfirmando}
           canCancel={canWriteMovimientos && normalizeEstado(selectedMovimiento.estado) === 'PENDIENTE'}
           onCancelar={handleCancelarMovimiento}
+          canEdit={canWriteMovimientos}
+          isEntradasView={true}
+          onEditar={handleEditarEntrada}
         />
       )}
 

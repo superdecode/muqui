@@ -482,24 +482,6 @@ export default function Conteos() {
               <Printer size={18} />
             </button>
           )}
-          {/* Botón editar - Solo usuarios con permiso Total y ubicación asignada */}
-          {canEditCompletedConteo(row) && (
-            <button
-              onClick={() => handleEditar(row)}
-              className={`p-2 rounded-lg transition-colors ${
-                (row.ediciones_count || 0) === 2
-                  ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
-                  : 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20'
-              }`}
-              title={
-                (row.ediciones_count || 0) === 2
-                  ? '⚠️ Última edición permitida'
-                  : `Editar conteo${row.ediciones_count ? ` (${row.ediciones_count}/3 ediciones)` : ''}`
-              }
-            >
-              <Pencil size={18} />
-            </button>
-          )}
           <button
             onClick={() => handleVer(row)}
             className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
@@ -507,8 +489,8 @@ export default function Conteos() {
           >
             <Eye size={18} />
           </button>
-          {/* SUPER-PRIVILEGIO: Solo Admin Global puede eliminar permanentemente */}
-          {user?.rol === 'ADMIN_GLOBAL' && (
+          {/* ACCESO TOTAL: Solo usuarios con permiso Total pueden eliminar permanentemente */}
+          {getPermissionLevel('conteos') === 'total' && (
             <button
               onClick={() => handleEliminar(row)}
               className="p-2 text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"

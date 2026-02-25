@@ -348,6 +348,28 @@ export default function Salidas() {
     })
   }
 
+  const handleEditarMovimiento = async (productosEditados) => {
+    if (!selectedMovimiento) return
+
+    try {
+      // Actualizar cantidades en detalles de movimientos
+      await dataService.updateMovimientoDetalles({
+        movimiento_id: selectedMovimiento.id,
+        productos: productosEditados,
+        fecha_ultima_edicion: new Date(),
+        editado_por: user?.id || 'USR001',
+        ediciones_count_increment: 1
+      })
+
+      toast.success('Movimiento Editado', 'Las cantidades han sido actualizadas')
+      refetch()
+      setShowDetail(false)
+      setSelectedMovimiento(null)
+    } catch (error) {
+      toast.error('Error', error.message || 'No se pudo editar el movimiento')
+    }
+  }
+
   const handleExportar = () => {
     try {
       exportMovimientosToCSV(movimientosFiltrados)
@@ -571,6 +593,9 @@ export default function Salidas() {
           onClose={handleCloseDetail}
           canCancel={canWriteMovimientos && normalizeEstado(selectedMovimiento.estado) === 'PENDIENTE'}
           onCancelar={handleCancelarMovimiento}
+          canEdit={canWriteMovimientos}
+          isEntradasView={false}
+          onEditar={handleEditarMovimiento}
         />
       )}
     </div>

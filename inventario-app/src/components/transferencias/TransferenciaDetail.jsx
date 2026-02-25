@@ -23,9 +23,20 @@ const normalizeEstado = (estado) => {
   return s
 }
 
-export default function TransferenciaDetail({ transferencia, onClose, onConfirmar, onConfirmarParcial, isConfirmando, onCancelar, canCancel = false }) {
+export default function TransferenciaDetail({
+  transferencia,
+  onClose,
+  onConfirmar,
+  onConfirmarParcial,
+  isConfirmando,
+  onCancelar,
+  canCancel = false,
+  canEdit = false,
+  isEntradasView = false,
+  onEditar
+}) {
   const toast = useToastStore()
-  const [modoRecepcion, setModoRecepcion] = useState(null) // null | 'total' | 'parcial'
+  const [modoRecepcion, setModoRecepcion] = useState(null) // null | 'total' | 'parcial' | 'editar'
   const [cantidadesRecibidas, setCantidadesRecibidas] = useState({})
   const inputRefs = useRef({})
 
@@ -33,6 +44,9 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [motivoCancelacion, setMotivoCancelacion] = useState('')
   const [isCancelling, setIsCancelling] = useState(false)
+
+  // Edit confirmation modal state (for entradas completadas)
+  const [showEditConfirmModal, setShowEditConfirmModal] = useState(false)
 
   // Observaciones de recepción
   const [observacionesRecepcion, setObservacionesRecepcion] = useState('')
@@ -226,7 +240,7 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
         return '-'
       }
       
-      const resultado = format(date, "d 'de' MMMM, yyyy", { locale: es })
+      const resultado = format(date, "dd-MM-yyyy HH:mm", { locale: es })
       console.log('formatDate - Resultado formateado:', resultado)
       return resultado
     } catch (error) {
@@ -503,10 +517,10 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
               </div>
             ) : (
               <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-                {modoRecepcion === 'parcial' && (
+                {(modoRecepcion === 'parcial' || modoRecepcion === 'editar') && (
                   <div className="bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-700 px-4 py-3">
                     <p className="text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
-                      <span className="font-semibold">Modo de Recepción Parcial:</span>
+                      <span className="font-semibold">{modoRecepcion === 'editar' ? 'Modo de Edición:' : 'Modo de Recepción Parcial:'}</span>
                       <span className="text-orange-600 font-medium">Naranja = Recibido &gt; Enviado</span>
                       <span className="text-blue-600 font-medium">Azul = Recibido &lt; Enviado</span>
                     </p>
@@ -517,12 +531,14 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
                     <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
                       <tr>
                         <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Producto</th>
-                        <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Especificación</th>
+                        <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Especificación (Unidad)</th>
                         <th className="px-4 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">
                         {transferencia.tipo_movimiento === 'VENTA' ? 'Cantidad' : 'Enviada'}
                       </th>
-                        {(modoRecepcion === 'parcial' || detalle_has_recibida) && (
-                          <th className="px-4 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">Recibida</th>
+                        {(modoRecepcion === 'parcial' || modoRecepcion === 'editar' || detalle_has_recibida) && (
+                          <th className="px-4 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">
+                            {modoRecepcion === 'editar' ? 'Editar' : 'Recibida'}
+                          </th>
                         )}
                       </tr>
                     </thead>
@@ -540,13 +556,17 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
                                 </div>
                                 <div>
                                   <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm">{productoInfo.nombre}</p>
-                                  <p className="text-xs text-slate-500">{productoInfo.unidad_medida || ''}</p>
                                 </div>
                               </div>
                             </td>
                             <td className="px-4 py-4">
                               <p className="text-sm text-slate-700 dark:text-slate-300">
                                 {productoInfo.especificacion || <span className="text-slate-400 italic">—</span>}
+                                {productoInfo.unidad_medida && (
+                                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    {productoInfo.unidad_medida}
+                                  </span>
+                                )}
                               </p>
                             </td>
                             <td className="px-4 py-4 text-center">
@@ -554,7 +574,7 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
                                 {cantEnviada}
                               </span>
                             </td>
-                            {modoRecepcion === 'parcial' && (
+                            {(modoRecepcion === 'parcial' || modoRecepcion === 'editar') && (
                               <td className="px-4 py-4 text-center">
                                 <input
                                   ref={el => { inputRefs.current[index] = el }}
@@ -592,7 +612,7 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
                                 )}
                               </td>
                             )}
-                            {modoRecepcion !== 'parcial' && detalle_has_recibida && (
+                            {modoRecepcion !== 'parcial' && modoRecepcion !== 'editar' && detalle_has_recibida && (
                               <td className="px-4 py-4 text-center">
                                 <span className={`text-lg font-bold ${cantRecibida !== null && cantRecibida < cantEnviada ? 'text-orange-600' : 'text-green-600'}`}>
                                   {cantRecibida !== null ? cantRecibida : '—'}
@@ -608,6 +628,36 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
               </div>
             )}
           </div>
+
+          {/* Información de Edición */}
+          {transferencia.fecha_ultima_edicion && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+              <h3 className="font-semibold text-amber-800 dark:text-amber-200 flex items-center gap-2 mb-3">
+                <Edit3 size={20} />
+                Información de Edición
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                <div>
+                  <p className="text-amber-700/70 dark:text-amber-300/70 mb-1">Última edición</p>
+                  <p className="font-medium text-amber-900 dark:text-amber-100">
+                    {formatDate(transferencia.fecha_ultima_edicion)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-amber-700/70 dark:text-amber-300/70 mb-1">Editado por</p>
+                  <p className="font-medium text-amber-900 dark:text-amber-100">
+                    {getUsuarioNombre(transferencia.editado_por)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-amber-700/70 dark:text-amber-300/70 mb-1">Total de ediciones</p>
+                  <p className="font-medium text-amber-900 dark:text-amber-100">
+                    {transferencia.ediciones_count || 1}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Observaciones guardadas */}
           {(transferencia.observaciones_creacion || transferencia.observaciones_confirmacion) && (
@@ -651,7 +701,7 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
           </div>
 
         {/* Footer Sticky */}
-        <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex-shrink-0">
+        <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex-shrink-0 sticky bottom-0">
           <div className="flex justify-between gap-4">
             {/* Cancel button - left side */}
             <div>
@@ -672,6 +722,30 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
               <Button variant="ghost" onClick={() => { setModoRecepcion(null); onClose() }}>
                 Cerrar
               </Button>
+
+              {/* Botón Editar para Salidas - solo cuando NO está en modo edición */}
+              {!isEntradasView && !modoRecepcion && canEdit && normalizeEstado(transferencia.estado) === 'PENDIENTE' && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setModoRecepcion('editar')}
+                >
+                  <Edit3 size={16} className="mr-1.5" />
+                  Editar
+                </Button>
+              )}
+
+              {/* Botón Editar para Entradas - solo cuando NO está en modo edición */}
+              {isEntradasView && !modoRecepcion && canEdit && normalizeEstado(transferencia.estado) === 'COMPLETADO' && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowEditConfirmModal(true)}
+                >
+                  <Edit3 size={16} className="mr-1.5" />
+                  Editar
+                </Button>
+              )}
+
+              {/* Botones de recepción - solo cuando onConfirmar existe y NO está en modo edición */}
               {onConfirmar && !modoRecepcion && normalizeEstado(transferencia.estado) !== 'CANCELADA' && (
                 <>
                   <Button
@@ -679,7 +753,7 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
                     onClick={() => setModoRecepcion('parcial')}
                   >
                     <Edit3 size={16} className="mr-1.5" />
-                    Recibir Parcial
+                    Ingresar Cantidades
                   </Button>
                   <Button
                     variant="success"
@@ -691,18 +765,30 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
                   </Button>
                 </>
               )}
-              {modoRecepcion === 'parcial' && (
+
+              {/* Botones cuando está en modo parcial o editar */}
+              {(modoRecepcion === 'parcial' || modoRecepcion === 'editar') && (
                 <>
                   <Button variant="ghost" onClick={() => setModoRecepcion(null)}>
                     Volver
                   </Button>
                   <Button
                     variant="success"
-                    onClick={handleConfirmarParcial}
+                    onClick={modoRecepcion === 'editar' ? () => {
+                      if (onEditar) {
+                        const productosEditados = detalles.map(d => ({
+                          detalle_id: d.id,
+                          producto_id: d.producto_id,
+                          cantidad_enviada: cantidadesRecibidas[d.id] || (d.cantidad_enviada ?? d.cantidad)
+                        }))
+                        onEditar(productosEditados)
+                        setModoRecepcion(null)
+                      }
+                    } : handleConfirmarParcial}
                     loading={isConfirmando}
                   >
                     <CheckCircle size={16} className="mr-1.5" />
-                    {isConfirmando ? 'Procesando...' : 'Confirmar Recepción Parcial'}
+                    {isConfirmando ? 'Procesando...' : modoRecepcion === 'editar' ? 'Guardar Cambios' : 'Confirmar Recepción Parcial'}
                   </Button>
                 </>
               )}
@@ -710,6 +796,58 @@ export default function TransferenciaDetail({ transferencia, onClose, onConfirma
           </div>
         </div>
       </div>
+
+      {/* Modal de Confirmación de Edición (para Entradas completadas) */}
+      {showEditConfirmModal && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+            <div className="bg-gradient-to-r from-amber-600 to-amber-700 p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-xl">
+                  <AlertTriangle className="text-white" size={24} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Confirmar Edición</h3>
+                  <p className="text-white/80 text-sm">Esta acción cambiará el estado</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  <strong>⚠️ Confirmar Edición:</strong><br />
+                  Al confirmar, el estado cambiará de <strong>'Completado'</strong> a <strong>'Recibiendo'</strong> para permitir editar cantidades.
+                  Una vez terminado, deberá marcar nuevamente como recibido manualmente.
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowEditConfirmModal(false)}
+                  className="flex-1"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  variant="warning"
+                  onClick={() => {
+                    setShowEditConfirmModal(false)
+                    setModoRecepcion('parcial') // Abrir directamente en modo ingreso de cantidades
+                    if (onEditar) {
+                      onEditar('change_to_recibiendo') // Signal to change state to recibiendo
+                    }
+                  }}
+                  className="flex-1"
+                >
+                  <Edit3 size={16} className="mr-1.5" />
+                  Confirmar Edición
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Cancelación */}
       {showCancelModal && (

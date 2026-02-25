@@ -159,7 +159,7 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
   const formatDate = (dateString) => {
     if (!dateString) return '-'
     try {
-      return format(new Date(dateString), "d 'de' MMMM 'de' yyyy 'a las' HH:mm", { locale: es })
+      return format(new Date(dateString), "dd-MM-yyyy HH:mm", { locale: es })
     } catch {
       return '-'
     }
@@ -217,7 +217,30 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
         <div className="p-5 overflow-y-auto flex-1 space-y-4">
           {/* Info General */}
           <div className="space-y-3">
-            {/* Primera fila: Fecha Programada y Responsable */}
+            {/* Primera fila: Ubicación y Tipo de Conteo */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <MapPin className="text-red-500" size={20} />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">Ubicación</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{getUbicacionNombre(conteo.ubicacion_id)}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Package className="text-blue-600" size={20} />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">Tipo de Conteo</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{conteo.tipo_conteo?.charAt(0).toUpperCase() + conteo.tipo_conteo?.slice(1)}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Segunda fila: Fecha Creación y Responsable */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex items-start gap-3">
                 <div className="p-2 bg-purple-100 rounded-lg">
@@ -240,29 +263,6 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
               </div>
             </div>
 
-            {/* Segunda fila: Tipo de Conteo y Ubicación */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Package className="text-blue-600" size={20} />
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Tipo de Conteo</p>
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">{conteo.tipo_conteo?.charAt(0).toUpperCase() + conteo.tipo_conteo?.slice(1)}</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-red-100 rounded-lg">
-                  <MapPin className="text-red-500" size={20} />
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Ubicación</p>
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">{getUbicacionNombre(conteo.ubicacion_id)}</p>
-                </div>
-              </div>
-            </div>
-
             {/* Tercera fila: Ejecución (solo si existe) */}
             {conteo.usuario_ejecutor_id && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -274,7 +274,7 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
                     <div>
                       <p className="text-sm text-slate-600 dark:text-slate-400">Completado el</p>
                       <p className="font-semibold text-slate-900 dark:text-slate-100">
-                        {safeFormatDate(conteo.fecha_completado, "d 'de' MMMM 'de' yyyy 'a las' HH:mm", 'Fecha no disponible')}
+                        {safeFormatDate(conteo.fecha_completado, "dd-MM-yyyy HH:mm", 'Fecha no disponible')}
                       </p>
                     </div>
                   </div>
@@ -304,7 +304,7 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
                       Editado el {conteo.ediciones_count > 1 ? `(${conteo.ediciones_count} veces)` : ''}
                     </p>
                     <p className="font-semibold text-slate-900 dark:text-slate-100">
-                      {safeFormatDate(conteo.fecha_edicion, "d 'de' MMMM 'de' yyyy 'a las' HH:mm", 'Fecha no disponible')}
+                      {safeFormatDate(conteo.fecha_edicion, "dd-MM-yyyy HH:mm", 'Fecha no disponible')}
                     </p>
                   </div>
                 </div>
@@ -373,7 +373,7 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
                                 {productoInfo.especificacion || <span className="text-slate-400 italic">Sin especificación</span>}
                                 {productoInfo.unidad_medida && (
                                   <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                    ({productoInfo.unidad_medida})
+                                    {productoInfo.unidad_medida}
                                   </span>
                                 )}
                               </p>
@@ -443,7 +443,7 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
           </div>
 
         {/* Footer Sticky */}
-        <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex-shrink-0">
+        <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex-shrink-0 sticky bottom-0">
           <div className="flex justify-between gap-3">
             <div>
               {canEditCompletedConteo(conteo) && onEdit && (
