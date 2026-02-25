@@ -719,7 +719,7 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
                         <input
                           type="number"
                           min="0.01"
-                          step="0.01"
+                          step="any"
                           max={producto.stock > 0 ? producto.stock : undefined}
                           value={producto.cantidad}
                           onChange={(e) => handleCantidadChange(producto.id, parseFloat(e.target.value) || 0)}

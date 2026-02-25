@@ -17,7 +17,8 @@ import {
   orderBy,
   serverTimestamp,
   writeBatch,
-  Timestamp
+  Timestamp,
+  increment
 } from 'firebase/firestore'
 import { getDB } from '../config/firebase.config'
 import { triggerTransferenciaRecibida, triggerStockBajo, verificarStockBajo } from './notificationService'
@@ -1049,7 +1050,7 @@ const firestoreService = {
       const batch = writeBatch(db)
 
       // Generar código legible secuencial
-      const codigoLegible = await getNextSequentialCode('EC')
+      const codigoLegible = await getNextSequentialCode('CM')
 
       // Crear movimiento de entrada
       const movimientoRef = doc(collection(db, 'movimientos'))
@@ -1058,7 +1059,8 @@ const firestoreService = {
         tipo_movimiento: 'COMPRA',
         origen_id: null, // No hay origen en compras
         destino_id: data.destino_id,
-        proveedor: data.proveedor || '',
+        proveedor_id: data.proveedor_id || '',
+        proveedor: data.proveedor_nombre || data.proveedor || '',
         numero_documento: data.numero_documento || '',
         estado: 'COMPLETADO', // Las compras se completan inmediatamente
         usuario_creacion_id: data.usuario_creacion_id,
@@ -1086,7 +1088,7 @@ const firestoreService = {
           })
 
           // Actualizar inventario en destino
-          const inventarioQuery = fbQuery(
+          const inventarioQuery = query(
             collection(db, 'inventario'),
             where('ubicacion_id', '==', data.destino_id),
             where('producto_id', '==', prod.producto_id)
@@ -2917,6 +2919,132 @@ const firestoreService = {
         success: false,
         error: error.message
       }
+    }
+  },
+
+  /**
+   * Update movimiento estado (e.g., from COMPLETADO to RECIBIENDO for editing)
+   */
+  updateMovimientoEstado: async (data) => {
+    try {
+      const db = getDB()
+      const movimientoRef = doc(db, 'movimientos', data.movimiento_id)
+
+      await updateDoc(movimientoRef, {
+        estado: data.estado,
+        fecha_ultima_edicion: Timestamp.now(),
+        usuario_editor_id: data.editado_por,
+        ediciones_count: increment(data.ediciones_count_increment || 1)
+      })
+
+      return { success: true, message: 'Estado actualizado exitosamente' }
+    } catch (error) {
+      console.error('Error actualizando estado del movimiento:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  /**
+   * Update movimiento detalles (product quantities)
+   * Updates detalle_movimientos and adjusts inventory accordingly
+   */
+  updateMovimientoDetalles: async (data) => {
+    try {
+      const db = getDB()
+      const batch = writeBatch(db)
+
+      // Get movimiento to know tipo and destino
+      const movimientoRef = doc(db, 'movimientos', data.movimiento_id)
+      const movimientoDoc = await getDoc(movimientoRef)
+      if (!movimientoDoc.exists()) {
+        throw new Error('Movimiento no encontrado')
+      }
+      const movimiento = movimientoDoc.data()
+
+      // Get current ediciones log or create new array
+      const edicionesActuales = movimiento.registro_ediciones || []
+      const numeroEdicion = edicionesActuales.length + 1
+      
+      // Create new edition log entry
+      const nuevaEdicion = {
+        numero_edicion: numeroEdicion,
+        fecha_edicion: Timestamp.now(),
+        usuario_editor_id: data.editado_por,
+        productos_modificados: data.productos.map(p => ({
+          detalle_id: p.detalle_id,
+          producto_id: p.producto_id,
+          cantidad_anterior: null, // Will be filled below
+          cantidad_nueva: p.cantidad_enviada
+        }))
+      }
+      
+      // Update movimiento metadata with historical log
+      const updateData = {
+        fecha_ultima_edicion: Timestamp.now(),
+        usuario_editor_id: data.editado_por,
+        registro_ediciones: [...edicionesActuales, nuevaEdicion]
+      }
+      
+      // If estado is RECIBIENDO, change it back to COMPLETADO after editing
+      if (movimiento.estado === 'RECIBIENDO') {
+        updateData.estado = 'COMPLETADO'
+        updateData.fecha_confirmacion = Timestamp.now()
+      }
+      
+      batch.update(movimientoRef, updateData)
+
+      // For each product, update detalle and adjust inventory
+      for (const prod of data.productos) {
+        const detalleRef = doc(db, 'detalle_movimientos', prod.detalle_id)
+        const detalleDoc = await getDoc(detalleRef)
+
+        if (detalleDoc.exists()) {
+          const detalleActual = detalleDoc.data()
+          const cantidadAnterior = detalleActual.cantidad_enviada || detalleActual.cantidad || 0
+          const cantidadNueva = prod.cantidad_enviada
+          const diferencia = cantidadNueva - cantidadAnterior
+
+          // Update detalle - preserve cantidad_recibida if it exists, otherwise set to cantidad_enviada for COMPRA
+          const updateData = {
+            cantidad_enviada: cantidadNueva
+          }
+          
+          // Only update cantidad_recibida if it's a COMPRA or if explicitly provided
+          if (movimiento.tipo_movimiento === 'COMPRA' || prod.cantidad_recibida !== undefined) {
+            updateData.cantidad_recibida = prod.cantidad_recibida !== undefined ? prod.cantidad_recibida : cantidadNueva
+          }
+          
+          batch.update(detalleRef, updateData)
+
+          // Adjust inventory in destino
+          if (movimiento.destino_id && diferencia !== 0) {
+            const inventarioQuery = query(
+              collection(db, 'inventario'),
+              where('ubicacion_id', '==', movimiento.destino_id),
+              where('producto_id', '==', prod.producto_id)
+            )
+            const inventarioSnapshot = await getDocs(inventarioQuery)
+
+            if (!inventarioSnapshot.empty) {
+              const inventarioDoc = inventarioSnapshot.docs[0]
+              const inventarioActual = inventarioDoc.data()
+              const inventarioRef = doc(db, 'inventario', inventarioDoc.id)
+
+              batch.update(inventarioRef, {
+                cantidad: (inventarioActual.cantidad || 0) + diferencia,
+                fecha_actualizacion: Timestamp.now()
+              })
+            }
+          }
+        }
+      }
+
+      await batch.commit()
+
+      return { success: true, message: 'Cantidades actualizadas exitosamente' }
+    } catch (error) {
+      console.error('Error actualizando detalles del movimiento:', error)
+      return { success: false, message: error.message }
     }
   }
 }

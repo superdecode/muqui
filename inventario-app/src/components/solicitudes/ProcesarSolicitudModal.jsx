@@ -303,7 +303,7 @@ export default function ProcesarSolicitudModal({ solicitud, onClose, onProcesar,
                                 <input
                                   type="number"
                                   min="0"
-                                  step="0.01"
+                                  step="any"
                                   max={stock}
                                   value={prod.cantidad_aprobada}
                                   onChange={(e) => handleCantidadChange(prod.producto_id, e.target.value)}

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../stores/authStore'
@@ -13,6 +13,7 @@ import dataService from '../services/dataService'
 
 export default function Dashboard() {
   const { user } = useAuthStore()
+  const navigate = useNavigate()
 
   // Data queries (same as Stock and Reportes)
   const { data: inventario = [], isLoading: loadingInventario } = useQuery({ queryKey: ['inventario'], queryFn: () => dataService.getInventario() })
@@ -23,7 +24,28 @@ export default function Dashboard() {
   const { data: conteos = [], isLoading: loadingConteos } = useQuery({ queryKey: ['conteos'], queryFn: () => dataService.getConteos() })
   const { data: detalleConteos = [] } = useQuery({ queryKey: ['detalle-conteos-all'], queryFn: () => dataService.getDetalleConteos() })
   const { data: detalleMovimientos = [] } = useQuery({ queryKey: ['detalle-movimientos-all'], queryFn: () => dataService.getDetalleMovimientos() })
-  const { alertas, loading: loadingAlertas } = useAlertasStore()
+  const { alertas } = useAlertasStore()
+
+  // Handler to navigate when clicking an alert - same logic as AlertsPanel
+  const handleAlertClick = (alerta) => {
+    // Check for accionUrl first
+    const accionUrl = alerta.accionUrl || alerta.datos_adicionales?.accionUrl
+    if (accionUrl) {
+      navigate(accionUrl)
+      return
+    }
+
+    // Fallback: navigate based on type
+    if (alerta.tipo === 'transferencia_pendiente' || alerta.tipo === 'transferencia_recibida') {
+      navigate('/transferencias')
+    } else if (alerta.tipo === 'conteo_recordatorio' || alerta.tipo === 'conteo_inventario') {
+      navigate('/conteos')
+    } else if (alerta.tipo === 'stock_bajo') {
+      navigate('/stock')
+    } else if (alerta.tipo === 'solicitud_recibida') {
+      navigate('/solicitudes?tab=recibidas')
+    }
+  }
 
   // User ubicaciones (same logic as Stock)
   const userUbicaciones = useMemo(() => {
@@ -117,7 +139,7 @@ export default function Dashboard() {
     conteosPendientes: conteos?.filter(c => c.estado === 'PENDIENTE').length || 0
   }
 
-  const isLoading = loadingInventario || loadingAlertas || loadingMovimientos || loadingConteos
+  const isLoading = loadingInventario || loadingMovimientos || loadingConteos
 
   return (
     <div className="space-y-8">
@@ -247,7 +269,11 @@ export default function Dashboard() {
         ) : (
           <div className="space-y-3">
             {alertas.slice(0, 5).map((alerta) => (
-              <div key={alerta.id} className="group flex items-start gap-4 p-4 bg-gradient-to-r from-slate-50 dark:from-slate-700/50 to-transparent rounded-xl hover:from-slate-100 dark:hover:from-slate-700 transition-all duration-300 border border-slate-100 dark:border-slate-700 hover:border-slate-200 dark:hover:border-slate-600">
+              <div 
+                key={alerta.id} 
+                onClick={() => handleAlertClick(alerta)}
+                className="group flex items-start gap-4 p-4 bg-gradient-to-r from-slate-50 dark:from-slate-700/50 to-transparent rounded-xl hover:from-slate-100 dark:hover:from-slate-700 transition-all duration-300 border border-slate-100 dark:border-slate-700 hover:border-slate-200 dark:hover:border-slate-600 cursor-pointer"
+              >
                 <div className={`p-2 rounded-lg ${alerta.prioridad === 'CRITICA' || alerta.prioridad === 'critica' ? 'bg-danger-100' : alerta.prioridad === 'ALTA' || alerta.prioridad === 'alta' ? 'bg-red-100' : alerta.prioridad === 'MEDIA' || alerta.prioridad === 'media' ? 'bg-accent-100' : 'bg-slate-100'}`}>
                   <AlertTriangle size={20} className={alerta.prioridad === 'CRITICA' || alerta.prioridad === 'critica' ? 'text-danger-600' : alerta.prioridad === 'ALTA' || alerta.prioridad === 'alta' ? 'text-red-600' : alerta.prioridad === 'MEDIA' || alerta.prioridad === 'media' ? 'text-accent-600' : 'text-slate-600'} />
                 </div>

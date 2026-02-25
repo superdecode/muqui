@@ -586,7 +586,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
                       <input
                         type="number"
                         min="0"
-                        step="0.01"
+                        step="any"
                         data-conteo-index={index}
                         value={getDisplayValue(producto)}
                         onChange={(e) => handleStockChange(producto.producto_id, e.target.value)}

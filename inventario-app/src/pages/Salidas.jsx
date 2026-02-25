@@ -45,7 +45,7 @@ export default function Salidas() {
 
   
   const { user } = useAuthStore()
-  const { canEdit, isReadOnly, isAdmin } = usePermissions()
+  const { canEdit, canDelete, isReadOnly, isAdmin } = usePermissions()
   const toast = useToastStore()
 
   const canWriteMovimientos = canEdit('movimientos')
@@ -269,7 +269,8 @@ export default function Salidas() {
       accessor: 'id',
       render: (value, row) => {
         const estado = normalizeEstado(row.estado)
-        const canDeleteRow = esAdmin && estado !== 'COMPLETADO'
+        // Users with 'total' permission can delete regardless of state
+        const canDeleteRow = canDelete('movimientos') || (esAdmin && estado !== 'COMPLETADO')
         return (
           <div className="flex gap-2">
             <button

@@ -17,6 +17,7 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
   const { canEdit, getPermissionLevel, isAdmin } = usePermissions()
   const [eliminandoId, setEliminandoId] = useState(null)
   const [confirmDetalle, setConfirmDetalle] = useState(null)
+  const [activeTab, setActiveTab] = useState('detalles') // 'detalles' | 'logs'
 
   // Verificar si el usuario puede editar conteos completados (permiso Total + ubicación asignada + máximo 3 ediciones + máximo 1 mes desde creación)
   const canEditCompletedConteo = (conteo) => {
@@ -214,116 +215,86 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
           </div>
         </div>
 
+        {/* Tabs Navigation */}
+        <div className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-5 flex-shrink-0">
+          <div className="flex gap-1">
+            <button
+              onClick={() => setActiveTab('detalles')}
+              className={`px-6 py-3 font-semibold text-sm transition-all relative ${
+                activeTab === 'detalles'
+                  ? 'text-primary-600 dark:text-primary-400'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              DETALLES
+              {activeTab === 'detalles' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 dark:bg-primary-400"></div>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('logs')}
+              className={`px-6 py-3 font-semibold text-sm transition-all relative flex items-center gap-2 ${
+                activeTab === 'logs'
+                  ? 'text-primary-600 dark:text-primary-400'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              LOGS
+              <span className={`inline-flex items-center justify-center w-5 h-5 text-xs font-bold rounded-full ${
+                activeTab === 'logs'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-slate-300 text-slate-700'
+              }`}>
+                {[
+                  conteo.fecha_creacion,
+                  conteo.fecha_completado,
+                  conteo.fecha_edicion
+                ].filter(Boolean).length}
+              </span>
+              {activeTab === 'logs' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 dark:bg-primary-400"></div>
+              )}
+            </button>
+          </div>
+        </div>
+
         <div className="p-5 overflow-y-auto flex-1 space-y-4">
-          {/* Info General */}
-          <div className="space-y-3">
-            {/* Primera fila: Ubicación y Tipo de Conteo */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Tab: Detalles */}
+          {activeTab === 'detalles' && (
+            <>
+          {/* Tarjeta de Ubicación y Tipo */}
+          <div className="bg-gradient-to-r from-primary-50 to-blue-50 dark:from-primary-900/20 dark:to-blue-900/20 border border-primary-200 dark:border-primary-800 rounded-xl p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Ubicación */}
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-red-100 rounded-lg">
-                  <MapPin className="text-red-500" size={20} />
+                <div className="p-2 bg-red-100 dark:bg-red-800 rounded-lg">
+                  <MapPin className="text-red-600 dark:text-red-300" size={20} />
                 </div>
                 <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Ubicación</p>
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">{getUbicacionNombre(conteo.ubicacion_id)}</p>
+                  <span className="text-xs font-semibold text-red-700 dark:text-red-300 uppercase tracking-wide">Ubicación</span>
+                  <p className="font-bold text-lg text-slate-900 dark:text-slate-100 mt-1">
+                    {getUbicacionNombre(conteo.ubicacion_id)}
+                  </p>
                 </div>
               </div>
 
+              {/* Tipo de Conteo */}
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Package className="text-blue-600" size={20} />
+                <div className="p-2 bg-blue-100 dark:bg-blue-800 rounded-lg">
+                  <Package className="text-blue-600 dark:text-blue-300" size={20} />
                 </div>
                 <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Tipo de Conteo</p>
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">{conteo.tipo_conteo?.charAt(0).toUpperCase() + conteo.tipo_conteo?.slice(1)}</p>
+                  <span className="text-xs font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide">Tipo de Conteo</span>
+                  <p className="font-bold text-lg text-slate-900 dark:text-slate-100 mt-1">
+                    {conteo.tipo_conteo?.charAt(0).toUpperCase() + conteo.tipo_conteo?.slice(1)}
+                  </p>
                 </div>
               </div>
             </div>
-
-            {/* Segunda fila: Fecha Creación y Responsable */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Calendar className="text-purple-600" size={20} />
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Fecha Creación</p>
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">{conteo.fecha_creacion ? formatDate(conteo.fecha_creacion.toDate ? conteo.fecha_creacion.toDate() : new Date(conteo.fecha_creacion)) : '-'}</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <User className="text-purple-600" size={20} />
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Responsable</p>
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">{getUsuarioNombre(conteo.usuario_responsable_id)}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Tercera fila: Ejecución (solo si existe) */}
-            {conteo.usuario_ejecutor_id && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {conteo.fecha_completado && (
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <Calendar className="text-green-600" size={20} />
-                    </div>
-                    <div>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">Completado el</p>
-                      <p className="font-semibold text-slate-900 dark:text-slate-100">
-                        {safeFormatDate(conteo.fecha_completado, "dd-MM-yyyy HH:mm", 'Fecha no disponible')}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <User className="text-green-600" size={20} />
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Ejecutado por</p>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">{getUsuarioNombre(conteo.usuario_ejecutor_id)}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Cuarta fila: Edición (solo si fue editado) */}
-            {conteo.fecha_edicion && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-amber-100 rounded-lg">
-                    <Pencil className="text-amber-600" size={20} />
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                      Editado el {conteo.ediciones_count > 1 ? `(${conteo.ediciones_count} veces)` : ''}
-                    </p>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">
-                      {safeFormatDate(conteo.fecha_edicion, "dd-MM-yyyy HH:mm", 'Fecha no disponible')}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-amber-100 rounded-lg">
-                    <User className="text-amber-600" size={20} />
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Editado por</p>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">{getUsuarioNombre(conteo.usuario_editor_id)}</p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Productos */}
-          <div>
+          <div className="max-h-[24rem] overflow-hidden">
             <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
               <Package size={24} className="text-primary-600" />
               Productos Contados {detalles.length > 0 && `(${detalles.length} items)`}
@@ -340,9 +311,9 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
               </div>
             ) : (
               <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-                <div className="overflow-x-auto">
+                <div className="overflow-y-auto max-h-[20rem]">
                   <table className="w-full">
-                    <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
+                    <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10">
                       <tr>
                         <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Producto</th>
                         <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Especificación (Unidad)</th>
@@ -438,35 +409,111 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
               <p className="text-slate-700 dark:text-slate-300">{conteo.observaciones}</p>
             </div>
           )}
+            </>
+          )}
 
-          {/* Botones */}
-          </div>
+          {/* Tab: Logs de Actividad */}
+          {activeTab === 'logs' && (
+            <div className="space-y-4">
+              {/* Creación */}
+              {conteo.fecha_creacion && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+                  <h3 className="font-semibold text-blue-800 dark:text-blue-200 flex items-center gap-2 mb-3">
+                    <Calendar size={20} />
+                    Creación
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-blue-700/70 dark:text-blue-300/70 mb-1">Fecha de creación</p>
+                      <p className="font-medium text-blue-900 dark:text-blue-100">
+                        {formatDate(conteo.fecha_creacion.toDate ? conteo.fecha_creacion.toDate() : new Date(conteo.fecha_creacion))}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-blue-700/70 dark:text-blue-300/70 mb-1">Responsable</p>
+                      <p className="font-medium text-blue-900 dark:text-blue-100">
+                        {getUsuarioNombre(conteo.usuario_responsable_id)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Completado */}
+              {conteo.fecha_completado && (
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
+                  <h3 className="font-semibold text-green-800 dark:text-green-200 flex items-center gap-2 mb-3">
+                    <CheckCircle size={20} />
+                    Completado
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-green-700/70 dark:text-green-300/70 mb-1">Fecha de completado</p>
+                      <p className="font-medium text-green-900 dark:text-green-100">
+                        {safeFormatDate(conteo.fecha_completado, "dd-MM-yyyy HH:mm", 'Fecha no disponible')}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-green-700/70 dark:text-green-300/70 mb-1">Ejecutado por</p>
+                      <p className="font-medium text-green-900 dark:text-green-100">
+                        {getUsuarioNombre(conteo.usuario_ejecutor_id)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Edición */}
+              {conteo.fecha_edicion && (
+                <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4">
+                  <h3 className="font-semibold text-purple-800 dark:text-purple-200 flex items-center gap-2 mb-3">
+                    <Edit3 size={20} />
+                    Edición
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <p className="text-purple-700/70 dark:text-purple-300/70 mb-1">Última edición</p>
+                      <p className="font-medium text-purple-900 dark:text-purple-100">
+                        {safeFormatDate(conteo.fecha_edicion, "dd-MM-yyyy HH:mm", 'Fecha no disponible')}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-purple-700/70 dark:text-purple-300/70 mb-1">Editado por</p>
+                      <p className="font-medium text-purple-900 dark:text-purple-100">
+                        {getUsuarioNombre(conteo.usuario_editor_id)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-purple-700/70 dark:text-purple-300/70 mb-1">Total de ediciones</p>
+                      <p className="font-medium text-purple-900 dark:text-purple-100">
+                        {conteo.ediciones_count || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Footer Sticky */}
         <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex-shrink-0 sticky bottom-0">
-          <div className="flex justify-between gap-3">
-            <div>
-              {canEditCompletedConteo(conteo) && onEdit && (
-                <Button
-                  variant="outline"
-                  onClick={() => onEdit(conteo)}
-                  className={(conteo.ediciones_count || 0) === 2 ? 'text-red-600 border-red-300 hover:bg-red-50' : ''}
-                >
-                  <Edit3 size={16} className="mr-1.5" />
-                  Editar
-                  {(conteo.ediciones_count || 0) > 0 && (
-                    <span className="ml-2 text-xs">
-                      ({conteo.ediciones_count || 0}/3 ediciones)
-                    </span>
-                  )}
-                </Button>
-              )}
-            </div>
-            <div className="flex gap-3">
-              <Button variant="ghost" onClick={onClose}>
-                Cerrar
+          <div className="flex justify-end gap-3">
+            {canEditCompletedConteo(conteo) && onEdit && (
+              <Button
+                variant="outline"
+                onClick={() => onEdit(conteo)}
+                className={(conteo.ediciones_count || 0) === 2 ? 'text-red-600 border-red-300 hover:bg-red-50' : ''}
+              >
+                <Edit3 size={16} className="mr-1.5" />
+                Editar
+                {(conteo.ediciones_count || 0) > 0 && (
+                  <span className="ml-2 text-xs">
+                    ({conteo.ediciones_count || 0}/3 ediciones)
+                  </span>
+                )}
               </Button>
-            </div>
+            )}
           </div>
         </div>
       </div>

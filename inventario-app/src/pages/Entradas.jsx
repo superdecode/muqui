@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowDownLeft,
   CheckCircle,
@@ -39,8 +39,9 @@ export default function Entradas() {
   const [selectedMovimiento, setSelectedMovimiento] = useState(null)
 
   const { user } = useAuthStore()
-  const { canEdit, isReadOnly, isAdmin } = usePermissions()
+  const { canEdit, canDelete, isReadOnly, isAdmin } = usePermissions()
   const toast = useToastStore()
+  const queryClient = useQueryClient()
 
   const canWriteMovimientos = canEdit('movimientos')
   const isReadOnlyMovimientos = isReadOnly('movimientos')
@@ -138,11 +139,12 @@ export default function Entradas() {
     { id: 'completados', label: 'Completados', matchEstados: ['COMPLETADO', 'PARCIAL'] }
   ]
 
-  // Filter recepciones - ONLY TRANSFERENCIAS
+  // Filter recepciones - TRANSFERENCIAS and COMPRAS
   const movimientosFiltrados = useMemo(() => {
     return (movimientos || []).filter(m => {
-      // Only transfers can be received
-      if ((m.tipo_movimiento || '').toUpperCase() !== 'TRANSFERENCIA') return false
+      // Only transfers and purchases can be received
+      const tipoMov = (m.tipo_movimiento || '').toUpperCase()
+      if (tipoMov !== 'TRANSFERENCIA' && tipoMov !== 'COMPRA') return false
 
       const hasLocationRestriction = !esAdmin && userUbicacionIds.length > 0
       if (hasLocationRestriction && !userUbicacionIds.includes(m.destino_id)) return false
@@ -171,7 +173,8 @@ export default function Entradas() {
 
   const statusTabsWithCounts = useMemo(() => {
     const filtered = (movimientos || []).filter(m => {
-      if ((m.tipo_movimiento || '').toUpperCase() !== 'TRANSFERENCIA') return false
+      const tipoMov = (m.tipo_movimiento || '').toUpperCase()
+      if (tipoMov !== 'TRANSFERENCIA' && tipoMov !== 'COMPRA') return false
       const hasLocationRestriction = !esAdmin && userUbicacionIds.length > 0
       if (hasLocationRestriction && !userUbicacionIds.includes(m.destino_id)) return false
       if (effectiveSedeFilter && m.destino_id !== effectiveSedeFilter) return false
@@ -243,7 +246,8 @@ export default function Entradas() {
         const estado = normalizeEstado(row.estado)
         const recv = isReceiver(row)
         const canConfirmar = estado === 'PENDIENTE' && recv && canWriteMovimientos
-        const canDeleteRow = esAdmin && estado !== 'COMPLETADO'
+        // Users with 'total' permission can delete regardless of state
+        const canDeleteRow = canDelete('movimientos') || (esAdmin && estado !== 'COMPLETADO')
 
         return (
           <div className="flex gap-2">
@@ -383,7 +387,10 @@ export default function Entradas() {
         })
 
         toast.success('Estado Actualizado', 'Ahora puedes editar las cantidades')
-        refetch()
+        
+        // Update local state to reflect new estado without refetching
+        setSelectedMovimiento(prev => ({ ...prev, estado: 'RECIBIENDO' }))
+        
         // No cerrar el modal, el usuario continuará editando
       } catch (error) {
         toast.error('Error', error.message || 'No se pudo cambiar el estado')
@@ -391,6 +398,23 @@ export default function Entradas() {
     } else {
       // Guardar cantidades editadas (es un array de productos)
       try {
+        // Optimistic update: update local state immediately
+        const updatedMovimiento = { ...selectedMovimiento }
+        if (updatedMovimiento.detalles) {
+          updatedMovimiento.detalles = updatedMovimiento.detalles.map(detalle => {
+            const productoEditado = action.find(p => p.detalle_id === detalle.id)
+            if (productoEditado) {
+              return {
+                ...detalle,
+                cantidad_enviada: productoEditado.cantidad_enviada,
+                cantidad_recibida: productoEditado.cantidad_recibida
+              }
+            }
+            return detalle
+          })
+        }
+        setSelectedMovimiento(updatedMovimiento)
+
         await dataService.updateMovimientoDetalles({
           movimiento_id: selectedMovimiento.id,
           productos: action, // action es el array de productos editados
@@ -400,9 +424,17 @@ export default function Entradas() {
         })
 
         toast.success('Entrada Editada', 'Las cantidades han sido actualizadas')
-        refetch()
+        
+        // Close modal first to avoid visual glitch
         setShowDetail(false)
         setSelectedMovimiento(null)
+        
+        // Then refetch data to show updated values
+        await refetch()
+        
+        // Invalidate related queries to ensure all data is fresh
+        queryClient.invalidateQueries(['detalle-movimientos-all'])
+        queryClient.invalidateQueries(['inventario'])
       } catch (error) {
         toast.error('Error', error.message || 'No se pudo editar la entrada')
       }

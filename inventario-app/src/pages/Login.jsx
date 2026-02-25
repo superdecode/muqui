@@ -32,16 +32,12 @@ export default function Login() {
     setError('')
 
     try {
-      console.log('Intentando login con:', formData.email)
       const result = await authService.login(formData.email, formData.password)
-
-      console.log('Resultado del login:', { success: result.success, message: result.message })
 
       if (result.success) {
         login(result.user, result.token, result.role || null)
         navigate('/')
       } else {
-        console.log('Login fallido, mostrando error:', result.message)
         setError(result.message || 'Error al iniciar sesión')
       }
     } catch (err) {

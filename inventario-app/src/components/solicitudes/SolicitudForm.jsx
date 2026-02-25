@@ -369,7 +369,7 @@ export default function SolicitudForm({ onClose, onSave, onEnviar, isLoading = f
                                 <input
                                   type="number"
                                   min="0.01"
-                                  step="0.01"
+                                  step="any"
                                   value={producto.cantidad}
                                   onChange={(e) => handleCantidadChange(producto.producto_id, e.target.value)}
                                   className="w-24 px-3 py-2 border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-center font-bold focus:ring-2 focus:ring-primary-500 focus:border-primary-500"

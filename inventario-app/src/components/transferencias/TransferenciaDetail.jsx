@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { Package, MapPin, Calendar, FileText, CheckCircle, User, X, Download, Edit3, Ban, AlertTriangle } from 'lucide-react'
+import { Package, MapPin, Calendar, FileText, CheckCircle, X, Download, Edit3, Ban, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import dataService from '../../services/dataService'
@@ -39,6 +39,8 @@ export default function TransferenciaDetail({
   const [modoRecepcion, setModoRecepcion] = useState(null) // null | 'total' | 'parcial' | 'editar'
   const [cantidadesRecibidas, setCantidadesRecibidas] = useState({})
   const inputRefs = useRef({})
+  const inputRefsById = useRef({})
+  const [activeTab, setActiveTab] = useState('detalles') // 'detalles' | 'logs'
 
   // Cancel modal state
   const [showCancelModal, setShowCancelModal] = useState(false)
@@ -51,9 +53,25 @@ export default function TransferenciaDetail({
   // Observaciones de recepción
   const [observacionesRecepcion, setObservacionesRecepcion] = useState('')
 
+  // Effect to detect when estado changes to RECIBIENDO and activate edit mode
+  useEffect(() => {
+    if (transferencia.estado === 'RECIBIENDO' && modoRecepcion === null && isEntradasView) {
+      setModoRecepcion('editar')
+      // Initialize cantidadesRecibidas with current values from detalles
+      if (detalles && detalles.length > 0) {
+        const initialValues = {}
+        detalles.forEach(d => {
+          const detalleId = d.id ?? d.detalle_id
+          if (detalleId === undefined || detalleId === null) return
+          initialValues[detalleId] = d.cantidad_enviada ?? d.cantidad
+        })
+        setCantidadesRecibidas(initialValues)
+      }
+    }
+  }, [transferencia.estado, modoRecepcion, isEntradasView]) // Removed detalles from dependencies
+
   // Validación inicial para evitar errores
   if (!transferencia) {
-    console.error('TransferenciaDetail: transferencia es null o undefined')
     return (
       <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-3xl shadow-card-hover max-w-md w-full p-6 text-center">
@@ -64,21 +82,8 @@ export default function TransferenciaDetail({
     )
   }
 
-  // Debug: Mostrar TODOS los campos disponibles para identificar fechas
-  console.log('TransferenciaDetail - Todos los campos disponibles:', {
-    id: transferencia.id,
-    campos: Object.keys(transferencia),
-    valoresFechas: Object.keys(transferencia)
-      .filter(key => key.toLowerCase().includes('fecha') || key.toLowerCase().includes('date') || key.toLowerCase().includes('created') || key.toLowerCase().includes('updated') || key.toLowerCase().includes('time'))
-      .reduce((obj, key) => {
-        obj[key] = transferencia[key]
-        return obj
-      }, {}),
-    datosCompletos: transferencia
-  })
-
   // Cargar detalles del movimiento
-  const { data: detalles = [], isLoading, error: detallesError } = useQuery({
+  const { data: detalles = [], isLoading } = useQuery({
     queryKey: ['movimiento-detalle', transferencia.id],
     queryFn: () => {
       if (transferencia.tipo_movimiento === 'VENTA') {
@@ -91,27 +96,22 @@ export default function TransferenciaDetail({
   })
 
   // Cargar productos para obtener información completa
-  const { data: productos = [], error: productosError } = useQuery({
+  const { data: productos = [] } = useQuery({
     queryKey: ['productos'],
     queryFn: () => dataService.getProductos()
   })
 
   // Cargar usuarios para mostrar nombres reales
-  const { data: usuarios = [], error: usuariosError } = useQuery({
+  const { data: usuarios = [] } = useQuery({
     queryKey: ['usuarios'],
     queryFn: () => dataService.getUsuarios()
   })
 
   // Cargar ubicaciones para export
-  const { data: ubicaciones = [], error: ubicacionesError } = useQuery({
+  const { data: ubicaciones = [] } = useQuery({
     queryKey: ['ubicaciones'],
     queryFn: () => dataService.getUbicaciones()
   })
-
-  // Manejo de errores en las consultas
-  if (detallesError || productosError || usuariosError || ubicacionesError) {
-    console.error('TransferenciaDetail: Error en consultas:', { detallesError, productosError, usuariosError, ubicacionesError })
-  }
 
   const handleExportExcel = () => {
     try {
@@ -125,7 +125,6 @@ export default function TransferenciaDetail({
   // Función para obtener información completa del producto
   const getProductoInfo = (productoId) => {
     if (!productoId) {
-      console.log('TransferenciaDetail: productoId es null/undefined')
       return {
         id: 'N/A',
         nombre: 'Producto no especificado',
@@ -133,21 +132,11 @@ export default function TransferenciaDetail({
         unidad_medida: ''
       }
     }
-    
+
     // Convertir ambos IDs a string para comparación (pueden ser numéricos o strings)
     const productoIdStr = String(productoId)
     const producto = productos.find(p => String(p.id) === productoIdStr)
-    
-    if (!producto) {
-      console.log('TransferenciaDetail - Producto NO encontrado:', {
-        buscando: productoIdStr,
-        totalProductos: productos.length,
-        primeros5ProductosIDs: productos.slice(0, 5).map(p => ({ id: p.id, tipo: typeof p.id })),
-        detalles: detalles.length,
-        primerDetalle: detalles[0]
-      })
-    }
-    
+
     return producto || {
       id: productoId,
       nombre: `Producto ${productoId}`,
@@ -171,58 +160,45 @@ export default function TransferenciaDetail({
   const formatDate = (dateString) => {
     if (!dateString) return '-'
     try {
-      console.log('formatDate - Procesando:', dateString, 'Tipo:', typeof dateString)
-      
       // Manejar diferentes formatos de fecha
       let date
-      
+
       // Si es un objeto Timestamp de Firestore (con segundos y nanosegundos)
       if (typeof dateString === 'object' && dateString !== null) {
-        console.log('formatDate - Es objeto, checking Firestore Timestamp...')
-        
         // Timestamp de Firestore { seconds: number, nanoseconds: number }
         if (dateString.seconds !== undefined && dateString.nanoseconds !== undefined) {
-          console.log('formatDate - Firestore Timestamp detectado:', dateString)
           date = new Date(dateString.seconds * 1000 + dateString.nanoseconds / 1000000)
         }
         // Otro tipo de objeto con toDate()
         else if (typeof dateString.toDate === 'function') {
-          console.log('formatDate - Objeto con toDate() detectado')
           date = dateString.toDate()
         }
         // Objeto Date normal
         else if (dateString instanceof Date) {
-          console.log('formatDate - Objeto Date detectado')
           date = dateString
         }
         // Otro objeto, intentar convertir
         else {
-          console.log('formatDate - Objeto desconocido, intentando convertir')
           date = new Date(dateString)
         }
       }
       // Si es un timestamp de Firestore (segundos o milisegundos)
       else if (typeof dateString === 'number') {
-        console.log('formatDate - Es número:', dateString)
         // Si parece estar en segundos (timestamp de Firestore), convertir a milisegundos
         if (dateString < 10000000000) {
-          console.log('formatDate - Asumiendo segundos, convirtiendo a ms')
           date = new Date(dateString * 1000)
         } else {
-          console.log('formatDate - Asumiendo milisegundos')
           date = new Date(dateString)
         }
-      } 
+      }
       // Si es string
       else if (typeof dateString === 'string') {
-        console.log('formatDate - Es string:', dateString)
         // Si es string, intentar crear fecha directamente
         date = new Date(dateString)
-        
+
         // Si falla, intentar con timestamp numérico
         if (isNaN(date.getTime()) && !isNaN(dateString)) {
           const timestamp = parseFloat(dateString)
-          console.log('formatDate - String inválido, intentando como timestamp:', timestamp)
           if (timestamp < 10000000000) {
             date = new Date(timestamp * 1000)
           } else {
@@ -230,21 +206,16 @@ export default function TransferenciaDetail({
           }
         }
       } else {
-        console.log('formatDate - Tipo desconocido, intentando new Date()')
         date = new Date(dateString)
       }
-      
+
       // Validar fecha final
       if (isNaN(date.getTime())) {
-        console.warn('FormatDate: Fecha inválida:', dateString)
         return '-'
       }
-      
-      const resultado = format(date, "dd-MM-yyyy HH:mm", { locale: es })
-      console.log('formatDate - Resultado formateado:', resultado)
-      return resultado
+
+      return format(date, "dd-MM-yyyy HH:mm", { locale: es })
     } catch (error) {
-      console.error('FormatDate: Error formateando fecha:', dateString, error)
       return '-'
     }
   }
@@ -266,16 +237,11 @@ export default function TransferenciaDetail({
       transferencia._createTime,
       transferencia.createTime
     ].filter(fecha => fecha != null && fecha !== '' && fecha !== undefined)
-    
-    console.log('getFechaCreacion - Fechas encontradas:', posiblesFechas)
-    
+
     if (posiblesFechas.length > 0) {
-      const fecha = posiblesFechas[0]
-      console.log('getFechaCreacion - Usando fecha:', fecha, 'Tipo:', typeof fecha)
-      return formatDate(fecha)
+      return formatDate(posiblesFechas[0])
     }
-    
-    console.log('getFechaCreacion - No se encontraron fechas')
+
     return '-'
   }
 
@@ -296,16 +262,11 @@ export default function TransferenciaDetail({
       transferencia._updateTime,
       transferencia.updateTime
     ].filter(fecha => fecha != null && fecha !== '' && fecha !== undefined)
-    
-    console.log('getFechaConfirmacion - Fechas encontradas:', posiblesFechas)
-    
+
     if (posiblesFechas.length > 0) {
-      const fecha = posiblesFechas[0]
-      console.log('getFechaConfirmacion - Usando fecha:', fecha, 'Tipo:', typeof fecha)
-      return formatDate(fecha)
+      return formatDate(posiblesFechas[0])
     }
-    
-    console.log('getFechaConfirmacion - No se encontraron fechas')
+
     return null // Retornar null para no mostrar la sección si no hay fecha
   }
 
@@ -317,12 +278,14 @@ export default function TransferenciaDetail({
     if (modoRecepcion === 'parcial' && detalles.length > 0) {
       const cantidadesIniciales = {}
       detalles.forEach(d => {
+        const detalleId = d.id ?? d.detalle_id
+        if (detalleId === undefined || detalleId === null) return
         const cantEnviada = d.cantidad_enviada ?? d.cantidad
-        cantidadesIniciales[d.id] = cantEnviada
+        cantidadesIniciales[detalleId] = cantEnviada
       })
       setCantidadesRecibidas(cantidadesIniciales)
     }
-  }, [modoRecepcion, detalles])
+  }, [modoRecepcion]) // Remove detalles from dependencies to prevent overriding user changes
 
   const handleConfirmarTodo = () => {
     if (onConfirmar) onConfirmar(null, observacionesRecepcion)
@@ -330,9 +293,11 @@ export default function TransferenciaDetail({
 
   const handleConfirmarParcial = () => {
     const productosRecibidos = detalles.map(d => ({
-      detalle_id: d.id,
+      detalle_id: (d.id ?? d.detalle_id),
       producto_id: d.producto_id,
-      cantidad_recibida: cantidadesRecibidas[d.id] || (d.cantidad_enviada ?? d.cantidad)
+      cantidad_recibida: cantidadesRecibidas[(d.id ?? d.detalle_id)] !== undefined
+        ? cantidadesRecibidas[(d.id ?? d.detalle_id)]
+        : (d.cantidad_enviada !== undefined ? d.cantidad_enviada : d.cantidad)
     }))
     if (onConfirmarParcial) {
       onConfirmarParcial(productosRecibidos, observacionesRecepcion)
@@ -424,73 +389,89 @@ export default function TransferenciaDetail({
           </div>
         </div>
 
-        <div className="p-5 overflow-y-auto flex-1 space-y-4">
-          {/* Info General */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Calendar className="text-purple-600" size={20} />
-              </div>
-              <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Fecha Creación</p>
-                <p className="font-semibold text-slate-900 dark:text-slate-100">{getFechaCreacion()}</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <User className="text-purple-600" size={20} />
-              </div>
-              <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Creado por</p>
-                <p className="font-semibold text-slate-900 dark:text-slate-100">{getUsuarioNombre(transferencia.usuario_creacion_id)}</p>
-              </div>
-            </div>
-
-            {getFechaConfirmacion() && (
-              <>
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <Calendar className="text-green-600" size={20} />
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Fecha Confirmación</p>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">{getFechaConfirmacion()}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <User className="text-green-600" size={20} />
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Confirmado por</p>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">{getUsuarioNombre(transferencia.usuario_confirmacion_id)}</p>
-                  </div>
-                </div>
-              </>
-            )}
+        {/* Tabs Navigation */}
+        <div className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-5 flex-shrink-0">
+          <div className="flex gap-1">
+            <button
+              onClick={() => setActiveTab('detalles')}
+              className={`px-6 py-3 font-semibold text-sm transition-all relative ${
+                activeTab === 'detalles'
+                  ? 'text-primary-600 dark:text-primary-400'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              DETALLES
+              {activeTab === 'detalles' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 dark:bg-primary-400"></div>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('logs')}
+              className={`px-6 py-3 font-semibold text-sm transition-all relative flex items-center gap-2 ${
+                activeTab === 'logs'
+                  ? 'text-primary-600 dark:text-primary-400'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              LOGS
+              <span className={`inline-flex items-center justify-center w-5 h-5 text-xs font-bold rounded-full ${
+                activeTab === 'logs'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-slate-300 text-slate-700'
+              }`}>
+                {[
+                  transferencia.fecha_creacion,
+                  transferencia.fecha_confirmacion || transferencia.updatedAt,
+                  transferencia.fecha_ultima_edicion
+                ].filter(Boolean).length}
+              </span>
+              {activeTab === 'logs' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 dark:bg-primary-400"></div>
+              )}
+            </button>
           </div>
+        </div>
 
-          {/* Ubicaciones */}
-          <div className="border-l-4 border-primary-500 pl-4">
-            <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
-              <MapPin size={20} className="text-primary-600" />
-              Movimiento
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Origen</p>
-                <p className="font-medium text-slate-900 dark:text-slate-100">
+        <div className="p-5 overflow-y-auto flex-1 space-y-4">
+          {/* Tab: Detalles */}
+          {activeTab === 'detalles' && (
+            <>
+          {/* Tarjeta Origen-Destino Visual */}
+          <div className="bg-gradient-to-r from-primary-50 to-blue-50 dark:from-primary-900/20 dark:to-blue-900/20 border border-primary-200 dark:border-primary-800 rounded-xl p-6">
+            <div className="flex items-center justify-between gap-4">
+              {/* Origen */}
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-2 bg-orange-100 dark:bg-orange-800 rounded-lg">
+                    <MapPin className="text-orange-600 dark:text-orange-300" size={20} />
+                  </div>
+                  <span className="text-xs font-semibold text-orange-700 dark:text-orange-300 uppercase tracking-wide">Origen</span>
+                </div>
+                <p className="font-bold text-lg text-slate-900 dark:text-slate-100">
                   {transferencia.origen_nombre || ubicaciones.find(u => u.id === transferencia.origen_id)?.nombre || transferencia.origen_id}
                 </p>
               </div>
-              <div>
-                <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">
-                  {transferencia.tipo_movimiento === 'VENTA' ? 'Beneficiario' : 'Destino'}
-                </p>
-                <p className="font-medium text-slate-900 dark:text-slate-100">
-                  {transferencia.tipo_movimiento === 'VENTA' 
+
+              {/* Flecha */}
+              <div className="flex-shrink-0 px-4">
+                <div className="relative">
+                  <div className="w-16 h-0.5 bg-primary-400 dark:bg-primary-600"></div>
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-0 h-0 border-t-4 border-t-transparent border-b-4 border-b-transparent border-l-8 border-l-primary-400 dark:border-l-primary-600"></div>
+                </div>
+              </div>
+
+              {/* Destino */}
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-2 bg-green-100 dark:bg-green-800 rounded-lg">
+                    <MapPin className="text-green-600 dark:text-green-300" size={20} />
+                  </div>
+                  <span className="text-xs font-semibold text-green-700 dark:text-green-300 uppercase tracking-wide">
+                    {transferencia.tipo_movimiento === 'VENTA' ? 'Beneficiario' : 'Destino'}
+                  </span>
+                </div>
+                <p className="font-bold text-lg text-slate-900 dark:text-slate-100">
+                  {transferencia.tipo_movimiento === 'VENTA'
                     ? (transferencia.beneficiario_nombre || 'Beneficiario no especificado')
                     : (transferencia.destino_nombre || ubicaciones.find(u => u.id === transferencia.destino_id)?.nombre || transferencia.destino_id)
                   }
@@ -547,6 +528,8 @@ export default function TransferenciaDetail({
                         const productoInfo = getProductoInfo(detalle.producto_id)
                         const cantEnviada = detalle.cantidad_enviada ?? detalle.cantidad
                         const cantRecibida = detalle.cantidad_recibida
+                        const detalleId = detalle.id ?? detalle.detalle_id ?? `idx_${index}`
+                        const currentValue = cantidadesRecibidas[detalleId] !== undefined ? cantidadesRecibidas[detalleId] : cantEnviada
                         return (
                           <tr key={detalle.id || index} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                             <td className="px-4 py-4">
@@ -577,14 +560,14 @@ export default function TransferenciaDetail({
                             {(modoRecepcion === 'parcial' || modoRecepcion === 'editar') && (
                               <td className="px-4 py-4 text-center">
                                 <input
-                                  ref={el => { inputRefs.current[index] = el }}
+                                  ref={el => { inputRefs.current[index] = el; inputRefsById.current[detalleId] = el }}
                                   type="number"
                                   min="0"
-                                  step="0.01"
-                                  value={cantidadesRecibidas[detalle.id] || cantEnviada}
+                                  step="any"
+                                  value={currentValue}
                                   onChange={(e) => {
                                     const val = Math.max(0, parseFloat(e.target.value) || 0)
-                                    setCantidadesRecibidas(prev => ({ ...prev, [detalle.id]: val }))
+                                    setCantidadesRecibidas(prev => ({ ...prev, [detalleId]: val }))
                                   }}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
@@ -593,20 +576,20 @@ export default function TransferenciaDetail({
                                       if (nextInput) nextInput.focus()
                                     }
                                   }}
-                                  className={`w-20 px-2 py-1.5 text-center border rounded-lg text-sm font-bold focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                                    (cantidadesRecibidas[detalle.id] || cantEnviada) > cantEnviada
+                                  className={`w-24 px-2 py-1.5 text-center border rounded-lg text-sm font-bold focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
+                                    currentValue > cantEnviada
                                       ? 'border-orange-300 bg-orange-50 text-orange-700'
-                                      : (cantidadesRecibidas[detalle.id] || cantEnviada) < cantEnviada
+                                      : currentValue < cantEnviada
                                         ? 'border-blue-300 bg-blue-50 text-blue-700'
-                                        : 'border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100'
+                                        : 'border-slate-300 bg-white text-slate-700'
                                   }`}
                                 />
-                                {(cantidadesRecibidas[detalle.id] || cantEnviada) !== cantEnviada && (
+                                {(currentValue !== cantEnviada) && (
                                   <div className="text-xs mt-1">
-                                    {(cantidadesRecibidas[detalle.id] || cantEnviada) > cantEnviada ? (
-                                      <span className="text-orange-600 font-medium">+{((cantidadesRecibidas[detalle.id] || cantEnviada) - cantEnviada)}</span>
+                                    {(currentValue > cantEnviada) ? (
+                                      <span className="text-orange-600 font-medium">+{(currentValue - cantEnviada)}</span>
                                     ) : (
-                                      <span className="text-blue-600 font-medium">-{(cantEnviada - (cantidadesRecibidas[detalle.id] || cantEnviada))}</span>
+                                      <span className="text-blue-600 font-medium">-{(cantEnviada - currentValue)}</span>
                                     )}
                                   </div>
                                 )}
@@ -629,35 +612,6 @@ export default function TransferenciaDetail({
             )}
           </div>
 
-          {/* Información de Edición */}
-          {transferencia.fecha_ultima_edicion && (
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
-              <h3 className="font-semibold text-amber-800 dark:text-amber-200 flex items-center gap-2 mb-3">
-                <Edit3 size={20} />
-                Información de Edición
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                <div>
-                  <p className="text-amber-700/70 dark:text-amber-300/70 mb-1">Última edición</p>
-                  <p className="font-medium text-amber-900 dark:text-amber-100">
-                    {formatDate(transferencia.fecha_ultima_edicion)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-amber-700/70 dark:text-amber-300/70 mb-1">Editado por</p>
-                  <p className="font-medium text-amber-900 dark:text-amber-100">
-                    {getUsuarioNombre(transferencia.editado_por)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-amber-700/70 dark:text-amber-300/70 mb-1">Total de ediciones</p>
-                  <p className="font-medium text-amber-900 dark:text-amber-100">
-                    {transferencia.ediciones_count || 1}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Observaciones guardadas */}
           {(transferencia.observaciones_creacion || transferencia.observaciones_confirmacion) && (
@@ -696,16 +650,99 @@ export default function TransferenciaDetail({
               />
             </div>
           )}
+            </>
+          )}
 
-          {/* Botones */}
-          </div>
+          {/* Tab: Logs de Actividad */}
+          {activeTab === 'logs' && (
+            <div className="space-y-4">
+              {/* Creación */}
+              {transferencia.fecha_creacion && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+                  <h3 className="font-semibold text-blue-800 dark:text-blue-200 flex items-center gap-2 mb-3">
+                    <Calendar size={20} />
+                    Creación
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-blue-700/70 dark:text-blue-300/70 mb-1">Fecha de creación</p>
+                      <p className="font-medium text-blue-900 dark:text-blue-100">
+                        {getFechaCreacion()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-blue-700/70 dark:text-blue-300/70 mb-1">Creado por</p>
+                      <p className="font-medium text-blue-900 dark:text-blue-100">
+                        {getUsuarioNombre(transferencia.usuario_creacion_id)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Confirmación */}
+              {getFechaConfirmacion() && (
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
+                  <h3 className="font-semibold text-green-800 dark:text-green-200 flex items-center gap-2 mb-3">
+                    <CheckCircle size={20} />
+                    Confirmación
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-green-700/70 dark:text-green-300/70 mb-1">Fecha de confirmación</p>
+                      <p className="font-medium text-green-900 dark:text-green-100">
+                        {getFechaConfirmacion()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-green-700/70 dark:text-green-300/70 mb-1">Confirmado por</p>
+                      <p className="font-medium text-green-900 dark:text-green-100">
+                        {getUsuarioNombre(transferencia.usuario_confirmacion_id)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Edición */}
+              {transferencia.fecha_ultima_edicion && (
+                <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4">
+                  <h3 className="font-semibold text-purple-800 dark:text-purple-200 flex items-center gap-2 mb-3">
+                    <Edit3 size={20} />
+                    Edición
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <p className="text-purple-700/70 dark:text-purple-300/70 mb-1">Última edición</p>
+                      <p className="font-medium text-purple-900 dark:text-purple-100">
+                        {formatDate(transferencia.fecha_ultima_edicion)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-purple-700/70 dark:text-purple-300/70 mb-1">Editado por</p>
+                      <p className="font-medium text-purple-900 dark:text-purple-100">
+                        {getUsuarioNombre(transferencia.usuario_editor_id)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-purple-700/70 dark:text-purple-300/70 mb-1">Total de ediciones</p>
+                      <p className="font-medium text-purple-900 dark:text-purple-100">
+                        {transferencia.ediciones_count || 1}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Footer Sticky */}
         <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex-shrink-0 sticky bottom-0">
-          <div className="flex justify-between gap-4">
-            {/* Cancel button - left side */}
+          <div className="flex justify-between items-center gap-4">
+            {/* Cancel/Reject button - left side */}
             <div>
-              {canCancel && normalizeEstado(transferencia.estado) !== 'CANCELADA' && normalizeEstado(transferencia.estado) !== 'COMPLETADO' && (
+              {canCancel && normalizeEstado(transferencia.estado) !== 'CANCELADA' && normalizeEstado(transferencia.estado) !== 'COMPLETADO' && !modoRecepcion && (
                 <Button
                   variant="outline"
                   className="text-red-600 border-red-300 hover:bg-red-50"
@@ -719,70 +756,121 @@ export default function TransferenciaDetail({
 
             {/* Action buttons - right side */}
             <div className="flex gap-3">
-              <Button variant="ghost" onClick={() => { setModoRecepcion(null); onClose() }}>
-                Cerrar
-              </Button>
-
-              {/* Botón Editar para Salidas - solo cuando NO está en modo edición */}
-              {!isEntradasView && !modoRecepcion && canEdit && normalizeEstado(transferencia.estado) === 'PENDIENTE' && (
-                <Button
-                  variant="secondary"
-                  onClick={() => setModoRecepcion('editar')}
-                >
-                  <Edit3 size={16} className="mr-1.5" />
-                  Editar
-                </Button>
-              )}
-
-              {/* Botón Editar para Entradas - solo cuando NO está en modo edición */}
-              {isEntradasView && !modoRecepcion && canEdit && normalizeEstado(transferencia.estado) === 'COMPLETADO' && (
-                <Button
-                  variant="secondary"
-                  onClick={() => setShowEditConfirmModal(true)}
-                >
-                  <Edit3 size={16} className="mr-1.5" />
-                  Editar
-                </Button>
-              )}
-
-              {/* Botones de recepción - solo cuando onConfirmar existe y NO está en modo edición */}
-              {onConfirmar && !modoRecepcion && normalizeEstado(transferencia.estado) !== 'CANCELADA' && (
+              {/* View mode: Edit + Confirm buttons */}
+              {!modoRecepcion && (
                 <>
-                  <Button
-                    variant="outline"
-                    onClick={() => setModoRecepcion('parcial')}
-                  >
-                    <Edit3 size={16} className="mr-1.5" />
-                    Ingresar Cantidades
-                  </Button>
-                  <Button
-                    variant="success"
-                    onClick={handleConfirmarTodo}
-                    loading={isConfirmando}
-                  >
-                    <CheckCircle size={16} className="mr-1.5" />
-                    {isConfirmando ? 'Procesando...' : 'Confirmar Recepción Completa'}
-                  </Button>
+                  {/* Botón Editar para Salidas */}
+                  {!isEntradasView && canEdit && normalizeEstado(transferencia.estado) === 'PENDIENTE' && (
+                    <Button
+                      variant="outline"
+                      className="text-primary-600 border-primary-300 hover:bg-primary-50"
+                      onClick={() => setModoRecepcion('editar')}
+                    >
+                      <Edit3 size={16} className="mr-1.5" />
+                      Editar
+                    </Button>
+                  )}
+
+                  {/* Botón Editar para Entradas */}
+                  {isEntradasView && canEdit && normalizeEstado(transferencia.estado) === 'COMPLETADO' && (
+                    <Button
+                      variant="outline"
+                      className="text-primary-600 border-primary-300 hover:bg-primary-50"
+                      onClick={() => setShowEditConfirmModal(true)}
+                    >
+                      <Edit3 size={16} className="mr-1.5" />
+                      Editar
+                    </Button>
+                  )}
+
+                  {/* Botones de recepción */}
+                  {onConfirmar && normalizeEstado(transferencia.estado) !== 'CANCELADA' && (
+                    <>
+                      <Button
+                        variant="outline"
+                        className="text-primary-600 border-primary-300 hover:bg-primary-50"
+                        onClick={() => setModoRecepcion('parcial')}
+                      >
+                        <Edit3 size={16} className="mr-1.5" />
+                        Ingresar Cantidades
+                      </Button>
+                      <Button
+                        variant="primary"
+                        onClick={handleConfirmarTodo}
+                        loading={isConfirmando}
+                      >
+                        <CheckCircle size={16} className="mr-1.5" />
+                        {isConfirmando ? 'Procesando...' : 'Confirmar Recepción Completa'}
+                      </Button>
+                    </>
+                  )}
                 </>
               )}
 
-              {/* Botones cuando está en modo parcial o editar */}
+              {/* Edit/Partial mode: Back + Save buttons */}
               {(modoRecepcion === 'parcial' || modoRecepcion === 'editar') && (
                 <>
-                  <Button variant="ghost" onClick={() => setModoRecepcion(null)}>
+                  <Button
+                    variant="outline"
+                    className="text-slate-600 border-slate-300 hover:bg-slate-50"
+                    onClick={() => setModoRecepcion(null)}
+                  >
                     Volver
                   </Button>
                   <Button
-                    variant="success"
+                    variant="primary"
                     onClick={modoRecepcion === 'editar' ? () => {
                       if (onEditar) {
-                        const productosEditados = detalles.map(d => ({
-                          detalle_id: d.id,
-                          producto_id: d.producto_id,
-                          cantidad_enviada: cantidadesRecibidas[d.id] || (d.cantidad_enviada ?? d.cantidad)
-                        }))
+                        const productosEditados = detalles.map(d => {
+                          const detalleId = d.id ?? d.detalle_id
+
+                          // Prefer latest typed value from DOM to avoid stale state when clicking "Guardar" quickly
+                          const inputEl = inputRefsById.current[detalleId]
+                          const raw = inputEl?.value
+                          const parsedFromDom = raw !== undefined && raw !== '' ? parseFloat(raw) : undefined
+
+                          const cantidadEditada = Number.isFinite(parsedFromDom)
+                            ? Math.max(0, parsedFromDom)
+                            : (cantidadesRecibidas[detalleId] !== undefined
+                              ? cantidadesRecibidas[detalleId]
+                              : (d.cantidad_enviada ?? d.cantidad))
+                          
+                          return {
+                            detalle_id: detalleId,
+                            producto_id: d.producto_id,
+                            cantidad_enviada: cantidadEditada,
+                            cantidad_recibida: cantidadEditada
+                          }
+                        })
+                        
+                        // Apply optimistic update immediately for visual feedback
+                        const updatedDetalles = detalles.map(d => {
+                          const editado = productosEditados.find(p => p.detalle_id === (d.id ?? d.detalle_id))
+                          if (editado) {
+                            return {
+                              ...d,
+                              cantidad_enviada: editado.cantidad_enviada,
+                              cantidad_recibida: editado.cantidad_recibida
+                            }
+                          }
+                          return d
+                        })
+                        
+                        // Update the parent component
                         onEditar(productosEditados)
+                        
+                        // Clear edit mode
                         setModoRecepcion(null)
+                        
+                        // Reset cantidadesRecibidas to match new values
+                        const newCantidadesRecibidas = {}
+                        updatedDetalles.forEach(d => {
+                          const detalleId = d.id ?? d.detalle_id
+                          if (detalleId !== undefined && detalleId !== null) {
+                            newCantidadesRecibidas[detalleId] = d.cantidad_enviada ?? d.cantidad
+                          }
+                        })
+                        setCantidadesRecibidas(newCantidadesRecibidas)
                       }
                     } : handleConfirmarParcial}
                     loading={isConfirmando}
@@ -833,7 +921,7 @@ export default function TransferenciaDetail({
                   variant="warning"
                   onClick={() => {
                     setShowEditConfirmModal(false)
-                    setModoRecepcion('parcial') // Abrir directamente en modo ingreso de cantidades
+                    setModoRecepcion('editar') // Fix: set to 'editar' instead of 'parcial' to enable save logic
                     if (onEditar) {
                       onEditar('change_to_recibiendo') // Signal to change state to recibiendo
                     }

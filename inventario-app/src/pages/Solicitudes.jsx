@@ -46,7 +46,7 @@ export default function Solicitudes() {
   const [editMode, setEditMode] = useState(false)
 
   const { user } = useAuthStore()
-  const { canEdit, isReadOnly, isAdmin } = usePermissions()
+  const { canEdit, canDelete, isReadOnly, isAdmin } = usePermissions()
   const toast = useToastStore()
 
   // Permission checks
@@ -305,7 +305,9 @@ export default function Solicitudes() {
         const estado = normalizeEstado(row.estado)
         const isOwner = row.usuario_creacion_id === user?.id || row.usuario_creacion_id === user?.codigo
         const canProcess = esAdmin || userUbicacionesAsignadas.includes(row.ubicacion_origen_id)
-        const canDelete = esAdmin && estado === 'iniciada'
+        // Users with 'total' permission on solicitudes OR movimientos can delete
+        // Also explicitly allow admins as a fallback
+        const canDeleteRow = canDelete('solicitudes') || canDelete('movimientos') || esAdmin
 
         return (
           <div className="flex gap-2">
@@ -349,8 +351,8 @@ export default function Solicitudes() {
                 <Edit size={18} />
               </button>
             )}
-            {/* Delete button - admin only, drafts only */}
-            {canDelete && (
+            {/* Delete button - users with 'total' permission can delete regardless of state */}
+            {canDeleteRow && (
               <button
                 onClick={() => handleEliminar(row)}
                 className="p-2 text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20 rounded-lg transition-colors disabled:opacity-50"
@@ -396,7 +398,6 @@ export default function Solicitudes() {
       usuarioId: user?.id || user?.codigo
     }, {
       onSuccess: () => {
-        console.log('📝 Solicitud enviada, refrescando...')
         refetch()
       }
     })
@@ -406,34 +407,28 @@ export default function Solicitudes() {
     if (!window.confirm('¿Estás seguro de eliminar esta solicitud? Esta acción no se puede deshacer.')) return
     eliminarSolicitud(solicitud.id, {
       onSuccess: () => {
-        console.log('📝 Solicitud eliminada, refrescando...')
         refetch()
       }
     })
   }
 
   const handleSaveSolicitud = async (data, enviar = false) => {
-    console.log('📝 handleSaveSolicitud called with:', { data, enviar, editMode })
     
     if (editMode && selectedSolicitud) {
-      console.log('📝 Updating existing solicitud:', selectedSolicitud.id)
       // Update existing
       actualizarSolicitud({
         solicitudId: selectedSolicitud.id,
         data
       }, {
         onSuccess: () => {
-          console.log('📝 Solicitud updated successfully')
-          refetch() // Refetch explícito
+          refetch()
           if (enviar) {
-            console.log('📝 Sending solicitud...')
             enviarSolicitud({
               solicitudId: selectedSolicitud.id,
               usuarioId: user?.id || user?.codigo
             }, {
               onSuccess: () => {
-                console.log('📝 Solicitud sent successfully')
-                refetch() // Refetch explícito después de enviar
+                refetch()
                 setShowForm(false)
               }
             })
@@ -443,24 +438,20 @@ export default function Solicitudes() {
         }
       })
     } else {
-      console.log('📝 Creating new solicitud')
       // Create new
       crearSolicitud({
         ...data,
         usuario_creacion_id: user?.id || user?.codigo
       }, {
         onSuccess: (response) => {
-          console.log('📝 Solicitud created successfully:', response)
-          refetch() // Refetch explícito
+          refetch()
           if (enviar && response?.data?.id) {
-            console.log('📝 Sending new solicitud...')
             enviarSolicitud({
               solicitudId: response.data.id,
               usuarioId: user?.id || user?.codigo
             }, {
               onSuccess: () => {
-                console.log('📝 New solicitud sent successfully')
-                refetch() // Refetch explícito después de enviar
+                refetch()
                 setShowForm(false)
               }
             })
@@ -839,9 +830,15 @@ export default function Solicitudes() {
               ? handleDetailCancelar
               : null
           }
+          onEliminar={
+            canDelete('solicitudes')
+              ? () => handleEliminar(selectedSolicitud)
+              : null
+          }
           isOwner={selectedSolicitud.usuario_creacion_id === user?.id || selectedSolicitud.usuario_creacion_id === user?.codigo}
           canProcess={esAdmin || userUbicacionesAsignadas.includes(selectedSolicitud.ubicacion_origen_id)}
           canEdit={canWriteSolicitudes}
+          canDelete={canDelete('solicitudes')}
           isLoading={isEnviando || isCancelando}
         />
       )}

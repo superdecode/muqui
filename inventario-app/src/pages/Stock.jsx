@@ -316,7 +316,7 @@ export default function Stock() {
               <input
                 type="number"
                 min="0"
-                step="0.01"
+                step="any"
                 value={stockMinValue}
                 onChange={(e) => setStockMinValue(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSaveStockMin(row.producto_id); if (e.key === 'Escape') setEditingStockMin(null) }}

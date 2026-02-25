@@ -115,6 +115,14 @@ const dataService = {
     return await firestoreService.cancelarMovimiento(data)
   },
 
+  updateMovimientoEstado: async (data) => {
+    return await firestoreService.updateMovimientoEstado(data)
+  },
+
+  updateMovimientoDetalles: async (data) => {
+    return await firestoreService.updateMovimientoDetalles(data)
+  },
+
   deleteMovimiento: async (movimientoId) => {
     return await firestoreService.deleteMovimiento(movimientoId)
   },

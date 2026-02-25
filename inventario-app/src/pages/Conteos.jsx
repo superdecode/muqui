@@ -473,15 +473,6 @@ export default function Conteos() {
               {isEjecutando ? 'Completando...' : 'Completar'}
             </Button>
           )}
-          {(row.estado === 'COMPLETADO' || row.estado === 'PARCIALMENTE_COMPLETADO') && (
-            <button
-              onClick={() => handleImprimir(row)}
-              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-              title="Imprimir conteo"
-            >
-              <Printer size={18} />
-            </button>
-          )}
           <button
             onClick={() => handleVer(row)}
             className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
@@ -489,6 +480,15 @@ export default function Conteos() {
           >
             <Eye size={18} />
           </button>
+          {(row.estado === 'COMPLETADO' || row.estado === 'PARCIALMENTE_COMPLETADO') && (
+            <button
+              onClick={() => handleImprimir(row)}
+              className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors"
+              title="Imprimir conteo"
+            >
+              <Printer size={18} />
+            </button>
+          )}
           {/* ACCESO TOTAL: Solo usuarios con permiso Total pueden eliminar permanentemente */}
           {getPermissionLevel('conteos') === 'total' && (
             <button
