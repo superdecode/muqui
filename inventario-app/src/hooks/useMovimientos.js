@@ -274,6 +274,37 @@ export const useMovimientos = (ubicacionId) => {
     }
   })
 
+  // Crear producción
+  const crearProduccion = useMutation({
+    mutationFn: async (data) => {
+      return await dataService.createProduccion(data)
+    },
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['movimientos'] })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
+      toast.success('Producción Registrada', response.message || 'La orden de producción se ha creado exitosamente')
+    },
+    onError: (error) => {
+      toast.error('Error al Registrar Producción', error.message || 'No se pudo registrar la producción.')
+    }
+  })
+
+  // Confirmar producción
+  const confirmarProduccion = useMutation({
+    mutationFn: async (data) => {
+      return await dataService.confirmarProduccion(data)
+    },
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['movimientos'] })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
+      queryClient.invalidateQueries({ queryKey: ['alertas'] })
+      toast.success('Producción Confirmada', response.message || 'La producción ha sido confirmada y el inventario actualizado')
+    },
+    onError: (error) => {
+      toast.error('Error al Confirmar Producción', error.message || 'No se pudo confirmar la producción.')
+    }
+  })
+
   // Crear merma
   const crearMerma = useMutation({
     mutationFn: async (data) => {
@@ -384,6 +415,10 @@ export const useMovimientos = (ubicacionId) => {
     isCreandoVenta: crearVenta.isPending,
     crearMerma: crearMerma.mutate,
     isCreandoMerma: crearMerma.isPending,
+    crearProduccion: crearProduccion.mutate,
+    isCreandoProduccion: crearProduccion.isPending,
+    confirmarProduccion: confirmarProduccion.mutate,
+    isConfirmandoProduccion: confirmarProduccion.isPending,
     normalizeEstado,
     estadisticas: getEstadisticas(),
     getEstadisticasPorDireccion,

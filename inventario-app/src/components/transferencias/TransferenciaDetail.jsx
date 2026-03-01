@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { Package, MapPin, Calendar, FileText, CheckCircle, X, Download, Edit3, Ban, AlertTriangle } from 'lucide-react'
+import { Package, MapPin, Calendar, FileText, CheckCircle, X, Download, Edit3, Ban, AlertTriangle, Factory, ArrowRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import dataService from '../../services/dataService'
@@ -111,6 +111,14 @@ export default function TransferenciaDetail({
   const { data: ubicaciones = [] } = useQuery({
     queryKey: ['ubicaciones'],
     queryFn: () => dataService.getUbicaciones()
+  })
+
+  // Cargar insumos de producción (solo para PRODUCCION)
+  const isProduccion = (transferencia.tipo_movimiento || '').toUpperCase() === 'PRODUCCION'
+  const { data: insumosProduccion = [] } = useQuery({
+    queryKey: ['insumos-produccion', transferencia.id],
+    queryFn: () => dataService.getInsumosProduccion(transferencia.id),
+    enabled: !!transferencia?.id && isProduccion
   })
 
   const handleExportExcel = () => {
@@ -356,12 +364,12 @@ export default function TransferenciaDetail({
           <div className="relative z-10">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold text-white">Detalle de Movimiento</h2>
-                <p className="text-white/90 text-sm mt-0.5">Código: {formatDisplayId(transferencia, 'MV')}</p>
+                <h2 className="text-xl font-bold text-white">{isProduccion ? 'Detalle de Producción' : 'Detalle de Movimiento'}</h2>
+                <p className="text-white/90 text-sm mt-0.5">Código: {transferencia.codigo_legible || formatDisplayId(transferencia, isProduccion ? 'OP' : 'MV')}</p>
                 {onConfirmar && normalizeEstado(transferencia.estado) === 'PENDIENTE' && (
                   <p className="text-white/80 text-sm mt-2 flex items-center gap-2">
                     <CheckCircle size={16} />
-                    Listo para confirmar recepción
+                    {isProduccion ? 'Listo para confirmar producción' : 'Listo para confirmar recepción'}
                   </p>
                 )}
               </div>
@@ -437,6 +445,29 @@ export default function TransferenciaDetail({
           {activeTab === 'detalles' && (
             <>
           {/* Tarjeta Origen-Destino Visual */}
+          {isProduccion ? (
+            <div className="bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-200 dark:border-violet-800 rounded-xl p-6">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 flex-1">
+                  <div className="p-2 bg-violet-100 dark:bg-violet-800 rounded-lg">
+                    <Factory className="text-violet-600 dark:text-violet-300" size={20} />
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-violet-700 dark:text-violet-300 uppercase tracking-wide">Ubicación de Producción</span>
+                    <p className="font-bold text-lg text-slate-900 dark:text-slate-100">
+                      {transferencia.destino_nombre || ubicaciones.find(u => u.id === transferencia.destino_id)?.nombre || transferencia.destino_id}
+                    </p>
+                  </div>
+                </div>
+                {transferencia.numero_documento && (
+                  <div className="text-right">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Nro/Nota</span>
+                    <p className="font-medium text-slate-900 dark:text-slate-100">{transferencia.numero_documento}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
           <div className="bg-gradient-to-r from-primary-50 to-blue-50 dark:from-primary-900/20 dark:to-blue-900/20 border border-primary-200 dark:border-primary-800 rounded-xl p-6">
             <div className="flex items-center justify-between gap-4">
               {/* Origen */}
@@ -479,12 +510,13 @@ export default function TransferenciaDetail({
               </div>
             </div>
           </div>
+          )}
 
           {/* Productos */}
           <div>
             <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
               <Package size={24} className="text-primary-600" />
-              {transferencia.tipo_movimiento === 'VENTA' ? 'Productos Vendidos' : 'Productos Transferidos'} {detalles.length > 0 && `(${detalles.length} items)`}
+              {isProduccion ? 'Productos Producidos' : transferencia.tipo_movimiento === 'VENTA' ? 'Productos Vendidos' : 'Productos Transferidos'} {detalles.length > 0 && `(${detalles.length} items)`}
             </h3>
 
             {isLoading ? (
@@ -612,6 +644,59 @@ export default function TransferenciaDetail({
             )}
           </div>
 
+
+          {/* Insumos Consumidos (solo para PRODUCCION) */}
+          {isProduccion && insumosProduccion.length > 0 && (
+            <div>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+                <ArrowRight size={24} className="text-orange-600" />
+                Insumos Consumidos ({insumosProduccion.length} items)
+              </h3>
+              <div className="bg-white dark:bg-slate-800 border border-orange-200 dark:border-orange-800 rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-orange-50 dark:bg-orange-900/30 border-b border-orange-200 dark:border-orange-700">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-orange-800 dark:text-orange-300">Insumo</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-orange-800 dark:text-orange-300">Especificación</th>
+                        <th className="px-4 py-3 text-center text-sm font-semibold text-orange-800 dark:text-orange-300">Cantidad Consumida</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                      {insumosProduccion.map((insumo, idx) => {
+                        const info = getProductoInfo(insumo.producto_id)
+                        return (
+                          <tr key={insumo.id || idx} className="hover:bg-orange-50/50 dark:hover:bg-orange-900/10 transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="p-1.5 bg-orange-100 rounded-lg">
+                                  <Package size={14} className="text-orange-600" />
+                                </div>
+                                <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm">{info.nombre}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="text-sm text-slate-600 dark:text-slate-400">
+                                {info.especificacion || '—'}
+                                {info.unidad_medida && (
+                                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                    {info.unidad_medida}
+                                  </span>
+                                )}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="text-lg font-bold text-orange-600">{insumo.cantidad}</span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Observaciones guardadas */}
           {(transferencia.observaciones_creacion || transferencia.observaciones_confirmacion) && (
@@ -771,7 +856,23 @@ export default function TransferenciaDetail({
                     </Button>
                   )}
 
-                  {/* Botón Editar para Entradas */}
+                  {/* Botón Editar para Producciones PENDIENTES */}
+                  {isProduccion && normalizeEstado(transferencia.estado) === 'PENDIENTE' && canEdit && (
+                    <Button
+                      variant="outline"
+                      className="text-amber-600 border-amber-300 hover:bg-amber-50"
+                      onClick={() => {
+                        if (onEditar) {
+                          onEditar('edit_produccion')
+                        }
+                      }}
+                    >
+                      <Edit3 size={16} className="mr-1.5 text-amber-600" />
+                      <span className="text-amber-600">Editar Producción</span>
+                    </Button>
+                  )}
+
+                  {/* Botón Editar para Entradas completadas */}
                   {isEntradasView && canEdit && normalizeEstado(transferencia.estado) === 'COMPLETADO' && (
                     <Button
                       variant="outline"
@@ -783,24 +884,26 @@ export default function TransferenciaDetail({
                     </Button>
                   )}
 
-                  {/* Botones de recepción */}
+                  {/* Botones de recepción/confirmación */}
                   {onConfirmar && normalizeEstado(transferencia.estado) !== 'CANCELADA' && (
                     <>
-                      <Button
-                        variant="outline"
-                        className="text-primary-600 border-primary-300 hover:bg-primary-50"
-                        onClick={() => setModoRecepcion('parcial')}
-                      >
-                        <Edit3 size={16} className="mr-1.5" />
-                        Ingresar Cantidades
-                      </Button>
+                      {!isProduccion && (
+                        <Button
+                          variant="outline"
+                          className="text-primary-600 border-primary-300 hover:bg-primary-50"
+                          onClick={() => setModoRecepcion('parcial')}
+                        >
+                          <Edit3 size={16} className="mr-1.5" />
+                          Ingresar Cantidades
+                        </Button>
+                      )}
                       <Button
                         variant="primary"
                         onClick={handleConfirmarTodo}
                         loading={isConfirmando}
                       >
                         <CheckCircle size={16} className="mr-1.5" />
-                        {isConfirmando ? 'Procesando...' : 'Confirmar Recepción Completa'}
+                        {isConfirmando ? 'Procesando...' : isProduccion ? 'Confirmar Producción' : 'Confirmar Recepción Completa'}
                       </Button>
                     </>
                   )}

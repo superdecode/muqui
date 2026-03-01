@@ -13,7 +13,8 @@ import {
   Loader,
   PackageCheck,
   XCircle,
-  Plus
+  Plus,
+  Edit3
 } from 'lucide-react'
 import Card from '../components/common/Card'
 import DataTable from '../components/common/DataTable'
@@ -21,6 +22,7 @@ import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import TransferenciaDetail from '../components/transferencias/TransferenciaDetail'
 import EntradaForm from '../components/entradas/EntradaForm'
+import ProduccionEditModal from '../components/entradas/ProduccionEditModal'
 import useMovimientos from '../hooks/useMovimientos'
 import { useAuthStore } from '../stores/authStore'
 import { usePermissions } from '../hooks/usePermissions'
@@ -36,6 +38,7 @@ export default function Entradas() {
   const [sedeFilter, setSedeFilter] = useState('')
   const [showDetail, setShowDetail] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  const [showEditProduccion, setShowEditProduccion] = useState(false)
   const [selectedMovimiento, setSelectedMovimiento] = useState(null)
 
   const { user } = useAuthStore()
@@ -112,6 +115,7 @@ export default function Entradas() {
   const isReceiver = (mov) => {
     if (esAdmin) return true
     if (userUbicacionIds.length === 0) return true
+    // Producciones usan destino_id (mismo que origen_id)
     return userUbicacionIds.includes(mov.destino_id)
   }
 
@@ -139,14 +143,15 @@ export default function Entradas() {
     { id: 'completados', label: 'Completados', matchEstados: ['COMPLETADO', 'PARCIAL'] }
   ]
 
-  // Filter recepciones - TRANSFERENCIAS and COMPRAS
+  // Filter recepciones - TRANSFERENCIAS, COMPRAS y PRODUCCIONES
   const movimientosFiltrados = useMemo(() => {
     return (movimientos || []).filter(m => {
-      // Only transfers and purchases can be received
+      // Only transfers, purchases and productions can be received
       const tipoMov = (m.tipo_movimiento || '').toUpperCase()
-      if (tipoMov !== 'TRANSFERENCIA' && tipoMov !== 'COMPRA') return false
+      if (tipoMov !== 'TRANSFERENCIA' && tipoMov !== 'COMPRA' && tipoMov !== 'PRODUCCION') return false
 
       const hasLocationRestriction = !esAdmin && userUbicacionIds.length > 0
+      // Todas usan destino_id (producciones tienen origen_id = destino_id)
       if (hasLocationRestriction && !userUbicacionIds.includes(m.destino_id)) return false
 
       if (effectiveSedeFilter && m.destino_id !== effectiveSedeFilter) return false
@@ -174,7 +179,7 @@ export default function Entradas() {
   const statusTabsWithCounts = useMemo(() => {
     const filtered = (movimientos || []).filter(m => {
       const tipoMov = (m.tipo_movimiento || '').toUpperCase()
-      if (tipoMov !== 'TRANSFERENCIA' && tipoMov !== 'COMPRA') return false
+      if (tipoMov !== 'TRANSFERENCIA' && tipoMov !== 'COMPRA' && tipoMov !== 'PRODUCCION') return false
       const hasLocationRestriction = !esAdmin && userUbicacionIds.length > 0
       if (hasLocationRestriction && !userUbicacionIds.includes(m.destino_id)) return false
       if (effectiveSedeFilter && m.destino_id !== effectiveSedeFilter) return false
@@ -216,16 +221,44 @@ export default function Entradas() {
       render: (value) => safeFormatDate(value, "d MMM yyyy")
     },
     {
+      header: 'Tipo',
+      accessor: 'tipo_movimiento',
+      sortKey: 'tipo_movimiento',
+      render: (value) => {
+        const tipo = (value || '').toUpperCase()
+        const config = {
+          TRANSFERENCIA: { color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300', label: 'Transferencia' },
+          COMPRA: { color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300', label: 'Compra' },
+          PRODUCCION: { color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300', label: 'Producción' }
+        }
+        const cfg = config[tipo] || { color: 'bg-slate-100 text-slate-800', label: value }
+        return (
+          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${cfg.color}`}>
+            {cfg.label}
+          </span>
+        )
+      }
+    },
+    {
       header: 'Origen',
       accessor: 'origen_nombre',
       sortKey: 'origen_nombre',
-      render: (value) => <span className="text-sm font-medium">{value}</span>
+      render: (value, row) => {
+        const tipoMov = (row.tipo_movimiento || '').toUpperCase()
+        // Para producciones, origen y destino son la misma ubicación
+        if (tipoMov === 'PRODUCCION') {
+          return <span className="text-sm font-medium">{row.destino_nombre || row.origen_nombre || '-'}</span>
+        }
+        return <span className="text-sm font-medium">{value || '-'}</span>
+      }
     },
     {
       header: 'Destino',
       accessor: 'destino_nombre',
       sortKey: 'destino_nombre',
-      render: (value) => <span className="text-sm font-medium">{value}</span>
+      render: (value, row) => {
+        return <span className="text-sm font-medium">{value || '-'}</span>
+      }
     },
     {
       header: 'Enviado por',
@@ -245,6 +278,8 @@ export default function Entradas() {
       render: (value, row) => {
         const estado = normalizeEstado(row.estado)
         const recv = isReceiver(row)
+        const tipoMov = (row.tipo_movimiento || '').toUpperCase()
+        const isProduccion = tipoMov === 'PRODUCCION'
         const canConfirmar = estado === 'PENDIENTE' && recv && canWriteMovimientos
         // Users with 'total' permission can delete regardless of state
         const canDeleteRow = canDelete('movimientos') || (esAdmin && estado !== 'COMPLETADO')
@@ -257,7 +292,7 @@ export default function Entradas() {
                 variant="success"
                 onClick={() => handleConfirmarDesdeTabla(row)}
               >
-                Confirmar Recepción
+                {isProduccion ? 'Confirmar Producción' : 'Confirmar Recepción'}
               </Button>
             )}
             <button
@@ -287,6 +322,12 @@ export default function Entradas() {
     if (!movimiento || !movimiento.id) return
     setSelectedMovimiento(movimiento)
     setShowDetail(true)
+  }
+
+  const handleEditarProduccion = (movimiento) => {
+    if (!movimiento || !movimiento.id) return
+    setSelectedMovimiento(movimiento)
+    setShowEditProduccion(true)
   }
 
   const handleConfirmarDesdeTabla = (movimiento) => {
@@ -331,6 +372,15 @@ export default function Entradas() {
           productos: data.productos,
           estado: 'PENDIENTE'
         })
+      } else if (data.tipo_entrada === 'PRODUCCION' || data.tipo_movimiento === 'PRODUCCION') {
+        // Crear orden de producción
+        response = await dataService.createProduccion({
+          ubicacion_id: data.ubicacion_id,
+          numero_documento: data.numero_documento,
+          usuario_creacion_id: data.usuario_creacion_id,
+          observaciones: data.observaciones,
+          lineas: data.lineas
+        })
       } else {
         // Crear entrada directa por compra
         response = await dataService.createEntradaCompra({
@@ -355,6 +405,47 @@ export default function Entradas() {
     }
   }
 
+  const handleSaveEditProduccion = async (data) => {
+        try {
+      const response = await dataService.updateProduccion({
+        movimiento_id: selectedMovimiento.id,
+        numero_documento: data.numero_documento,
+        observaciones: data.observaciones,
+        lineas: data.lineas,
+        usuario_editor_id: user?.id || 'USR001'
+      })
+
+      if (response.success) {
+        toast.success('Producción Actualizada', response.message || 'La orden de producción se ha actualizado correctamente')
+        
+        // Invalidar queries para forzar recarga de datos frescos
+                await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['movimientos'] }),
+          queryClient.invalidateQueries({ queryKey: ['movimiento-detalle', selectedMovimiento.id] }),
+          queryClient.invalidateQueries({ queryKey: ['insumos-produccion', selectedMovimiento.id] }),
+          queryClient.invalidateQueries({ queryKey: ['inventario'] })
+        ])
+        
+        // Refetch inmediato para asegurar consistencia
+        await queryClient.refetchQueries({ queryKey: ['movimientos'] })
+        
+        setShowEditProduccion(false)
+        // No ponemos selectedMovimiento a null para que el detail modal se actualice
+        // pero se mantenga abierto si el usuario quiere seguir viendo el detalle.
+        // Opcionalmente podemos actualizar selectedMovimiento con los datos básicos
+        setSelectedMovimiento(prev => ({
+          ...prev,
+          numero_documento: data.numero_documento,
+          observaciones_creacion: data.observaciones
+        }))
+      } else {
+                toast.error('Error al Actualizar', response.message || 'No se pudo actualizar la orden de producción')
+      }
+    } catch (error) {
+            toast.error('Error al Actualizar', error.message || 'No se pudo actualizar la orden de producción')
+    }
+  }
+
   const handleCloseDetail = () => { setShowDetail(false); setSelectedMovimiento(null) }
 
   const handleCancelarMovimiento = async (motivo) => {
@@ -374,6 +465,12 @@ export default function Entradas() {
 
   const handleEditarEntrada = async (action) => {
     if (!selectedMovimiento) return
+
+    if (action === 'edit_produccion') {
+      // Abrir modal de edición de producción
+      setShowEditProduccion(true)
+      return
+    }
 
     if (action === 'change_to_recibiendo') {
       // Cambiar estado de completada a recibiendo
@@ -655,6 +752,18 @@ export default function Entradas() {
           onClose={() => setShowForm(false)}
           onSave={handleSaveEntrada}
           isLoading={false}
+        />
+      )}
+
+      {/* Formulario de Edición de Producción */}
+      {showEditProduccion && selectedMovimiento && (
+        <ProduccionEditModal
+          movimiento={selectedMovimiento}
+          onClose={() => {
+            setShowEditProduccion(false)
+            setSelectedMovimiento(null)
+          }}
+          onSave={handleSaveEditProduccion}
         />
       )}
     </div>

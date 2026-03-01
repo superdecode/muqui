@@ -1131,6 +1131,291 @@ const firestoreService = {
   },
 
   /**
+   * Crear orden de producción (estado PENDIENTE, no afecta inventario hasta confirmar)
+   * data.ubicacion_id: ubicación de producción
+   * data.numero_documento: campo opcional de texto/número
+   * data.observaciones: observaciones opcionales
+   * data.usuario_creacion_id: usuario que crea
+   * data.lineas: [{ producto_id, cantidad, insumos: [{ producto_id, cantidad }] }]
+   */
+  createProduccion: async (data) => {
+    try {
+      const db = getDB()
+      const batch = writeBatch(db)
+
+      const codigoLegible = await getNextSequentialCode('OP')
+
+      // Crear movimiento de producción
+      const movimientoRef = doc(collection(db, 'movimientos'))
+      const nuevoMovimiento = {
+        codigo_legible: codigoLegible,
+        tipo_movimiento: 'PRODUCCION',
+        origen_id: data.ubicacion_id, // misma ubicación (consumo)
+        destino_id: data.ubicacion_id, // misma ubicación (producción)
+        estado: 'PENDIENTE',
+        usuario_creacion_id: data.usuario_creacion_id,
+        usuario_confirmacion_id: null,
+        fecha_creacion: Timestamp.now(),
+        fecha_confirmacion: null,
+        numero_documento: data.numero_documento || '',
+        observaciones_creacion: data.observaciones || '',
+        observaciones_confirmacion: ''
+      }
+
+      batch.set(movimientoRef, nuevoMovimiento)
+
+      // Crear detalles: productos producidos
+      if (data.lineas && data.lineas.length > 0) {
+        for (const linea of data.lineas) {
+          const detalleRef = doc(collection(db, 'detalle_movimientos'))
+          batch.set(detalleRef, {
+            movimiento_id: movimientoRef.id,
+            producto_id: linea.producto_id,
+            cantidad: linea.cantidad,
+            cantidad_enviada: linea.cantidad,
+            cantidad_recibida: null,
+            tipo: 'PRODUCIDO',
+            observaciones: ''
+          })
+
+          // Crear detalles de insumos consumidos para esta línea
+          if (linea.insumos && linea.insumos.length > 0) {
+            for (const insumo of linea.insumos) {
+              const insumoRef = doc(collection(db, 'detalle_insumos_produccion'))
+              batch.set(insumoRef, {
+                movimiento_id: movimientoRef.id,
+                detalle_producido_id: detalleRef.id,
+                producto_id: insumo.producto_id,
+                cantidad: insumo.cantidad
+              })
+            }
+          }
+        }
+      }
+
+      await batch.commit()
+
+      return {
+        success: true,
+        message: 'Orden de producción creada exitosamente',
+        data: { id: movimientoRef.id, ...nuevoMovimiento }
+      }
+    } catch (error) {
+      console.error('Error creando orden de producción:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  /**
+   * Confirmar orden de producción (PENDIENTE -> COMPLETADO)
+   * - Incrementa inventario de productos producidos
+   * - Descuenta inventario de insumos consumidos
+   * - Todo atómico en un batch
+   */
+  confirmarProduccion: async (data) => {
+    try {
+      const db = getDB()
+      const batch = writeBatch(db)
+
+      const movimientoRef = doc(db, 'movimientos', data.movimiento_id)
+      const movimientoDoc = await getDoc(movimientoRef)
+      if (!movimientoDoc.exists()) throw new Error('Orden de producción no encontrada')
+      const movimiento = movimientoDoc.data()
+      const ubicacionId = movimiento.destino_id
+
+      // Obtener detalles producidos
+      const detallesProducidos = await firestoreService.getDetalleMovimientos(data.movimiento_id)
+
+      // Obtener insumos consumidos
+      const insumosQuery = query(
+        collection(db, 'detalle_insumos_produccion'),
+        where('movimiento_id', '==', data.movimiento_id)
+      )
+      const insumosSnapshot = await getDocs(insumosQuery)
+      const insumos = insumosSnapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+
+      // 1. Incrementar inventario de productos producidos
+      for (const detalle of detallesProducidos) {
+        const cantidadProducida = detalle.cantidad_enviada ?? detalle.cantidad
+
+        // Actualizar cantidad_recibida en detalle
+        const detalleRef = doc(db, 'detalle_movimientos', detalle.id)
+        batch.update(detalleRef, { cantidad_recibida: cantidadProducida })
+
+        // Actualizar inventario
+        const invQuery = query(
+          collection(db, 'inventario'),
+          where('ubicacion_id', '==', ubicacionId),
+          where('producto_id', '==', detalle.producto_id)
+        )
+        const invSnapshot = await getDocs(invQuery)
+
+        if (!invSnapshot.empty) {
+          const invDoc = invSnapshot.docs[0]
+          const invActual = invDoc.data()
+          batch.update(doc(db, 'inventario', invDoc.id), {
+            cantidad: (invActual.cantidad || 0) + parseFloat(cantidadProducida),
+            fecha_actualizacion: Timestamp.now()
+          })
+        } else {
+          const invRef = doc(collection(db, 'inventario'))
+          batch.set(invRef, {
+            ubicacion_id: ubicacionId,
+            producto_id: detalle.producto_id,
+            cantidad: parseFloat(cantidadProducida),
+            fecha_actualizacion: Timestamp.now()
+          })
+        }
+      }
+
+      // 2. Descontar inventario de insumos consumidos
+      for (const insumo of insumos) {
+        const invQuery = query(
+          collection(db, 'inventario'),
+          where('ubicacion_id', '==', ubicacionId),
+          where('producto_id', '==', insumo.producto_id)
+        )
+        const invSnapshot = await getDocs(invQuery)
+
+        if (!invSnapshot.empty) {
+          const invDoc = invSnapshot.docs[0]
+          const invActual = invDoc.data()
+          const nuevoStock = Math.max(0, (invActual.cantidad || 0) - parseFloat(insumo.cantidad))
+          batch.update(doc(db, 'inventario', invDoc.id), {
+            cantidad: nuevoStock,
+            fecha_actualizacion: Timestamp.now()
+          })
+        }
+        // If no inventory record exists, skip (can't deduct from nothing)
+      }
+
+      // 3. Actualizar estado del movimiento
+      batch.update(movimientoRef, {
+        estado: 'COMPLETADO',
+        usuario_confirmacion_id: data.usuario_confirmacion_id,
+        fecha_confirmacion: Timestamp.now()
+      })
+
+      await batch.commit()
+
+      return {
+        success: true,
+        message: 'Producción confirmada. Inventario actualizado.'
+      }
+    } catch (error) {
+      console.error('Error confirmando producción:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  /**
+   * Actualizar una orden de producción (solo si está PENDIENTE)
+   */
+  updateProduccion: async (data) => {
+    try {
+      const db = getDB()
+      const batch = writeBatch(db)
+
+      // Verificar que el movimiento existe y está PENDIENTE
+      const movimientoRef = doc(db, 'movimientos', data.movimiento_id)
+      const movimientoDoc = await getDoc(movimientoRef)
+      if (!movimientoDoc.exists()) {
+        throw new Error('Orden de producción no encontrada')
+      }
+      const movimiento = movimientoDoc.data()
+      if (movimiento.estado !== 'PENDIENTE') {
+        throw new Error('Solo se pueden editar órdenes de producción pendientes')
+      }
+
+      // Actualizar datos básicos del movimiento (si se proporcionan)
+      const updateData = {
+        updated_at: serverTimestamp(),
+        fecha_ultima_edicion: Timestamp.now()
+      }
+      
+      if (data.usuario_editor_id) updateData.usuario_editor_id = data.usuario_editor_id
+      if (data.numero_documento !== undefined) updateData.numero_documento = data.numero_documento
+      if (data.observaciones !== undefined) updateData.observaciones_creacion = data.observaciones
+      
+      batch.update(movimientoRef, updateData)
+
+      // Si se proporcionan líneas, actualizar detalles y insumos
+      if (data.lineas && data.lineas.length > 0) {
+                
+        // Eliminar detalles e insumos existentes
+        const detallesQuery = query(
+          collection(db, 'detalle_movimientos'),
+          where('movimiento_id', '==', data.movimiento_id)
+        )
+        const detallesSnapshot = await getDocs(detallesQuery)
+                detallesSnapshot.docs.forEach(d => batch.delete(d.ref))
+
+        const insumosQuery = query(
+          collection(db, 'detalle_insumos_produccion'),
+          where('movimiento_id', '==', data.movimiento_id)
+        )
+        const insumosSnapshot = await getDocs(insumosQuery)
+                insumosSnapshot.docs.forEach(d => batch.delete(d.ref))
+
+        // Crear nuevos detalles y sus insumos
+        for (const linea of data.lineas) {
+          const detalleRef = doc(collection(db, 'detalle_movimientos'))
+          const nuevoDetalle = {
+            movimiento_id: data.movimiento_id,
+            producto_id: linea.producto_id,
+            cantidad: linea.cantidad,
+            cantidad_enviada: linea.cantidad,
+            cantidad_recibida: null,
+            tipo: 'PRODUCIDO',
+            observaciones: ''
+          }
+          batch.set(detalleRef, nuevoDetalle)
+
+          // Crear insumos para esta línea
+          if (linea.insumos && linea.insumos.length > 0) {
+            for (const insumo of linea.insumos) {
+              const insumoRef = doc(collection(db, 'detalle_insumos_produccion'))
+              batch.set(insumoRef, {
+                movimiento_id: data.movimiento_id,
+                detalle_producido_id: detalleRef.id,
+                producto_id: insumo.producto_id,
+                cantidad: insumo.cantidad
+              })
+            }
+          }
+        }
+      }
+
+      await batch.commit()
+
+      return {
+        success: true,
+        message: 'Orden de producción actualizada exitosamente'
+      }
+    } catch (error) {
+      console.error('Error actualizando producción:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  /**
+   * Obtener insumos de producción para un movimiento
+   */
+  getInsumosProduccion: async (movimientoId) => {
+    try {
+      const q = query(
+        collection(getDB(), 'detalle_insumos_produccion'),
+        where('movimiento_id', '==', movimientoId)
+      )
+      const snapshot = await getDocs(q)
+      return snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+    } catch (error) {
+      console.error('Error obteniendo insumos de producción:', error)
+      return []
+    }
+  },
+
+  /**
    * Confirmar transferencia con soporte para recepción parcial.
    * data.productos_recibidos: [{ detalle_id, producto_id, cantidad_recibida }]
    * If productos_recibidos is not provided, assumes full reception (cantidad_recibida = cantidad_enviada).

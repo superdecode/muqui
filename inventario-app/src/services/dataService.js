@@ -111,6 +111,20 @@ const dataService = {
     return await firestoreService.createEntradaCompra(uppercaseStrings(data))
   },
 
+  // PRODUCCION
+  createProduccion: async (data) => {
+    return await firestoreService.createProduccion(data)
+  },
+  confirmarProduccion: async (data) => {
+    return await firestoreService.confirmarProduccion(data)
+  },
+  updateProduccion: async (data) => {
+    return await firestoreService.updateProduccion(data)
+  },
+  getInsumosProduccion: async (movimientoId) => {
+    return await firestoreService.getInsumosProduccion(movimientoId)
+  },
+
   cancelarMovimiento: async (data) => {
     return await firestoreService.cancelarMovimiento(data)
   },

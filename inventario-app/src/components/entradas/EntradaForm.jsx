@@ -1,12 +1,13 @@
 import { useState, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Button from '../common/Button'
-import Input from '../common/Input'
+import Alert from '../common/Alert'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { Search, Plus, X, User, ShoppingCart, ArrowRightLeft, AlertCircle, Package } from 'lucide-react'
+import { Search, Plus, X, User, ShoppingCart, ArrowRightLeft, AlertCircle, Package, Phone, MapPin, CreditCard, Factory } from 'lucide-react'
 import dataService from '../../services/dataService'
 import { useAuthStore } from '../../stores/authStore'
 import { useToastStore } from '../../stores/toastStore'
+import ProduccionForm from './ProduccionForm'
 
 // ========== PROVEEDOR MODAL ==========
 function ProveedorModal({ isOpen, onClose, onCreate }) {
@@ -17,6 +18,10 @@ function ProveedorModal({ isOpen, onClose, onCreate }) {
   const handleSave = async () => {
     if (!form.nombre.trim()) {
       setError('El nombre del proveedor es obligatorio')
+      return
+    }
+    if (!form.identificacion.trim()) {
+      setError('La identificación es obligatoria')
       return
     }
 
@@ -37,78 +42,74 @@ function ProveedorModal({ isOpen, onClose, onCreate }) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <User className="text-white" size={20} />
-            <h3 className="text-lg font-bold text-white">Nuevo Proveedor</h3>
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+        <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <User className="text-white" size={20} />
+              <h3 className="text-lg font-bold text-white">Nuevo Proveedor</h3>
+            </div>
+            <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-lg transition-colors">
+              <X className="text-white" size={20} />
+            </button>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-lg transition-colors">
-            <X className="text-white" size={20} />
-          </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="p-4 space-y-4">
+          {error && <Alert type="error">{error}</Alert>}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Nombre <span className="text-red-500">*</span>
+              <span className="flex items-center gap-1"><User size={14} /> Nombre *</span>
             </label>
             <input
               value={form.nombre}
               onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-              className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="Nombre del proveedor"
-              autoFocus
+              placeholder="Nombre completo"
+              className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl"
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Identificación
+              <span className="flex items-center gap-1"><CreditCard size={14} /> Identificación *</span>
             </label>
             <input
               value={form.identificacion}
               onChange={(e) => setForm({ ...form, identificacion: e.target.value })}
-              className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="RUC, CI, etc."
+              placeholder="DNI, RUC, etc."
+              className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl"
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Teléfono
+              <span className="flex items-center gap-1"><Phone size={14} /> Teléfono</span>
             </label>
             <input
               value={form.telefono}
               onChange={(e) => setForm({ ...form, telefono: e.target.value })}
-              className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="Teléfono de contacto"
+              placeholder="Opcional"
+              className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl"
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Dirección
+              <span className="flex items-center gap-1"><MapPin size={14} /> Dirección</span>
             </label>
             <input
               value={form.direccion}
               onChange={(e) => setForm({ ...form, direccion: e.target.value })}
-              className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="Dirección del proveedor"
+              placeholder="Opcional"
+              className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl"
             />
           </div>
 
-          {error && (
-            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-3 pt-2">
-          <Button variant="outline" onClick={onClose} className="flex-1" disabled={saving}>Cancelar</Button>
-          <Button onClick={handleSave} loading={saving} className="flex-1">Crear Proveedor</Button>
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" onClick={onClose} className="flex-1" disabled={saving}>Cancelar</Button>
+            <Button onClick={handleSave} loading={saving} className="flex-1">Crear Proveedor</Button>
+          </div>
         </div>
       </div>
     </div>
@@ -328,7 +329,8 @@ export default function EntradaForm({ onClose, onSave, isLoading = false }) {
             <div className="flex gap-1 bg-white/20 rounded-xl p-1">
               {[
                 { id: 'TRANSFERENCIA', label: 'Transferencia', icon: ArrowRightLeft },
-                { id: 'COMPRA', label: 'Compra', icon: ShoppingCart }
+                { id: 'COMPRA', label: 'Compra', icon: ShoppingCart },
+                { id: 'PRODUCCION', label: 'Producción', icon: Factory }
               ].map(tipo => {
                 const Icon = tipo.icon
                 const isActive = tipoEntrada === tipo.id
@@ -359,6 +361,16 @@ export default function EntradaForm({ onClose, onSave, isLoading = false }) {
           </div>
         </div>
 
+        {/* Producción Form (separate component) */}
+        {tipoEntrada === 'PRODUCCION' ? (
+          <div className="p-6 overflow-y-auto max-h-[calc(95vh-200px)]">
+            <ProduccionForm
+              onClose={onClose}
+              onSave={onSave}
+              isLoading={isLoading}
+            />
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(95vh-200px)] space-y-6">
           {/* Error Alert */}
           {error && (
@@ -775,25 +787,22 @@ export default function EntradaForm({ onClose, onSave, isLoading = false }) {
             </Button>
           </div>
         </form>
+        )}
       </div>
 
       {/* Modal para crear nuevo proveedor */}
       <ProveedorModal
         isOpen={showProveedorModal}
         onClose={() => setShowProveedorModal(false)}
-        onCreate={(result) => {
-          if (result.success) {
-            toast.success('Proveedor Creado', 'El proveedor ha sido creado exitosamente')
-            // Refrescar la lista de proveedores
-            queryClient.invalidateQueries(['beneficiarios'])
-            // Seleccionar automáticamente el nuevo proveedor
-            setSelectedProveedor(result.data)
-            setFormData({ ...formData, proveedor_id: result.data.id })
-            setProveedorSearch('')
-            setShowProveedorDropdown(false)
-          } else {
-            toast.error('Error', result.message || 'No se pudo crear el proveedor')
-          }
+        onCreate={(newProveedor) => {
+          // Refrescar la lista de proveedores
+          queryClient.invalidateQueries({ queryKey: ['beneficiarios'] })
+          // Seleccionar automáticamente el nuevo proveedor
+          setSelectedProveedor(newProveedor)
+          setFormData(prev => ({ ...prev, proveedor_id: newProveedor.id }))
+          setProveedorSearch('')
+          setShowProveedorDropdown(false)
+          toast.success('Proveedor Creado', `${newProveedor.nombre} ha sido registrado`)
         }}
       />
     </div>

@@ -444,7 +444,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+        <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault() }} className="flex-1 flex flex-col overflow-hidden">
           <div className="p-6 space-y-4 flex-shrink-0">
             {/* Error Alert */}
             {error && (
@@ -521,6 +521,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
                 placeholder="Buscar producto por nombre o ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
                 className="w-full pl-12 pr-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
               />
             </div>
@@ -594,8 +595,15 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault()
+                            e.stopPropagation()
+                            // Guardar el valor actual antes de moverse
+                            handleStockBlur(productoIndex, producto.producto_id, e.target.value)
+                            // Buscar el siguiente input
                             const nextInput = document.querySelector(`[data-conteo-index="${index + 1}"]`)
-                            if (nextInput) nextInput.focus()
+                            if (nextInput) {
+                              nextInput.focus()
+                              nextInput.select()
+                            }
                           }
                         }}
                         className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-center font-semibold"
