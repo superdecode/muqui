@@ -4,13 +4,13 @@ import Select from 'react-select'
 import Card from '../components/common/Card'
 import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import { Download, FileBarChart, TrendingUp, Package, AlertCircle, ArrowUp, ArrowDown, Printer, ChevronLeft, Filter, Lock, ChevronDown, ChevronUp, BarChart3, PieChart } from 'lucide-react'
+import { Download, FileBarChart, TrendingUp, Package, AlertCircle, ArrowUp, ArrowDown, Printer, ChevronLeft, Filter, Lock, ChevronDown, ChevronUp, BarChart3, PieChart, Activity, FileText } from 'lucide-react'
 import { exportToCSV } from '../utils/exportUtils'
 import { exportConsolidatedToExcel } from '../utils/excelExport'
 import MultiSelectUbicaciones from '../components/reportes/MultiSelectUbicaciones'
 import TablaConsolidada from '../components/reportes/TablaConsolidada'
 import { useToastStore } from '../stores/toastStore'
-import { safeFormatDate, safeParseDate } from '../utils/formatters'
+import { safeFormatDate, safeParseDate, formatDisplayId } from '../utils/formatters'
 import { useAuthStore } from '../stores/authStore'
 import dataService from '../services/dataService'
 import { format } from 'date-fns'
@@ -28,17 +28,20 @@ const getDefaultDates = () => {
 }
 
 const REPORTS = [
-  { id: 'stock', name: 'Reporte de Stock Actual', description: 'Estado actual del inventario por ubicación', icon: Package, color: 'blue' },
+  { id: 'stock', name: 'Reporte de Stock Actual', description: 'Estado actual del inventario con entradas y salidas del período', icon: Package, color: 'blue' },
   { id: 'consumo', name: 'Reporte de Consumo', description: 'Análisis de consumo por periodo', icon: TrendingUp, color: 'green' },
+  { id: 'kardex', name: 'Movimientos de Inventario', description: 'Trazabilidad detallada línea por línea de movimientos por producto', icon: FileText, color: 'indigo' },
   { id: 'rotacion', name: 'Rotación de Inventario', description: 'Productos más y menos rotados', icon: FileBarChart, color: 'purple' },
-  { id: 'transferencias', name: 'Reporte de Movimientos', description: 'Historial de movimientos entre ubicaciones', icon: FileBarChart, color: 'orange' }
+  { id: 'transferencias', name: 'Historial de Registros', description: 'Registro histórico de transferencias entre ubicaciones', icon: Activity, color: 'orange' }
 ]
 
 const COLOR_CLASSES = {
   blue: 'bg-blue-100 text-blue-600 border-blue-200',
   green: 'bg-green-100 text-green-600 border-green-200',
   purple: 'bg-purple-100 text-purple-600 border-purple-200',
-  orange: 'bg-orange-100 text-orange-600 border-orange-200'
+  orange: 'bg-orange-100 text-orange-600 border-orange-200',
+  teal: 'bg-teal-100 text-teal-600 border-teal-200',
+  indigo: 'bg-indigo-100 text-indigo-600 border-indigo-200'
 }
 
 // Badge component for método values
@@ -248,15 +251,45 @@ export default function Reportes() {
 
         const METODO_LABEL = { conteo_reciente: 'Conteo Reciente', calculado: 'Calculado', sin_conteo: 'Sin Conteo' }
 
+        // Calcular entradas y salidas del período seleccionado
+        const fi = new Date(dateRange.fechaInicio)
+        const ff = new Date(dateRange.fechaFin)
+        ff.setHours(23, 59, 59, 999)
+
         let result = data.map(item => {
           const producto = productos.find(p => p.id === item.producto_id)
           const ubicacion = ubicaciones.find(u => u.id === item.ubicacion_id)
           const calc = calcularStockActual(item.producto_id, item.ubicacion_id)
           const stockMin = producto?.stock_minimo || 0
+
+          // Calcular entradas y salidas en el rango de fechas
+          let entradas = 0
+          let salidas = 0
+
+          movimientos.forEach(mov => {
+            const estadoMov = (mov.estado || '').toUpperCase()
+            if (!['COMPLETADO', 'PARCIAL', 'EN_PROCESO'].includes(estadoMov)) return
+
+            const fechaMov = safeParseDate(mov.fecha_confirmacion || mov.fecha_creacion)
+            if (!fechaMov || fechaMov < fi || fechaMov > ff) return
+
+            const dets = detalleMovimientos.filter(d => d.movimiento_id === mov.id && d.producto_id === item.producto_id)
+            dets.forEach(det => {
+              if (mov.destino_id === item.ubicacion_id) {
+                entradas += det.cantidad_recibida ?? det.cantidad ?? 0
+              }
+              if (mov.origen_id === item.ubicacion_id) {
+                salidas += det.cantidad_enviada ?? det.cantidad ?? 0
+              }
+            })
+          })
+
           return {
             Producto: producto?.nombre || item.producto_id,
             Ubicación: ubicacion?.nombre || item.ubicacion_id,
-            Cantidad: calc.stock_actual,
+            Entradas: entradas,
+            Salidas: salidas,
+            'Stock Actual': calc.stock_actual,
             'Stock Mínimo': stockMin,
             'Fecha Último Conteo': calc.fecha_ultimo_conteo ? format(calc.fecha_ultimo_conteo, 'dd/MM/yyyy') : 'Sin conteo',
             'Días desde Conteo': calc.dias_desde_conteo ?? '—',
@@ -292,7 +325,7 @@ export default function Reportes() {
           const cantidadTotal = detalles.reduce((sum, d) => sum + (d.cantidad_enviada || d.cantidad || 0), 0)
 
           return {
-            ID: mov.id,
+            Código: formatDisplayId(mov, 'MV'),
             Tipo: mov.tipo_movimiento || 'TRANSFERENCIA',
             Fecha: safeFormatDate(mov.fecha_creacion, 'dd/MM/yyyy'),
             Origen: origen?.nombre || mov.origen_id,
@@ -413,6 +446,150 @@ export default function Reportes() {
           Movimientos: movsByProduct[p.id] || 0,
           Rotación: movsByProduct[p.id] > 5 ? 'Alta' : movsByProduct[p.id] > 0 ? 'Media' : 'Baja'
         })).sort((a, b) => b.Movimientos - a.Movimientos)
+      }
+      case 'kardex': {
+        // Reporte Kardex: Historial detallado línea por línea de movimientos
+        const fi = new Date(dateRange.fechaInicio)
+        const ff = new Date(dateRange.fechaFin)
+        ff.setHours(23, 59, 59, 999)
+
+        // Filtrar ubicaciones seleccionadas o todas las del usuario
+        const ubicacionesFiltro = filterUbicaciones.length > 0 ? filterUbicaciones : userUbicaciones.map(u => u.id)
+
+        // Filtrar productos seleccionados o todos
+        const productosFiltrados = filterProductos.length > 0
+          ? productos.filter(p => filterProductos.includes(p.id))
+          : productos
+
+        const kardexLines = []
+
+        productosFiltrados.forEach(producto => {
+          ubicacionesFiltro.forEach(ubicacionId => {
+            // Encontrar stock inicial (último conteo antes del rango)
+            const conteosAnteriores = conteos
+              .filter(c =>
+                c.ubicacion_id === ubicacionId &&
+                ['COMPLETADO', 'PARCIALMENTE_COMPLETADO'].includes(c.estado?.toUpperCase()) &&
+                safeParseDate(c.fecha_completado || c.fecha_programada) < fi
+              )
+              .sort((a, b) => {
+                const da = safeParseDate(a.fecha_completado || a.fecha_programada) || new Date(0)
+                const db = safeParseDate(b.fecha_completado || b.fecha_programada) || new Date(0)
+                return db - da
+              })
+
+            let saldoAnterior = 0
+            let codigoConteoInicial = '-'
+            if (conteosAnteriores.length > 0) {
+              const ultimoConteo = conteosAnteriores[0]
+              codigoConteoInicial = formatDisplayId(ultimoConteo, 'CT')
+              const detalle = detalleConteos.find(d =>
+                d.conteo_id === ultimoConteo.id && d.producto_id === producto.id
+              )
+              if (detalle) {
+                saldoAnterior = detalle.cantidad_fisica ?? detalle.cantidad_sistema ?? 0
+              }
+            } else {
+              // Si no hay conteo anterior, usar inventario base
+              const invItem = inventario.find(i =>
+                i.producto_id === producto.id && i.ubicacion_id === ubicacionId
+              )
+              saldoAnterior = invItem?.stock_actual ?? 0
+            }
+
+            let saldoActual = saldoAnterior
+
+            // Agregar línea de saldo inicial
+            if (saldoAnterior > 0) {
+              kardexLines.push({
+                fecha: fi,
+                producto: producto.nombre,
+                ubicacion: ubicaciones.find(u => u.id === ubicacionId)?.nombre || ubicacionId,
+                tipo: 'SALDO INICIAL',
+                documento: codigoConteoInicial,
+                entradas: 0,
+                salidas: 0,
+                saldo: saldoAnterior,
+                orden: 0
+              })
+            }
+
+            // Procesar movimientos en el rango
+            const movimientosRelevantes = movimientos
+              .filter(mov => {
+                const estadoMov = (mov.estado || '').toUpperCase()
+                if (!['COMPLETADO', 'PARCIAL', 'EN_PROCESO'].includes(estadoMov)) return false
+
+                const fechaMov = safeParseDate(mov.fecha_confirmacion || mov.fecha_creacion)
+                if (!fechaMov || fechaMov < fi || fechaMov > ff) return false
+
+                // Verificar si afecta este producto y ubicación
+                const detalles = detalleMovimientos.filter(d =>
+                  d.movimiento_id === mov.id && d.producto_id === producto.id
+                )
+                return detalles.some(d =>
+                  mov.destino_id === ubicacionId || mov.origen_id === ubicacionId
+                )
+              })
+              .sort((a, b) => {
+                const da = safeParseDate(a.fecha_confirmacion || a.fecha_creacion) || new Date(0)
+                const db = safeParseDate(b.fecha_confirmacion || b.fecha_creacion) || new Date(0)
+                return da - db
+              })
+
+            movimientosRelevantes.forEach(mov => {
+              const detalles = detalleMovimientos.filter(d =>
+                d.movimiento_id === mov.id && d.producto_id === producto.id
+              )
+
+              detalles.forEach(det => {
+                let entrada = 0
+                let salida = 0
+                let tipoMovimiento = mov.tipo_movimiento || 'TRANSFERENCIA'
+
+                if (mov.destino_id === ubicacionId) {
+                  entrada = det.cantidad_recibida ?? det.cantidad ?? 0
+                  saldoActual += entrada
+                }
+                if (mov.origen_id === ubicacionId) {
+                  salida = det.cantidad_enviada ?? det.cantidad ?? 0
+                  saldoActual -= salida
+                }
+
+                const fechaMov = safeParseDate(mov.fecha_confirmacion || mov.fecha_creacion)
+                kardexLines.push({
+                  fecha: fechaMov,
+                  producto: producto.nombre,
+                  ubicacion: ubicaciones.find(u => u.id === ubicacionId)?.nombre || ubicacionId,
+                  tipo: tipoMovimiento,
+                  documento: formatDisplayId(mov, 'MV'),
+                  entradas: entrada,
+                  salidas: salida,
+                  saldo: saldoActual,
+                  orden: fechaMov.getTime()
+                })
+              })
+            })
+          })
+        })
+
+        return kardexLines
+          .sort((a, b) => {
+            // Ordenar por producto, ubicación y fecha
+            if (a.producto !== b.producto) return a.producto.localeCompare(b.producto)
+            if (a.ubicacion !== b.ubicacion) return a.ubicacion.localeCompare(b.ubicacion)
+            return a.orden - b.orden
+          })
+          .map(line => ({
+            Fecha: safeFormatDate(line.fecha, 'dd/MM/yyyy HH:mm'),
+            Producto: line.producto,
+            Ubicación: line.ubicacion,
+            Tipo: line.tipo,
+            Documento: line.documento,
+            Entradas: line.entradas,
+            Salidas: line.salidas,
+            Saldo: line.saldo
+          }))
       }
       default:
         return []
@@ -575,7 +752,7 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
             <Filter size={18} className="text-primary-600" />
             <h3 className="font-semibold text-slate-900 dark:text-slate-100">Filtros del Reporte</h3>
           </div>
-          <div className={`grid grid-cols-1 gap-4 ${selectedReport === 'stock' ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
+          <div className={`grid grid-cols-1 gap-4 ${(selectedReport === 'stock' || selectedReport === 'kardex') ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Fecha Inicio</label>
               <input type="date" value={dateRange.fechaInicio} onChange={e => setDateRange({ ...dateRange, fechaInicio: e.target.value })}
@@ -588,9 +765,9 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                {selectedReport === 'stock' ? 'Ubicaciones (Multi-selección)' : 'Ubicación'}
+                {(selectedReport === 'stock' || selectedReport === 'kardex') ? 'Ubicaciones (Multi-selección)' : 'Ubicación'}
               </label>
-              {selectedReport === 'stock' ? (
+              {(selectedReport === 'stock' || selectedReport === 'kardex') ? (
                 <MultiSelectUbicaciones
                   ubicaciones={userUbicaciones}
                   selected={filterUbicaciones}
@@ -604,7 +781,7 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
                 </select>
               )}
             </div>
-            {selectedReport === 'stock' && (
+            {(selectedReport === 'stock' || selectedReport === 'kardex') && (
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Productos</label>
                 <Select

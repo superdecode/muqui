@@ -467,6 +467,8 @@ export default function Entradas() {
     if (!selectedMovimiento) return
 
     if (action === 'edit_produccion') {
+      // Cerrar modal de detalles antes de abrir modal de edición
+      setShowDetail(false)
       // Abrir modal de edición de producción
       setShowEditProduccion(true)
       return

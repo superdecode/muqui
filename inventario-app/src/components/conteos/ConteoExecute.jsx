@@ -81,23 +81,28 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
 
   // Guardar progreso en localStorage
   const saveProgress = useCallback(() => {
-    if (!autoSaveEnabled || productosConteo.length === 0) return
+    // Usar una función de actualización para obtener el estado actual sin depender de él
+    setProductosConteo(currentProductos => {
+      if (!autoSaveEnabled || currentProductos.length === 0) return currentProductos
 
-    const progressKey = `conteo_progress_${conteo.id}`
-    const progressData = {
-      productos: productosConteo,
-      timestamp: new Date().toISOString(),
-      ubicacion_id: conteo.ubicacion_id,
-      tipo_conteo: conteo.tipo_conteo
-    }
+      const progressKey = `conteo_progress_${conteo.id}`
+      const progressData = {
+        productos: currentProductos,
+        timestamp: new Date().toISOString(),
+        ubicacion_id: conteo.ubicacion_id,
+        tipo_conteo: conteo.tipo_conteo
+      }
 
-    try {
-      localStorage.setItem(progressKey, JSON.stringify(progressData))
-      setLastSaved(new Date())
-    } catch (error) {
-      console.error('Error guardando progreso:', error)
-    }
-  }, [autoSaveEnabled, productosConteo, conteo.id, conteo.ubicacion_id, conteo.tipo_conteo])
+      try {
+        localStorage.setItem(progressKey, JSON.stringify(progressData))
+        setLastSaved(new Date())
+      } catch (error) {
+        console.error('Error guardando progreso:', error)
+      }
+
+      return currentProductos // No modificar el estado, solo leerlo
+    })
+  }, [autoSaveEnabled, conteo.id, conteo.ubicacion_id, conteo.tipo_conteo])
 
   // Auto-guardar cada 30 segundos
   useEffect(() => {
@@ -116,7 +121,8 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
 
   // Cargar progreso guardado o inicializar productos
   useEffect(() => {
-    if (!isLoading && productos.length > 0) {
+    // Solo inicializar si productosConteo está vacío (primera carga)
+    if (!isLoading && productos.length > 0 && productosConteo.length === 0) {
       // MODO EDICIÓN: Cargar los detalles ya contados
       if (editMode && detallesConteo.length > 0) {
         const productosEditables = detallesConteo.map(detalle => {
@@ -198,7 +204,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
 
       setProductosConteo(productosIniciales)
     }
-  }, [isLoading, productos, inventario, conteo.ubicacion_id, conteo.tipo_conteo, editMode, detallesConteo]) // Agregado editMode y detallesConteo
+  }, [isLoading, productos.length, inventario.length, conteo.ubicacion_id, conteo.tipo_conteo, editMode, detallesConteo.length, productosConteo.length]) // Solo depender de longitudes, no de arrays completos
 
   // Función para mostrar modal de confirmación de eliminación
   const handleEliminarProducto = (productoId) => {
@@ -258,10 +264,25 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
   }
 
   // Manejar cambio de stock con onBlur (actualiza valores reales y afecta filtros)
-  const handleStockBlur = (index, productoId, value) => {
-    const newProductos = [...productosConteo]
-    newProductos[index].stock_fisico = value === '' ? '' : parseFloat(value)
-    setProductosConteo(newProductos)
+  const handleStockBlur = useCallback((productoId, value) => {
+    // Convertir el valor de manera segura
+    let stockValue = value
+    if (value !== '' && value !== null && value !== undefined) {
+      const parsed = parseFloat(value)
+      stockValue = isNaN(parsed) ? '' : parsed
+    } else {
+      stockValue = ''
+    }
+
+    // Actualizar usando productoId en lugar de índice para evitar problemas con filtros
+    setProductosConteo(prev => {
+      const newProductos = [...prev]
+      const index = newProductos.findIndex(p => p.producto_id === productoId)
+      if (index !== -1) {
+        newProductos[index].stock_fisico = stockValue
+      }
+      return newProductos
+    })
 
     // Limpiar valor temporal
     setTempValues(prev => {
@@ -271,14 +292,14 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
     })
 
     saveProgress() // Guardar al perder foco
-  }
+  }, [saveProgress])
 
   // Obtener el valor a mostrar (temporal si existe, sino el real)
   const getDisplayValue = (producto) => {
     if (tempValues[producto.producto_id] !== undefined) {
       return tempValues[producto.producto_id]
     }
-    return producto.stock_fisico
+    return producto.stock_fisico === null || producto.stock_fisico === undefined ? '' : producto.stock_fisico
   }
 
   // Completar conteo COMPLETO (todos los productos)
@@ -385,47 +406,44 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-card-hover max-w-7xl w-full max-h-[95vh] overflow-hidden flex flex-col">
         {/* Header con Progreso Integrado */}
-        <div className={`relative overflow-hidden ${editMode ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-ocean'} p-5 flex-shrink-0`}>
+        <div className={`relative overflow-hidden ${editMode ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-ocean'} p-4 flex-shrink-0`}>
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16"></div>
           <div className="relative z-10">
-            <div className="flex flex-col gap-1.5">
-              {/* Primera línea: Título + Botón Cerrar */}
-              <div className="flex items-start justify-between gap-4">
-                <h2 className="text-2xl font-bold text-white">
+            <div className="flex items-start justify-between gap-4">
+              {/* Lado izquierdo: Título e info de ubicación */}
+              <div className="flex-1 min-w-0">
+                <h2 className="text-2xl font-bold text-white mb-1.5">
                   {editMode ? 'Editar Conteo' : 'Ejecutar Conteo'}
                 </h2>
+                <p className="text-white/90 text-sm">Ubicacion: {conteo.ubicacion_nombre || conteo.ubicacion_id}</p>
+                <p className="text-white/90 text-sm">Tipo: {conteo.tipo_conteo}</p>
+              </div>
+
+              {/* Lado derecho: Progreso + Botón Cerrar */}
+              <div className="flex items-start gap-3 flex-shrink-0">
+                {/* Bloque de progreso */}
+                <div className="text-right mt-3">
+                  <p className="text-white font-bold text-base leading-tight">
+                    {estadisticas.porcentajeCompletado}%
+                  </p>
+                  <p className="text-white/70 text-xs leading-tight mt-0.5 mb-1">
+                    {lastSaved ? lastSaved.toLocaleTimeString() : new Date().toLocaleTimeString()}
+                  </p>
+                  <div className="w-48 bg-white/30 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="bg-white h-full rounded-full transition-all duration-300 shadow-lg"
+                      style={{ width: `${estadisticas.porcentajeCompletado}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Botón cerrar */}
                 <button
                   onClick={onClose}
                   className="p-1.5 hover:bg-white/20 rounded-lg transition-colors flex-shrink-0"
                 >
                   <X className="text-white" size={20} />
                 </button>
-              </div>
-
-              {/* Segunda línea: Info ubicación izquierda + Porcentaje y hora derecha */}
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <p className="text-white/90 text-sm">Ubicacion: {conteo.ubicacion_nombre || conteo.ubicacion_id}</p>
-                  <p className="text-white/90 text-sm">Tipo: {conteo.tipo_conteo}</p>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-white font-bold text-base">
-                    {estadisticas.porcentajeCompletado}%
-                  </p>
-                  <p className="text-white/70 text-xs mt-0.5">
-                    {lastSaved ? lastSaved.toLocaleTimeString() : new Date().toLocaleTimeString()}
-                  </p>
-                </div>
-              </div>
-
-              {/* Tercera línea: Barra de Progreso (solo en lado derecho) */}
-              <div className="flex justify-end">
-                <div className="w-64 bg-white/30 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-white h-full rounded-full transition-all duration-300 shadow-lg"
-                    style={{ width: `${estadisticas.porcentajeCompletado}%` }}
-                  />
-                </div>
               </div>
             </div>
           </div>
@@ -445,7 +463,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
         )}
 
         <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault() }} className="flex-1 flex flex-col overflow-hidden">
-          <div className="p-6 space-y-4 flex-shrink-0">
+          <div className="p-4 space-y-2 flex-shrink-0">
             {/* Error Alert */}
             {error && (
               <Alert type="error" onClose={() => setError('')}>
@@ -456,80 +474,80 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
               </Alert>
             )}
 
-            {/* Summary Badges */}
-            <div className="grid grid-cols-3 gap-4">
+            {/* Summary Badges - Compacto */}
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setFilterStatus('todos')}
-                className={`p-4 rounded-xl border-2 transition-all ${
+                className={`p-2 rounded-lg border-2 transition-all ${
                   filterStatus === 'todos'
                     ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
                     : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-primary-300'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <div className="text-left">
-                    <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">Total Productos</p>
-                    <p className="text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1">{estadisticas.totalProductos}</p>
+                <div className="flex items-center gap-2">
+                  <Package className="text-primary-600 flex-shrink-0" size={20} />
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="text-xs text-slate-600 dark:text-slate-400 font-medium leading-tight">Total</p>
+                    <p className="text-xl font-bold text-slate-900 dark:text-slate-100 leading-tight">{estadisticas.totalProductos}</p>
                   </div>
-                  <Package className="text-primary-600" size={32} />
                 </div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setFilterStatus('contados')}
-                className={`p-4 rounded-xl border-2 transition-all ${
+                className={`p-2 rounded-lg border-2 transition-all ${
                   filterStatus === 'contados'
                     ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
                     : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-green-300'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <div className="text-left">
-                    <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">Contados</p>
-                    <p className="text-3xl font-bold text-green-600 mt-1">{estadisticas.productosContados}</p>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="text-green-600 flex-shrink-0" size={20} />
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="text-xs text-slate-600 dark:text-slate-400 font-medium leading-tight">Contados</p>
+                    <p className="text-xl font-bold text-green-600 leading-tight">{estadisticas.productosContados}</p>
                   </div>
-                  <CheckCircle className="text-green-600" size={32} />
                 </div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setFilterStatus('pendientes')}
-                className={`p-4 rounded-xl border-2 transition-all ${
+                className={`p-2 rounded-lg border-2 transition-all ${
                   filterStatus === 'pendientes'
                     ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20'
                     : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-yellow-300'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <div className="text-left">
-                    <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">Pendientes</p>
-                    <p className="text-3xl font-bold text-yellow-600 mt-1">{estadisticas.productosPendientes}</p>
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="text-yellow-600 flex-shrink-0" size={20} />
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="text-xs text-slate-600 dark:text-slate-400 font-medium leading-tight">Pendientes</p>
+                    <p className="text-xl font-bold text-yellow-600 leading-tight">{estadisticas.productosPendientes}</p>
                   </div>
-                  <AlertCircle className="text-yellow-600" size={32} />
                 </div>
               </button>
             </div>
 
-            {/* Search Box */}
+            {/* Search Box - Compacto */}
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input
                 type="text"
-                placeholder="Buscar producto por nombre o ID..."
+                placeholder="Buscar producto..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
-                className="w-full pl-12 pr-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
+                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
               />
             </div>
 
-            {/* Filter Info */}
-            <div className="flex items-center justify-between text-sm">
+            {/* Filter Info - Compacto */}
+            <div className="flex items-center justify-between text-xs">
               <p className="text-slate-600 dark:text-slate-400">
-                Mostrando <span className="font-semibold text-slate-900 dark:text-slate-100">{productosFiltrados.length}</span> de <span className="font-semibold">{estadisticas.totalProductos}</span> productos
+                <span className="font-semibold text-slate-900 dark:text-slate-100">{productosFiltrados.length}</span> de <span className="font-semibold">{estadisticas.totalProductos}</span>
               </p>
               {filterStatus !== 'todos' && (
                 <button
@@ -537,37 +555,36 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
                   onClick={() => setFilterStatus('todos')}
                   className="text-primary-600 hover:text-primary-700 font-medium"
                 >
-                  Limpiar filtros
+                  Limpiar
                 </button>
               )}
             </div>
           </div>
 
           {/* Lista de Productos - Scrollable */}
-          <div className="flex-1 overflow-y-auto px-6 pb-6">
-            <div className="space-y-3">
+          <div className="flex-1 overflow-y-auto px-4 pb-4">
+            <div className="space-y-1.5">
               {productosFiltrados.map((producto, index) => {
-              const productoIndex = productosConteo.findIndex(p => p.producto_id === producto.producto_id)
               const diferencia = getDiferencia(producto)
               const isNegative = diferencia !== null && diferencia < 0
               const isPositive = diferencia !== null && diferencia > 0
               const isCounted = producto.stock_fisico !== '' && producto.stock_fisico !== null
 
               return (
-                <div key={producto.producto_id} className={`bg-white dark:bg-slate-800 rounded-lg p-3 border-2 transition-all ${
-                  isCounted ? 'border-green-200 dark:border-green-800 bg-green-50/30 dark:bg-green-900/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
+                <div key={producto.producto_id} className={`bg-white dark:bg-slate-800 rounded-lg p-2 border transition-all ${
+                  isCounted ? 'border-green-300 dark:border-green-700 bg-green-50/40 dark:bg-green-900/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
                 }`}>
-                  <div className="grid grid-cols-12 gap-3 items-center">
-                    {/* Producto Info - Más compacto */}
+                  <div className="grid grid-cols-12 gap-2 items-center">
+                    {/* Producto Info - Compacto */}
                     <div className="col-span-4">
-                      <div className="flex items-center gap-2">
-                        <div className="p-1.5 bg-gradient-ocean rounded-lg flex-shrink-0">
-                          <Package className="text-white" size={16} />
+                      <div className="flex items-center gap-1.5">
+                        <div className="p-1 bg-gradient-ocean rounded flex-shrink-0">
+                          <Package className="text-white" size={14} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-sm truncate">{producto.nombre}</h4>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {producto.especificacion || 'Sin especificación'} ({producto.unidad_medida})
+                          <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-xs truncate leading-tight">{producto.nombre}</h4>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                            {producto.especificacion || 'S/E'} · {producto.unidad_medida}
                           </p>
                         </div>
                       </div>
@@ -575,38 +592,56 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
 
                     {/* Stock Sistema */}
                     <div className="col-span-2">
-                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-0.5">Sistema</label>
-                      <div className="bg-slate-100 dark:bg-slate-700 rounded-lg px-2 py-1.5 text-center">
-                        <p className="text-base font-bold text-slate-900 dark:text-slate-100">{producto.stock_sistema}</p>
+                      <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-0.5 leading-tight">Sistema</label>
+                      <div className="bg-slate-100 dark:bg-slate-700 rounded px-2 py-1 text-center">
+                        <p className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">{producto.stock_sistema}</p>
                       </div>
                     </div>
 
                     {/* Stock Físico */}
                     <div className="col-span-2">
-                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-0.5">Físico *</label>
+                      <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-0.5 leading-tight">Físico *</label>
                       <input
                         type="number"
                         min="0"
                         step="any"
                         data-conteo-index={index}
+                        data-producto-id={producto.producto_id}
                         value={getDisplayValue(producto)}
                         onChange={(e) => handleStockChange(producto.producto_id, e.target.value)}
-                        onBlur={(e) => handleStockBlur(productoIndex, producto.producto_id, e.target.value)}
+                        onBlur={(e) => handleStockBlur(producto.producto_id, e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault()
                             e.stopPropagation()
+
                             // Guardar el valor actual antes de moverse
-                            handleStockBlur(productoIndex, producto.producto_id, e.target.value)
-                            // Buscar el siguiente input
-                            const nextInput = document.querySelector(`[data-conteo-index="${index + 1}"]`)
-                            if (nextInput) {
-                              nextInput.focus()
-                              nextInput.select()
-                            }
+                            const currentValue = e.target.value
+                            handleStockBlur(producto.producto_id, currentValue)
+
+                            // Usar setTimeout para asegurar que el estado se actualice antes de moverse
+                            setTimeout(() => {
+                              // Detectar si se está presionando Enter rápidamente (doble Enter)
+                              const lastEnterTime = e.target.dataset.lastEnterTime
+                              const currentTime = Date.now()
+                              const isDoubleEnter = lastEnterTime && (currentTime - parseInt(lastEnterTime)) < 500
+
+                              // Guardar timestamp del Enter actual
+                              e.target.dataset.lastEnterTime = currentTime
+
+                              // Determinar cuántas filas saltar
+                              const skipRows = isDoubleEnter ? 2 : 1
+
+                              // Buscar el input correspondiente
+                              const nextInput = document.querySelector(`[data-conteo-index="${index + skipRows}"]`)
+                              if (nextInput) {
+                                nextInput.focus()
+                                nextInput.select()
+                              }
+                            }, 0)
                           }
                         }}
-                        className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-center font-semibold"
+                        className="w-full px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-center font-semibold"
                         placeholder="0"
                       />
                     </div>
@@ -614,23 +649,23 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
                     {/* Diferencia - Inline */}
                     <div className="col-span-2">
                       {diferencia !== null ? (
-                        <div className={`px-3 py-1.5 rounded-lg flex items-center justify-center gap-1.5 ${
+                        <div className={`px-2 py-1 rounded flex items-center justify-center gap-1 ${
                           isNegative ? 'bg-red-100 text-red-700' :
                           isPositive ? 'bg-green-100 text-green-700' :
                           'bg-blue-100 text-blue-700'
                         }`}>
                           {isNegative ? (
-                            <AlertCircle size={14} />
+                            <AlertCircle size={12} />
                           ) : (
-                            <CheckCircle size={14} />
+                            <CheckCircle size={12} />
                           )}
-                          <p className="text-sm font-bold">
+                          <p className="text-xs font-bold leading-tight">
                             {diferencia > 0 ? '+' : ''}{diferencia}
                           </p>
                         </div>
                       ) : (
-                        <div className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-400 text-center">
-                          <p className="text-xs font-medium">Pendiente</p>
+                        <div className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-400 text-center">
+                          <p className="text-[10px] font-medium leading-tight">Pend.</p>
                         </div>
                       )}
                     </div>
@@ -641,10 +676,10 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
                         <button
                           type="button"
                           onClick={() => handleEliminarProducto(producto.producto_id)}
-                          className="w-full p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center justify-center"
+                          className="w-full p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors flex items-center justify-center"
                           title="Eliminar del conteo"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     )}
@@ -656,8 +691,8 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
           </div>
 
           {/* Botones - Fixed at bottom */}
-          <div className="p-6 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
-            <div className="flex gap-3">
+          <div className="p-3 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
+            <div className="flex gap-2">
               <Button
                 type="button"
                 variant="ghost"
