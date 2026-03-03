@@ -350,6 +350,7 @@ export default function Salidas() {
   }
 
   const handleConfirmarEnvio = async (movimiento) => {
+    if (!movimiento) return
     if (!window.confirm('¿Confirmar el envío de esta transferencia? La bodega destino podrá proceder a recibir los productos.')) return
     confirmarEnvio({
       movimiento_id: movimiento.id,
@@ -630,6 +631,8 @@ export default function Salidas() {
           canEdit={canWriteMovimientos}
           isEntradasView={false}
           onEditar={handleEditarMovimiento}
+          onConfirmarEnvio={normalizeEstado(selectedMovimiento.estado) === 'BORRADOR' ? () => handleConfirmarEnvio(selectedMovimiento) : null}
+          isConfirmandoEnvio={isConfirmandoEnvio}
         />
       )}
     </div>

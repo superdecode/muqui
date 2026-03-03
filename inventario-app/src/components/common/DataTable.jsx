@@ -74,20 +74,46 @@ export default function DataTable({
     setPage(1)
   }, [data])
 
-  // Cycle: null → asc → desc → null
+  // Apply default sorting on mount if data is available and no sorting is active
+  useEffect(() => {
+    if (data && data.length > 0 && defaultSortKey && !sortKey) {
+      console.log('Applying default sort on mount:', defaultSortKey, defaultSortDir)
+      setSortKey(defaultSortKey)
+      setSortDir(defaultSortDir)
+    }
+  }, [data, defaultSortKey, defaultSortDir, sortKey])
+
+  // Re-apply default sorting when data changes and we have a default sort key
+  useEffect(() => {
+    if (data && data.length > 0 && defaultSortKey && sortKey === defaultSortKey) {
+      console.log('Re-applying default sort after data change:', defaultSortDir)
+      // Force a re-sort by briefly clearing and re-setting the sort direction
+      setSortDir(null)
+      setTimeout(() => setSortDir(defaultSortDir), 0)
+    }
+  }, [data])
+
+  // Cycle: desc → asc → null → desc (for fecha column) or asc → desc → null → asc (for other columns)
   const handleSort = (key) => {
     if (!key) return
+    console.log('handleSort called with key:', key, 'current sortKey:', sortKey, 'current sortDir:', sortDir)
+    
     if (sortKey !== key) {
+      // Clicking a different column - start with its default direction
       setSortKey(key)
-      setSortDir('asc')
+      const initialDir = key === defaultSortKey ? defaultSortDir : 'asc'
+      setSortDir(initialDir)
     } else {
-      if (sortDir === 'asc') {
-        setSortDir('desc')
-      } else if (sortDir === 'desc') {
+      // Clicking the same column - cycle through directions
+      if (sortDir === 'desc') {
+        setSortDir('asc')
+      } else if (sortDir === 'asc') {
         setSortKey(null)
         setSortDir(null)
       } else {
-        setSortDir('asc')
+        // Currently null - start with default direction
+        const initialDir = key === defaultSortKey ? defaultSortDir : 'asc'
+        setSortDir(initialDir)
       }
     }
     setPage(1)
@@ -100,12 +126,61 @@ export default function DataTable({
 
   // Apply sorting in-memory
   const sortedData = useMemo(() => {
-    if (!sortKey || !sortDir) return data
-    return [...data].sort((a, b) => {
+    console.log('sortedData recalculating:', { sortKey, sortDir, dataLength: data?.length })
+    
+    if (!sortKey || !sortDir) {
+      console.log('No sorting applied, returning original data')
+      return data
+    }
+    
+    const result = [...data].sort((a, b) => {
+      // Find the column definition for the current sortKey
+      const column = columns.find(col => col.sortKey === sortKey)
+      
+      // If column has custom sortValue function, use it
+      if (column && typeof column.sortValue === 'function') {
+        const va = column.sortValue(a)
+        const vb = column.sortValue(b)
+        
+        console.log('Custom sortValue comparison:', { va, vb, sortDir })
+        
+        if (va == null && vb == null) return 0
+        if (va == null) return 1
+        if (vb == null) return -1
+        
+        // Handle numeric values (timestamps)
+        if (typeof va === 'number' && typeof vb === 'number') {
+          const result = va - vb
+          console.log('Numeric comparison result:', result, 'direction:', sortDir)
+          return sortDir === 'asc' ? result : -result
+        }
+        
+        // Handle date objects
+        if (va instanceof Date && vb instanceof Date) {
+          const result = va.getTime() - vb.getTime()
+          console.log('Date comparison result:', result, 'direction:', sortDir)
+          return sortDir === 'asc' ? result : -result
+        }
+        
+        // Handle strings
+        if (typeof va === 'string' && typeof vb === 'string') {
+          const result = va.toLowerCase().localeCompare(vb.toLowerCase(), 'es', { sensitivity: 'base' })
+          console.log('String comparison result:', result, 'direction:', sortDir)
+          return sortDir === 'asc' ? result : -result
+        }
+        
+        return 0
+      }
+      
+      // Fall back to default compareValues
       const cmp = compareValues(a, b, sortKey)
-      return sortDir === 'asc' ? cmp : -cmp
+      console.log('Default compareValues result:', cmp)
+      return cmp
     })
-  }, [data, sortKey, sortDir])
+    
+    console.log('Sorted data result length:', result.length)
+    return result
+  }, [data, sortKey, sortDir, columns])
 
   // Pagination math
   const totalRecords = sortedData.length

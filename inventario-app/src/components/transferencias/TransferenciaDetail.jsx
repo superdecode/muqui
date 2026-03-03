@@ -36,7 +36,9 @@ export default function TransferenciaDetail({
   canCancel = false,
   canEdit = false,
   isEntradasView = false,
-  onEditar
+  onEditar,
+  onConfirmarEnvio,
+  isConfirmandoEnvio = false
 }) {
   const toast = useToastStore()
   const { user } = useAuthStore()
@@ -70,6 +72,9 @@ export default function TransferenciaDetail({
 
   // Observaciones de recepción
   const [observacionesRecepcion, setObservacionesRecepcion] = useState('')
+  const estadoNormalizado = normalizeEstado(transferencia.estado)
+  const isSalidaDraft = !isEntradasView && estadoNormalizado === 'BORRADOR'
+  const isEntradaDraft = isEntradasView && estadoNormalizado === 'BORRADOR'
 
   // Effect to detect when estado changes to RECIBIENDO and activate edit mode
   useEffect(() => {
@@ -234,8 +239,9 @@ export default function TransferenciaDetail({
         // Update specific transferencia query cache
         queryClient.setQueryData(['movimiento', transferencia.id], updatedTransferencia)
         
-        // Invalidate queries to refresh data in background
+        // Invalidate queries to refresh data and sorting
         queryClient.invalidateQueries({ queryKey: ['movimientos'] })
+        queryClient.invalidateQueries({ queryKey: ['movimientos', undefined] })
         
         setEditingFechaDoc(false)
       } else {
@@ -981,7 +987,21 @@ export default function TransferenciaDetail({
         </div>
 
         {/* Footer Sticky */}
-        <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex-shrink-0 sticky bottom-0">
+        <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex-shrink-0 sticky bottom-0 space-y-3">
+          {isEntradaDraft && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-3">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="text-amber-600 mt-0.5" size={20} />
+                <div>
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">Pendiente de confirmación de bodega origen</p>
+                  <p className="text-sm text-amber-700 dark:text-amber-100">
+                    Esta entrada se habilitará para recepción una vez la bodega origen confirme y envíe la salida vinculada.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-between items-center gap-4">
             {/* Cancel/Reject button - left side */}
             <div>
@@ -1003,13 +1023,12 @@ export default function TransferenciaDetail({
               {!modoRecepcion && (
                 <>
                   {/* Botón Editar para Salidas */}
-                  {!isEntradasView && canEdit && normalizeEstado(transferencia.estado) === 'PENDIENTE' && (
+                  {!isEntradasView && canEdit && (estadoNormalizado === 'PENDIENTE' || estadoNormalizado === 'BORRADOR') && (
                     <Button
                       variant="outline"
                       className="text-primary-600 border-primary-300 hover:bg-primary-50"
                       onClick={() => setModoRecepcion('editar')}
                     >
-                      <Edit3 size={16} className="mr-1.5" />
                       Editar
                     </Button>
                   )}
@@ -1043,7 +1062,7 @@ export default function TransferenciaDetail({
                   )}
 
                   {/* Botones de recepción/confirmación */}
-                  {onConfirmar && normalizeEstado(transferencia.estado) !== 'CANCELADA' && (
+                  {onConfirmar && estadoNormalizado !== 'CANCELADA' && estadoNormalizado !== 'BORRADOR' && (
                     <>
                       {!isProduccion && (
                         <Button
@@ -1141,9 +1160,20 @@ export default function TransferenciaDetail({
                   </Button>
                 </>
               )}
+
+              {isSalidaDraft && onConfirmarEnvio && (
+                <Button
+                  variant="primary"
+                  loading={isConfirmandoEnvio}
+                  onClick={onConfirmarEnvio}
+                >
+                  {isConfirmandoEnvio ? 'Enviando...' : 'Confirmar Envío'}
+                </Button>
+              )}
             </div>
           </div>
         </div>
+
       </div>
 
       {/* Modal de Confirmación de Edición (para Entradas completadas) */}

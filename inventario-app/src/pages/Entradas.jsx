@@ -80,6 +80,8 @@ export default function Entradas() {
     getAllDirectionStats
   } = useMovimientos()
 
+  const selectedMovimientoEstado = selectedMovimiento ? normalizeEstado(selectedMovimiento.estado) : null
+
   const userUbicacionIds = useMemo(() => {
     return getUserAllowedUbicacionIds(user, ubicaciones, empresas)
   }, [user, ubicaciones, empresas])
@@ -751,7 +753,7 @@ export default function Entradas() {
               : null
           }
           isConfirmando={isConfirmando}
-          canCancel={canWriteMovimientos && normalizeEstado(selectedMovimiento.estado) === 'PENDIENTE'}
+          canCancel={canWriteMovimientos && ['PENDIENTE', 'BORRADOR'].includes(selectedMovimientoEstado)}
           onCancelar={handleCancelarMovimiento}
           canEdit={canWriteMovimientos}
           isEntradasView={true}

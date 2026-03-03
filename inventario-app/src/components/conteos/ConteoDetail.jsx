@@ -273,8 +273,9 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
         // Update specific conteo query cache
         queryClient.setQueryData(['conteo', conteo.id], updatedConteo)
         
-        // Invalidate queries to refresh data in background
+        // Invalidate queries to refresh data and sorting
         queryClient.invalidateQueries({ queryKey: ['conteos'] })
+        queryClient.invalidateQueries({ queryKey: ['conteos', undefined] })
         
         setEditingFechaDoc(false)
       } else {
