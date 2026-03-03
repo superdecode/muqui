@@ -793,6 +793,7 @@ export default function Conteos() {
             </div>
           ) : (
             <DataTable
+              key={JSON.stringify(conteosFiltrados.map(c => ({ id: c.id, fecha_documento: c.fecha_documento, fecha_creacion: c.fecha_creacion })))}
               columns={columns}
               data={conteosFiltrados}
               defaultSortKey="fecha_documento"

@@ -714,6 +714,7 @@ export default function Entradas() {
             </div>
           ) : (
             <DataTable
+              key={JSON.stringify(movimientosFiltrados.map(m => ({ id: m.id, fecha_documento: m.fecha_documento, fecha_creacion: m.fecha_creacion })))}
               columns={columns}
               data={movimientosFiltrados}
               defaultSortKey="fecha_documento"
