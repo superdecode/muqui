@@ -20,7 +20,7 @@ export default function Productos() {
   const [unidadFilter, setUnidadFilter] = useState('')
   const [estadoFilter, setEstadoFilter] = useState('')
   const [especificacionFilter, setEspecificacionFilter] = useState('')
-  const [sortColumn, setSortColumn] = useState('')
+  const [sortColumn, setSortColumn] = useState('nombre')
   const [sortDirection, setSortDirection] = useState('asc')
   const [showForm, setShowForm] = useState(false)
   const [selectedProducto, setSelectedProducto] = useState(null)

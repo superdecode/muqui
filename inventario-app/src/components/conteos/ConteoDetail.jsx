@@ -1,23 +1,39 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Button from '../common/Button'
 import LoadingSpinner from '../common/LoadingSpinner'
 import { Package, MapPin, Calendar, User, CheckCircle, AlertCircle, X, Download, Trash2, Pencil, Edit3 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { Timestamp } from 'firebase/firestore'
 import dataService from '../../services/dataService'
 import { useToastStore } from '../../stores/toastStore'
+import { useAuthStore } from '../../stores/authStore'
 import { exportConteoToExcel } from '../../utils/exportUtils'
 import { formatDisplayId, safeFormatDate } from '../../utils/formatters'
 import { usePermissions } from '../../hooks/usePermissions'
 
 export default function ConteoDetail({ conteo, onClose, onEdit }) {
   const toast = useToastStore()
+  const { user } = useAuthStore()
   const queryClient = useQueryClient()
   const { canEdit, getPermissionLevel, isAdmin } = usePermissions()
   const [eliminandoId, setEliminandoId] = useState(null)
   const [confirmDetalle, setConfirmDetalle] = useState(null)
   const [activeTab, setActiveTab] = useState('detalles') // 'detalles' | 'logs'
+
+  // Local state to track the current conteo (allows immediate updates)
+  const [localConteo, setLocalConteo] = useState(conteo)
+
+  // Update local state when prop changes
+  useEffect(() => {
+    setLocalConteo(conteo)
+  }, [conteo])
+
+  // Fecha documento editing state
+  const [editingFechaDoc, setEditingFechaDoc] = useState(false)
+  const [fechaDocumentoEdit, setFechaDocumentoEdit] = useState('')
+  const [isSavingFechaDoc, setIsSavingFechaDoc] = useState(false)
 
   // Verificar si el usuario puede editar conteos completados (permiso Total + ubicación asignada + máximo 3 ediciones + máximo 1 mes desde creación)
   const canEditCompletedConteo = (conteo) => {
@@ -171,6 +187,106 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
     return cantidad_fisica - cantidad_sistema
   }
 
+  // Obtener fecha_documento formateada
+  const getFechaDocumento = () => {
+    let fecha = localConteo.fecha_documento || localConteo.fecha_creacion
+    if (!fecha) return '-'
+    
+    // Handle different date formats
+    let dateObj
+    if (typeof fecha?.toDate === 'function') {
+      dateObj = fecha.toDate()
+    } else if (fecha?.seconds !== undefined) {
+      dateObj = new Date(fecha.seconds * 1000)
+    } else if (fecha instanceof Date) {
+      dateObj = fecha
+    } else {
+      dateObj = new Date(fecha)
+    }
+    
+    if (isNaN(dateObj.getTime())) return '-'
+    
+    return format(dateObj, 'dd/MM/yyyy', { locale: es })
+  }
+
+  // Iniciar edición de fecha_documento
+  const handleEditFechaDoc = () => {
+    const fecha = localConteo.fecha_documento || localConteo.fecha_creacion
+    const dateObj = fecha?.toDate ? fecha.toDate() : new Date(fecha)
+    setFechaDocumentoEdit(format(dateObj, 'yyyy-MM-dd'))
+    setEditingFechaDoc(true)
+  }
+
+  // Guardar fecha_documento
+  const handleSaveFechaDocumento = async () => {
+    if (!fechaDocumentoEdit) return
+    
+    // Parse "YYYY-MM-DD" safely as local date
+    const [year, month, day] = fechaDocumentoEdit.split('-').map(Number)
+    const parsedDate = new Date(year, month - 1, day) // local date, no time
+    
+    if (isNaN(parsedDate.getTime())) {
+      toast.error('Error', 'Por favor selecciona una fecha válida del calendario')
+      return
+    }
+    
+    // Ensure the date is within reasonable bounds (not too far in past or future)
+    const now = new Date()
+    const tenYearsAgo = new Date(now.getFullYear() - 10, 0, 1)
+    const tenYearsFromNow = new Date(now.getFullYear() + 10, 11, 31)
+    
+    if (parsedDate < tenYearsAgo || parsedDate > tenYearsFromNow) {
+      toast.error('Error', 'Por favor selecciona una fecha dentro de un rango razonable')
+      return
+    }
+    
+    setIsSavingFechaDoc(true)
+    try {
+      const fechaAnterior = getFechaDocumento()
+      
+      const result = await dataService.updateFechaDocumento({
+        collection_name: 'conteos',
+        document_id: conteo.id,
+        nueva_fecha: fechaDocumentoEdit,
+        fecha_anterior: fechaAnterior,
+        usuario_id: user?.id || 'USR001'
+      })
+      if (result.success) {
+        toast.success('Fecha Actualizada', 'La fecha del documento ha sido actualizada')
+        
+        // Update local state immediately to reflect the change in the modal
+        const updatedConteo = {
+          ...localConteo,
+          // use parsedDate directly, no setHours
+          fecha_documento: Timestamp.fromDate(parsedDate)
+        }
+        
+        // Update local state FIRST for immediate visual feedback
+        setLocalConteo(updatedConteo)
+        
+        // Update the conteo in the query cache
+        queryClient.setQueryData(['conteos'], (oldData) => {
+          if (!oldData) return oldData
+          return oldData.map(c => c.id === conteo.id ? updatedConteo : c)
+        })
+        
+        // Update specific conteo query cache
+        queryClient.setQueryData(['conteo', conteo.id], updatedConteo)
+        
+        // Invalidate queries to refresh data in background
+        queryClient.invalidateQueries({ queryKey: ['conteos'] })
+        
+        setEditingFechaDoc(false)
+      } else {
+        toast.error('Error', result.message || 'No se pudo actualizar la fecha')
+      }
+    } catch (err) {
+      toast.error('Error', err.message || 'No se pudo actualizar la fecha')
+    } finally {
+      setIsSavingFechaDoc(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-3xl shadow-card-hover max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
@@ -181,7 +297,47 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold text-white">Detalle de Conteo</h2>
-                <p className="text-white/90 text-sm mt-0.5">Código: {formatDisplayId(conteo, 'CT')}</p>
+                <div className="flex items-center gap-3 mt-0.5">
+                  <p className="text-white/90 text-sm">Código: {formatDisplayId(conteo, 'CT')}</p>
+                  <span className="text-white/50">|</span>
+                  {editingFechaDoc ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={fechaDocumentoEdit}
+                        onChange={(e) => setFechaDocumentoEdit(e.target.value)}
+                        className="px-2 py-1 text-sm rounded-lg bg-white/20 text-white border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50"
+                      />
+                      <button
+                        onClick={handleSaveFechaDocumento}
+                        disabled={isSavingFechaDoc}
+                        className="px-2 py-1 text-xs bg-white/20 hover:bg-white/30 rounded-lg text-white transition-colors"
+                      >
+                        {isSavingFechaDoc ? '...' : 'Guardar'}
+                      </button>
+                      <button
+                        onClick={() => setEditingFechaDoc(false)}
+                        className="px-2 py-1 text-xs bg-white/10 hover:bg-white/20 rounded-lg text-white/80 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <Calendar size={14} className="text-white/70" />
+                      <span className="text-white/90 text-sm">{getFechaDocumento()}</span>
+                      {canEdit('conteos') && (
+                        <button
+                          onClick={handleEditFechaDoc}
+                          className="p-1 hover:bg-white/20 rounded transition-colors"
+                          title="Editar fecha del documento"
+                        >
+                          <Pencil size={12} className="text-white/70 hover:text-white" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <span className={`px-4 py-2 rounded-full text-sm font-semibold ${

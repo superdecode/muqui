@@ -99,8 +99,16 @@ const dataService = {
     return await firestoreService.confirmarTransferencia(uppercaseStrings(data))
   },
 
+  confirmarEnvio: async (data) => {
+    return await firestoreService.confirmarEnvio(data)
+  },
+
   iniciarRecepcion: async (data) => {
     return await firestoreService.iniciarRecepcion(data)
+  },
+
+  updateFechaDocumento: async (data) => {
+    return await firestoreService.updateFechaDocumento(data)
   },
 
   createMovimiento: async (data) => {

@@ -885,6 +885,15 @@ const firestoreService = {
       // Generar código legible secuencial
       const codigoLegible = await getNextSequentialCode('MV')
 
+      // Determinar estado inicial: BORRADOR si es solicitud desde destino, PENDIENTE si es envío desde origen
+      const estadoInicial = data.estado || 'PENDIENTE'
+
+      // Fecha documento: por defecto es la fecha de creación (solo fecha, sin hora)
+      const ahora = new Date()
+      const fechaDocumento = data.fecha_documento 
+        ? Timestamp.fromDate(new Date(data.fecha_documento))
+        : Timestamp.fromDate(new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()))
+
       // Crear movimiento
       const movimientoRef = doc(collection(db, 'movimientos'))
       const nuevoMovimiento = {
@@ -892,11 +901,14 @@ const firestoreService = {
         tipo_movimiento: data.tipo_movimiento || 'TRANSFERENCIA',
         origen_id: data.origen_id,
         destino_id: data.destino_id,
-        estado: 'PENDIENTE',
+        estado: estadoInicial,
         usuario_creacion_id: data.usuario_creacion_id,
         usuario_confirmacion_id: null,
         fecha_creacion: Timestamp.now(),
+        fecha_documento: fechaDocumento,
         fecha_confirmacion: null,
+        fecha_envio: null,
+        usuario_envio_id: null,
         fecha_limite_edicion: data.fecha_limite_edicion || null,
         observaciones_creacion: data.observaciones || '',
         observaciones_confirmacion: ''
@@ -1052,6 +1064,12 @@ const firestoreService = {
       // Generar código legible secuencial
       const codigoLegible = await getNextSequentialCode('CM')
 
+      // Fecha documento: por defecto es la fecha de creación (solo fecha, sin hora)
+      const ahora = new Date()
+      const fechaDocumento = data.fecha_documento 
+        ? Timestamp.fromDate(new Date(data.fecha_documento))
+        : Timestamp.fromDate(new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()))
+
       // Crear movimiento de entrada
       const movimientoRef = doc(collection(db, 'movimientos'))
       const nuevoMovimiento = {
@@ -1066,6 +1084,7 @@ const firestoreService = {
         usuario_creacion_id: data.usuario_creacion_id,
         usuario_confirmacion_id: data.usuario_creacion_id,
         fecha_creacion: Timestamp.now(),
+        fecha_documento: fechaDocumento,
         fecha_confirmacion: Timestamp.now(),
         observaciones_creacion: data.observaciones || '',
         observaciones_confirmacion: ''
@@ -1145,6 +1164,12 @@ const firestoreService = {
 
       const codigoLegible = await getNextSequentialCode('OP')
 
+      // Fecha documento: por defecto es la fecha de creación (solo fecha, sin hora)
+      const ahora = new Date()
+      const fechaDocumento = data.fecha_documento 
+        ? Timestamp.fromDate(new Date(data.fecha_documento))
+        : Timestamp.fromDate(new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()))
+
       // Crear movimiento de producción
       const movimientoRef = doc(collection(db, 'movimientos'))
       const nuevoMovimiento = {
@@ -1156,6 +1181,7 @@ const firestoreService = {
         usuario_creacion_id: data.usuario_creacion_id,
         usuario_confirmacion_id: null,
         fecha_creacion: Timestamp.now(),
+        fecha_documento: fechaDocumento,
         fecha_confirmacion: null,
         numero_documento: data.numero_documento || '',
         observaciones_creacion: data.observaciones || '',
@@ -1534,6 +1560,37 @@ const firestoreService = {
     }
   },
 
+  // Confirmar envío (BORRADOR -> PENDIENTE) - Bodega origen confirma la salida
+  confirmarEnvio: async (data) => {
+    try {
+      const db = getDB()
+      const movimientoRef = doc(db, 'movimientos', data.movimiento_id)
+      
+      // Verificar que el movimiento esté en BORRADOR
+      const movDoc = await getDoc(movimientoRef)
+      if (!movDoc.exists()) {
+        return { success: false, message: 'Movimiento no encontrado' }
+      }
+      
+      const movimiento = movDoc.data()
+      if (movimiento.estado !== 'BORRADOR') {
+        return { success: false, message: 'El movimiento no está en estado Borrador' }
+      }
+
+      await updateDoc(movimientoRef, {
+        estado: 'PENDIENTE',
+        fecha_envio: Timestamp.now(),
+        usuario_envio_id: data.usuario_envio_id,
+        observaciones_envio: data.observaciones || ''
+      })
+      
+      return { success: true, message: 'Envío confirmado. La bodega destino puede proceder a recibir.' }
+    } catch (error) {
+      console.error('Error confirmando envío:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
   // Iniciar recepción (PENDIENTE -> EN_PROCESO)
   iniciarRecepcion: async (data) => {
     try {
@@ -1547,6 +1604,50 @@ const firestoreService = {
       return { success: true, message: 'Recepción iniciada - verificando productos' }
     } catch (error) {
       console.error('Error iniciando recepción:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  // Actualizar fecha_documento con logging
+  updateFechaDocumento: async (data) => {
+    try {
+      const db = getDB()
+      const { collection_name, document_id, nueva_fecha, fecha_anterior, usuario_id } = data
+      
+      const docRef = doc(db, collection_name, document_id)
+      const docSnap = await getDoc(docRef)
+      
+      if (!docSnap.exists()) {
+        return { success: false, message: 'Documento no encontrado' }
+      }
+
+      // Parse "YYYY-MM-DD" safely as local date
+      const [year, month, day] = nueva_fecha.split('-').map(Number)
+      const fechaDocumentoDate = new Date(year, month - 1, day) // local date, no time
+      const timestamp = Timestamp.fromDate(fechaDocumentoDate)
+      
+      // Obtener historial de ediciones existente o crear nuevo array
+      const docData = docSnap.data()
+      const historialEdiciones = docData.historial_ediciones || []
+      
+      // Agregar entrada al log de ediciones
+      historialEdiciones.push({
+        campo: 'fecha_documento',
+        valor_anterior: fecha_anterior,
+        valor_nuevo: nueva_fecha,
+        usuario_id: usuario_id,
+        fecha_edicion: Timestamp.now()
+      })
+
+      await updateDoc(docRef, {
+        fecha_documento: timestamp,
+        historial_ediciones: historialEdiciones,
+        updated_at: Timestamp.now()
+      })
+
+      return { success: true, message: 'Fecha de documento actualizada' }
+    } catch (error) {
+      console.error('Error actualizando fecha_documento:', error)
       return { success: false, message: error.message }
     }
   },
@@ -1634,6 +1735,12 @@ const firestoreService = {
       // Generar código legible secuencial
       const codigoLegible = await getNextSequentialCode('CT')
 
+      // Fecha documento: por defecto es la fecha de creación (solo fecha, sin hora)
+      const ahora = new Date()
+      const fechaDocumento = data.fecha_documento 
+        ? Timestamp.fromDate(new Date(data.fecha_documento))
+        : Timestamp.fromDate(new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()))
+
       const nuevoConteo = {
         codigo_legible: codigoLegible,
         ubicacion_id: data.ubicacion_id,
@@ -1643,6 +1750,7 @@ const firestoreService = {
         usuario_responsable_id: data.usuario_responsable_id,
         usuario_ejecutor_id: null,
         fecha_creacion: serverTimestamp(),
+        fecha_documento: fechaDocumento,
         fecha_inicio: null,
         fecha_completado: null,
         observaciones: data.observaciones || '',
@@ -2411,6 +2519,12 @@ const firestoreService = {
       const batch = writeBatch(db)
       const codigoLegible = await getNextSequentialCode('VT')
 
+      // Fecha documento: por defecto es la fecha de creación (solo fecha, sin hora)
+      const ahora = new Date()
+      const fechaDocumento = data.fecha_documento 
+        ? Timestamp.fromDate(new Date(data.fecha_documento))
+        : Timestamp.fromDate(new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()))
+
       const ventaRef = doc(collection(db, 'ventas'))
       const nuevaVenta = {
         codigo_legible: codigoLegible,
@@ -2421,6 +2535,7 @@ const firestoreService = {
         estado: 'COMPLETADO',
         usuario_creacion_id: data.usuario_creacion_id,
         fecha_creacion: Timestamp.now(),
+        fecha_documento: fechaDocumento,
         observaciones: data.observaciones || ''
       }
       batch.set(ventaRef, nuevaVenta)
@@ -2476,6 +2591,12 @@ const firestoreService = {
       const batch = writeBatch(db)
       const codigoLegible = await getNextSequentialCode('MR')
 
+      // Fecha documento: por defecto es la fecha de creación (solo fecha, sin hora)
+      const ahora = new Date()
+      const fechaDocumento = data.fecha_documento 
+        ? Timestamp.fromDate(new Date(data.fecha_documento))
+        : Timestamp.fromDate(new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()))
+
       const mermaRef = doc(collection(db, 'mermas'))
       const nuevaMerma = {
         codigo_legible: codigoLegible,
@@ -2486,6 +2607,7 @@ const firestoreService = {
         estado: 'COMPLETADO',
         usuario_creacion_id: data.usuario_creacion_id,
         fecha_creacion: Timestamp.now(),
+        fecha_documento: fechaDocumento,
         observaciones: data.observaciones || ''
       }
       batch.set(mermaRef, nuevaMerma)

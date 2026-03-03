@@ -79,6 +79,11 @@ export default function Reportes() {
   const [filterProductos, setFilterProductos] = useState([]) // array de IDs seleccionados
   const [vistaConsolidada, setVistaConsolidada] = useState(true)
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(100)
+  const PAGE_SIZE_OPTIONS = [100, 200, 500, 1000]
+
   // Cargar datos
   const { data: inventario = [], isLoading: isLoadingInventario } = useQuery({ queryKey: ['inventario'], queryFn: () => dataService.getInventario() })
   const { data: movimientos = [], isLoading: isLoadingMovimientos } = useQuery({ queryKey: ['movimientos'], queryFn: () => dataService.getMovimientos() })
@@ -270,7 +275,7 @@ export default function Reportes() {
             const estadoMov = (mov.estado || '').toUpperCase()
             if (!['COMPLETADO', 'PARCIAL', 'EN_PROCESO'].includes(estadoMov)) return
 
-            const fechaMov = safeParseDate(mov.fecha_confirmacion || mov.fecha_creacion)
+            const fechaMov = safeParseDate(mov.fecha_documento || mov.fecha_confirmacion || mov.fecha_creacion)
             if (!fechaMov || fechaMov < fi || fechaMov > ff) return
 
             const dets = detalleMovimientos.filter(d => d.movimiento_id === mov.id && d.producto_id === item.producto_id)
@@ -305,16 +310,54 @@ export default function Reportes() {
           })
         }
 
+        // Sort by fecha_documento (most recent first) - using the most recent movement date for each item
         result.sort((a, b) => {
-          const cmp = a.Producto.localeCompare(b.Producto)
-          return cmp !== 0 ? cmp : a.Ubicación.localeCompare(b.Ubicación)
+          // Get the most recent movement date for each item
+          const getMostRecentDate = (item) => {
+            let mostRecent = new Date(0)
+            movimientos.forEach(mov => {
+              const estadoMov = (mov.estado || '').toUpperCase()
+              if (!['COMPLETADO', 'PARCIAL', 'EN_PROCESO'].includes(estadoMov)) return
+              
+              const dets = detalleMovimientos.filter(d => 
+                d.movimiento_id === mov.id && 
+                d.producto_id === item.producto_id &&
+                (mov.origen_id === item.ubicacion_id || mov.destino_id === item.ubicacion_id)
+              )
+              if (dets.length > 0) {
+                const fechaMov = safeParseDate(mov.fecha_documento || mov.fecha_confirmacion || mov.fecha_creacion) || new Date(0)
+                if (fechaMov > mostRecent) mostRecent = fechaMov
+              }
+            })
+            return mostRecent
+          }
+
+          const dateA = getMostRecentDate(a)
+          const dateB = getMostRecentDate(b)
+          return dateB - dateA
         })
 
         return result
       }
       case 'transferencias': {
-        let data = movimientos
+        const fi = new Date(dateRange.fechaInicio)
+        const ff = new Date(dateRange.fechaFin)
+        ff.setHours(23, 59, 59, 999)
+
+        let data = movimientos.filter(mov => {
+          const fecha = safeParseDate(mov.fecha_documento || mov.fecha_creacion)
+          return fecha && fecha >= fi && fecha <= ff
+        })
+        
         if (ubFilter) data = data.filter(m => m.origen_id === ubFilter || m.destino_id === ubFilter)
+        
+        // Sort by fecha_documento (most recent first)
+        data.sort((a, b) => {
+          const fa = safeParseDate(a.fecha_documento || a.fecha_creacion) || new Date(0)
+          const fb = safeParseDate(b.fecha_documento || b.fecha_creacion) || new Date(0)
+          return fb - fa
+        })
+
         return data.map(mov => {
           const origen = ubicaciones.find(u => u.id === mov.origen_id)
           const destino = ubicaciones.find(u => u.id === mov.destino_id)
@@ -327,7 +370,7 @@ export default function Reportes() {
           return {
             Código: formatDisplayId(mov, 'MV'),
             Tipo: mov.tipo_movimiento || 'TRANSFERENCIA',
-            Fecha: safeFormatDate(mov.fecha_creacion, 'dd/MM/yyyy'),
+            Fecha: safeFormatDate(mov.fecha_documento || mov.fecha_creacion, 'dd/MM/yyyy'),
             Origen: origen?.nombre || mov.origen_id,
             Destino: destino?.nombre || mov.destino_id,
             'Cant. Items': cantidadItems,
@@ -378,7 +421,7 @@ export default function Reportes() {
         const movsConfirmados = movimientos.filter(m => {
           const estado = m.estado?.toUpperCase() || ''
           if (!estado.startsWith('CONFIRM')) return false
-          const fecha = safeParseDate(m.fecha_creacion || m.fecha_confirmacion)
+          const fecha = safeParseDate(m.fecha_documento || m.fecha_creacion || m.fecha_confirmacion)
           return fecha && fecha >= fi && fecha <= ff
         })
 
@@ -520,7 +563,7 @@ export default function Reportes() {
                 const estadoMov = (mov.estado || '').toUpperCase()
                 if (!['COMPLETADO', 'PARCIAL', 'EN_PROCESO'].includes(estadoMov)) return false
 
-                const fechaMov = safeParseDate(mov.fecha_confirmacion || mov.fecha_creacion)
+                const fechaMov = safeParseDate(mov.fecha_documento || mov.fecha_confirmacion || mov.fecha_creacion)
                 if (!fechaMov || fechaMov < fi || fechaMov > ff) return false
 
                 // Verificar si afecta este producto y ubicación
@@ -532,8 +575,8 @@ export default function Reportes() {
                 )
               })
               .sort((a, b) => {
-                const da = safeParseDate(a.fecha_confirmacion || a.fecha_creacion) || new Date(0)
-                const db = safeParseDate(b.fecha_confirmacion || b.fecha_creacion) || new Date(0)
+                const da = safeParseDate(a.fecha_documento || a.fecha_confirmacion || a.fecha_creacion) || new Date(0)
+                const db = safeParseDate(b.fecha_documento || b.fecha_confirmacion || b.fecha_creacion) || new Date(0)
                 return da - db
               })
 
@@ -556,7 +599,7 @@ export default function Reportes() {
                   saldoActual -= salida
                 }
 
-                const fechaMov = safeParseDate(mov.fecha_confirmacion || mov.fecha_creacion)
+                const fechaMov = safeParseDate(mov.fecha_documento || mov.fecha_confirmacion || mov.fecha_creacion)
                 kardexLines.push({
                   fecha: fechaMov,
                   producto: producto.nombre,
@@ -914,30 +957,89 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
                   productos={productos}
                 />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider w-10">#</th>
-                        {reportHeaders.map(h => (
-                          <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                      {reportData.map((row, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-                          <td className="px-4 py-3 text-xs text-slate-400 font-mono">{idx + 1}</td>
+                <>
+                  {/* Pagination Controls - Top */}
+                  {reportData.length > 100 && (
+                    <div className="flex items-center justify-between mb-4 px-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-slate-600 dark:text-slate-400">Mostrar:</span>
+                        <select
+                          value={pageSize}
+                          onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1) }}
+                          className="px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg"
+                        >
+                          {PAGE_SIZE_OPTIONS.map(size => (
+                            <option key={size} value={size}>{size} registros</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                          Mostrando {Math.min((currentPage - 1) * pageSize + 1, reportData.length)} - {Math.min(currentPage * pageSize, reportData.length)} de {reportData.length}
+                        </span>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => setCurrentPage(1)}
+                            disabled={currentPage === 1}
+                            className="px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded-lg disabled:opacity-50 hover:bg-slate-100 dark:hover:bg-slate-700"
+                          >
+                            «
+                          </button>
+                          <button
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded-lg disabled:opacity-50 hover:bg-slate-100 dark:hover:bg-slate-700"
+                          >
+                            ‹
+                          </button>
+                          <span className="px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300">
+                            {currentPage} / {Math.ceil(reportData.length / pageSize)}
+                          </span>
+                          <button
+                            onClick={() => setCurrentPage(p => Math.min(Math.ceil(reportData.length / pageSize), p + 1))}
+                            disabled={currentPage >= Math.ceil(reportData.length / pageSize)}
+                            className="px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded-lg disabled:opacity-50 hover:bg-slate-100 dark:hover:bg-slate-700"
+                          >
+                            ›
+                          </button>
+                          <button
+                            onClick={() => setCurrentPage(Math.ceil(reportData.length / pageSize))}
+                            disabled={currentPage >= Math.ceil(reportData.length / pageSize)}
+                            className="px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded-lg disabled:opacity-50 hover:bg-slate-100 dark:hover:bg-slate-700"
+                          >
+                            »
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider w-10">#</th>
                           {reportHeaders.map(h => (
-                            <td key={h} className="px-4 py-3 text-slate-900 dark:text-slate-100">
-                              {h === 'Estado' ? <EstadoBadge value={row[h]} /> : h === 'Método' ? <MetodoBadgeInline value={row[h]} /> : (row[h] ?? '-')}
-                            </td>
+                            <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">{h}</th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                        {reportData
+                          .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                          .map((row, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+                            <td className="px-4 py-3 text-xs text-slate-400 font-mono">{(currentPage - 1) * pageSize + idx + 1}</td>
+                            {reportHeaders.map(h => (
+                              <td key={h} className="px-4 py-3 text-slate-900 dark:text-slate-100">
+                                {h === 'Estado' ? <EstadoBadge value={row[h]} /> : h === 'Método' ? <MetodoBadgeInline value={row[h]} /> : (row[h] ?? '-')}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </Card>
           </div>

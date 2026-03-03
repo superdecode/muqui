@@ -357,30 +357,36 @@ export default function Conteos() {
       )
     },
     {
-      header: 'Fecha Creación',
-      accessor: 'fecha_creacion',
-      sortKey: 'fecha_creacion',
-      // Agregar sortValue para manejar conteos sin fecha
+      header: 'Fecha',
+      accessor: 'fecha_documento',
+      sortKey: 'fecha_documento',
+      // Agregar sortValue para manejar conteos sin fecha_documento
       sortValue: (row) => {
-        // Prioridad 1: fecha_creacion (conteos nuevos)
+        // Prioridad 1: fecha_documento (nuevo campo)
+        if (row.fecha_documento) {
+          return row.fecha_documento.toDate ? row.fecha_documento.toDate().getTime() : new Date(row.fecha_documento).getTime()
+        }
+        // Prioridad 2: fecha_creacion (conteos nuevos)
         if (row.fecha_creacion) {
           return row.fecha_creacion.toDate ? row.fecha_creacion.toDate().getTime() : new Date(row.fecha_creacion).getTime()
         }
-        // Prioridad 2: fecha_programada (conteos antiguos - equivalente a fecha_creacion)
+        // Prioridad 3: fecha_programada (conteos antiguos - equivalente a fecha_creacion)
         if (row.fecha_programada) {
           return row.fecha_programada.toDate ? row.fecha_programada.toDate().getTime() : new Date(row.fecha_programada).getTime()
         }
-        // Prioridad 3: created_at (fallback adicional)
+        // Prioridad 4: created_at (fallback adicional)
         if (row.created_at) {
           return row.created_at.toDate ? row.created_at.toDate().getTime() : new Date(row.created_at).getTime()
         }
-        // Prioridad 4: fecha actual (último recurso)
+        // Prioridad 5: fecha actual (último recurso)
         return new Date().getTime()
       },
       render: (value, row) => {
         // Usar la misma lógica que sortValue para consistencia
         let fechaParaMostrar
-        if (row.fecha_creacion) {
+        if (row.fecha_documento) {
+          fechaParaMostrar = row.fecha_documento.toDate ? row.fecha_documento.toDate() : new Date(row.fecha_documento)
+        } else if (row.fecha_creacion) {
           fechaParaMostrar = row.fecha_creacion.toDate ? row.fecha_creacion.toDate() : new Date(row.fecha_creacion)
         } else if (row.fecha_programada) {
           fechaParaMostrar = row.fecha_programada.toDate ? row.fecha_programada.toDate() : new Date(row.fecha_programada)
@@ -391,8 +397,8 @@ export default function Conteos() {
         }
         
         try {
-          const esEstimada = !row.fecha_creacion && !row.fecha_programada && !row.created_at
-          return format(fechaParaMostrar, "d MMM yyyy HH:mm", { locale: es }) + (esEstimada ? ' (estimada)' : '')
+          const esEstimada = !row.fecha_documento && !row.fecha_creacion && !row.fecha_programada && !row.created_at
+          return format(fechaParaMostrar, "d MMM yyyy", { locale: es }) + (esEstimada ? ' (estimada)' : '')
         } catch (error) {
           console.error('Error formateando fecha:', error, { value, row })
           return 'Fecha no disponible'
@@ -789,7 +795,7 @@ export default function Conteos() {
             <DataTable
               columns={columns}
               data={conteosFiltrados}
-              defaultSortKey="fecha_creacion"
+              defaultSortKey="fecha_documento"
               defaultSortDir="desc"
             />
           )}

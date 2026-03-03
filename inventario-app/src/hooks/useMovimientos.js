@@ -204,6 +204,26 @@ export const useMovimientos = (ubicacionId) => {
     }
   })
 
+  // Confirmar envío (BORRADOR -> PENDIENTE)
+  const confirmarEnvio = useMutation({
+    mutationFn: async (data) => {
+      return await dataService.confirmarEnvio(data)
+    },
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['movimientos'] })
+      toast.success(
+        'Envío Confirmado',
+        response.message || 'El envío ha sido confirmado. La bodega destino puede proceder a recibir.'
+      )
+    },
+    onError: (error) => {
+      toast.error(
+        'Error al Confirmar Envío',
+        error.message || 'No se pudo confirmar el envío.'
+      )
+    }
+  })
+
   // Cancelar movimiento
   const cancelarMovimiento = useMutation({
     mutationFn: async (data) => {
@@ -252,6 +272,7 @@ export const useMovimientos = (ubicacionId) => {
     if (s === 'COMPLETADO' || s === 'COMPLETADA') return 'COMPLETADO'
     if (s === 'PARCIAL') return 'PARCIAL'
     if (s === 'RECIBIENDO') return 'RECIBIENDO'
+    if (s === 'BORRADOR') return 'BORRADOR'
     if (s.startsWith('CONFIRM')) return 'COMPLETADO'
     if (s.startsWith('CANCEL')) return 'CANCELADA'
     if (s.startsWith('PENDIEN')) return 'PENDIENTE'
@@ -407,6 +428,8 @@ export const useMovimientos = (ubicacionId) => {
     isIniciandoRecepcion: iniciarRecepcion.isPending,
     confirmarMovimiento: confirmarMovimiento.mutate,
     isConfirmando: confirmarMovimiento.isPending,
+    confirmarEnvio: confirmarEnvio.mutate,
+    isConfirmandoEnvio: confirmarEnvio.isPending,
     cancelarMovimiento: cancelarMovimiento.mutate,
     isCancelando: cancelarMovimiento.isPending,
     eliminarMovimiento: eliminarMovimiento.mutate,

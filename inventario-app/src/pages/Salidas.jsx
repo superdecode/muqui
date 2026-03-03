@@ -65,6 +65,8 @@ export default function Salidas() {
     refetch,
     crearMovimiento,
     isCreando,
+    confirmarEnvio,
+    isConfirmandoEnvio,
     cancelarMovimiento,
     isCancelando,
     eliminarMovimiento,
@@ -126,6 +128,7 @@ export default function Salidas() {
   const getEstadoBadge = (estado) => {
     const norm = normalizeEstado(estado)
     const map = {
+      BORRADOR: { color: 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300', icon: Clock, label: 'Borrador' },
       PENDIENTE: { color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300', icon: Clock, label: 'Pendiente' },
       PARCIAL: { color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300', icon: Package, label: 'Parcial' },
       COMPLETADO: { color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300', icon: CheckCircle, label: 'Completado' },
@@ -159,6 +162,7 @@ export default function Salidas() {
 
   const statusTabs = [
     { id: 'todos', label: 'Todos' },
+    { id: 'borradores', label: 'Borradores', matchEstado: 'BORRADOR' },
     { id: 'pendientes', label: 'Pendientes', matchEstado: 'PENDIENTE' },
     { id: 'completados', label: 'Completados', matchEstado: 'COMPLETADO' }
   ]
@@ -227,9 +231,16 @@ export default function Salidas() {
     },
     {
       header: 'Fecha',
-      accessor: 'fecha_creacion',
-      sortKey: 'fecha_creacion',
-      render: (value) => safeFormatDate(value, "d MMM yyyy")
+      accessor: 'fecha_documento',
+      sortKey: 'fecha_documento',
+      sortValue: (row) => {
+        const fecha = row.fecha_documento || row.fecha_creacion
+        return fecha?.toDate ? fecha.toDate().getTime() : new Date(fecha).getTime()
+      },
+      render: (value, row) => {
+        const fecha = row.fecha_documento || row.fecha_creacion
+        return safeFormatDate(fecha, "d MMM yyyy")
+      }
     },
     {
       header: 'Tipo',
@@ -269,10 +280,23 @@ export default function Salidas() {
       accessor: 'id',
       render: (value, row) => {
         const estado = normalizeEstado(row.estado)
+        const isBorrador = estado === 'BORRADOR'
+        const isTransferencia = (row.tipo_movimiento || '').toUpperCase() === 'TRANSFERENCIA'
         // Users with 'total' permission can delete regardless of state
         const canDeleteRow = canDelete('movimientos') || (esAdmin && estado !== 'COMPLETADO')
+        const canConfirmarEnvio = isBorrador && isTransferencia && canWriteMovimientos
         return (
           <div className="flex gap-2">
+            {canConfirmarEnvio && (
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => handleConfirmarEnvio(row)}
+                disabled={isConfirmandoEnvio}
+              >
+                Confirmar Envío
+              </Button>
+            )}
             <button
               onClick={() => handleVer(row)}
               className="p-2 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
@@ -323,6 +347,14 @@ export default function Salidas() {
   const handleEliminar = async (movimiento) => {
     if (!window.confirm('¿Estás seguro de eliminar este movimiento? Esta acción no se puede deshacer.')) return
     eliminarMovimiento(movimiento.id)
+  }
+
+  const handleConfirmarEnvio = async (movimiento) => {
+    if (!window.confirm('¿Confirmar el envío de esta transferencia? La bodega destino podrá proceder a recibir los productos.')) return
+    confirmarEnvio({
+      movimiento_id: movimiento.id,
+      usuario_envio_id: user?.id || 'USR001'
+    })
   }
 
   const handleVer = (movimiento) => {
@@ -564,7 +596,7 @@ export default function Salidas() {
             <DataTable
               columns={columns}
               data={movimientosFiltrados}
-              defaultSortKey="fecha_creacion"
+              defaultSortKey="fecha_documento"
               defaultSortDir="desc"
               rowClassName={(row) => {
                 const estado = normalizeEstado(row.estado)

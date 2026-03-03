@@ -122,7 +122,8 @@ export default function Entradas() {
   const getEstadoBadge = (estado) => {
     const norm = normalizeEstado(estado)
     const map = {
-      PENDIENTE: { color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300', icon: Loader, label: 'Recibiendo' },
+      BORRADOR: { color: 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300', icon: Clock, label: 'Borrador' },
+      PENDIENTE: { color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300', icon: Loader, label: 'Por Recibir' },
       PARCIAL: { color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300', icon: PackageCheck, label: 'Parcial' },
       COMPLETADO: { color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300', icon: CheckCircle, label: 'Completado' },
       CANCELADA: { color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300', icon: XCircle, label: 'Cancelada' }
@@ -139,6 +140,7 @@ export default function Entradas() {
 
   const statusTabs = [
     { id: 'todos', label: 'Todos' },
+    { id: 'borradores', label: 'Borradores', matchEstado: 'BORRADOR' },
     { id: 'recibiendo', label: 'Por Recibir', matchEstado: 'PENDIENTE' },
     { id: 'completados', label: 'Completados', matchEstados: ['COMPLETADO', 'PARCIAL'] }
   ]
@@ -216,9 +218,16 @@ export default function Entradas() {
     },
     {
       header: 'Fecha',
-      accessor: 'fecha_creacion',
-      sortKey: 'fecha_creacion',
-      render: (value) => safeFormatDate(value, "d MMM yyyy")
+      accessor: 'fecha_documento',
+      sortKey: 'fecha_documento',
+      sortValue: (row) => {
+        const fecha = row.fecha_documento || row.fecha_creacion
+        return fecha?.toDate ? fecha.toDate().getTime() : new Date(fecha).getTime()
+      },
+      render: (value, row) => {
+        const fecha = row.fecha_documento || row.fecha_creacion
+        return safeFormatDate(fecha, "d MMM yyyy")
+      }
     },
     {
       header: 'Tipo',
@@ -362,7 +371,7 @@ export default function Entradas() {
     try {
       let response
       if (data.tipo_entrada === 'TRANSFERENCIA') {
-        // Crear transferencia (salida + entrada)
+        // Crear transferencia en BORRADOR - requiere confirmación de bodega origen
         response = await dataService.createMovimiento({
           tipo_movimiento: 'TRANSFERENCIA',
           origen_id: data.origen_id,
@@ -370,7 +379,8 @@ export default function Entradas() {
           usuario_creacion_id: data.usuario_creacion_id,
           observaciones_creacion: data.observaciones,
           productos: data.productos,
-          estado: 'PENDIENTE'
+          estado: 'BORRADOR',
+          fecha_documento: data.fecha_documento
         })
       } else if (data.tipo_entrada === 'PRODUCCION' || data.tipo_movimiento === 'PRODUCCION') {
         // Crear orden de producción
@@ -706,7 +716,7 @@ export default function Entradas() {
             <DataTable
               columns={columns}
               data={movimientosFiltrados}
-              defaultSortKey="fecha_creacion"
+              defaultSortKey="fecha_documento"
               defaultSortDir="desc"
               rowClassName={(row) => {
                 const estado = normalizeEstado(row.estado)
