@@ -431,7 +431,7 @@ export async function triggerStockBajo({ producto, ubicacion, stockActual, stock
       ubicacion_nombre: ubicacion?.nombre,
       stock_actual: stockActual,
       stock_minimo: stockMinimo,
-      accionUrl: '/inventario' // Navigate to inventario page
+      accionUrl: '/stock' // Navigate to stock page
     },
     usuarios_destino: usuariosDestino || [],
     productos_afectados: items.map(p => ({

@@ -995,7 +995,7 @@ export default function TransferenciaDetail({
                 <div>
                   <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">Pendiente de confirmación de bodega origen</p>
                   <p className="text-sm text-amber-700 dark:text-amber-100">
-                    Esta entrada se habilitará para recepción una vez la bodega origen confirme y envíe la salida vinculada.
+                    Esta entrada se habilitará para recepción una vez la ubicacion origen confirme y envíe la salida vinculada.
                   </p>
                 </div>
               </div>
