@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Button from '../common/Button'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { Package, MapPin, Calendar, User, CheckCircle, AlertCircle, X, Download, Trash2, Pencil, Edit3 } from 'lucide-react'
+import { Package, MapPin, Calendar, User, CheckCircle, AlertCircle, X, Download, Trash2, Pencil, Edit3, Ban } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Timestamp } from 'firebase/firestore'
@@ -13,7 +13,7 @@ import { exportConteoToExcel } from '../../utils/exportUtils'
 import { formatDisplayId, safeFormatDate } from '../../utils/formatters'
 import { usePermissions } from '../../hooks/usePermissions'
 
-export default function ConteoDetail({ conteo, onClose, onEdit }) {
+export default function ConteoDetail({ conteo, onClose, onEdit, onCancelar, isCancelando }) {
   const toast = useToastStore()
   const { user } = useAuthStore()
   const queryClient = useQueryClient()
@@ -34,6 +34,10 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
   const [editingFechaDoc, setEditingFechaDoc] = useState(false)
   const [fechaDocumentoEdit, setFechaDocumentoEdit] = useState('')
   const [isSavingFechaDoc, setIsSavingFechaDoc] = useState(false)
+
+  // Cancel modal state
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [motivoCancelacion, setMotivoCancelacion] = useState('')
 
   // Verificar si el usuario puede editar conteos completados (permiso Total + ubicación asignada + máximo 3 ediciones + máximo 1 mes desde creación)
   const canEditCompletedConteo = (conteo) => {
@@ -288,6 +292,24 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
     }
   }
 
+  // Cancelar conteo
+  const handleCancelarConteo = async () => {
+    if (!motivoCancelacion.trim()) {
+      toast.error('Motivo requerido', 'Por favor ingresa un motivo para la cancelación')
+      return
+    }
+    
+    try {
+      if (onCancelar) {
+        await onCancelar(motivoCancelacion)
+      }
+      setShowCancelModal(false)
+      setMotivoCancelacion('')
+    } catch (err) {
+      toast.error('Error', err.message || 'No se pudo cancelar el conteo')
+    }
+  }
+
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-3xl shadow-card-hover max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
@@ -348,6 +370,8 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
                     ? 'bg-green-500 text-white'
                     : conteo.estado === 'PARCIALMENTE_COMPLETADO'
                     ? 'bg-orange-500 text-white'
+                    : conteo.estado === 'CANCELADO'
+                    ? 'bg-red-500 text-white'
                     : 'bg-yellow-500 text-white'
                 }`}>
                   {conteo.estado === 'PARCIALMENTE_COMPLETADO' ? 'PARCIAL' : conteo.estado}
@@ -656,6 +680,16 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
         {/* Footer Sticky */}
         <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex-shrink-0 sticky bottom-0">
           <div className="flex justify-end gap-3">
+            {(conteo.estado === 'PENDIENTE' || conteo.estado === 'EN_PROGRESO') && onCancelar && canEdit('conteos') && (
+              <Button
+                variant="danger"
+                onClick={() => setShowCancelModal(true)}
+                disabled={isCancelando}
+              >
+                <Ban size={16} className="mr-1.5" />
+                Cancelar Conteo
+              </Button>
+            )}
             {canEditCompletedConteo(conteo) && onEdit && (
               <Button
                 variant="outline"
@@ -711,6 +745,60 @@ export default function ConteoDetail({ conteo, onClose, onEdit }) {
                 className="flex-1"
               >
                 {eliminandoId !== null ? 'Eliminando...' : 'Eliminar'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de cancelación de conteo */}
+      {showCancelModal && (
+        <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-10 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full flex-shrink-0">
+                <Ban className="text-red-600" size={22} />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">
+                  Cancelar Conteo
+                </h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                  Esta acción no se puede revertir. Si el conteo tiene valores registrados, estos no afectarán el inventario.
+                </p>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Motivo de cancelación *
+                  </label>
+                  <textarea
+                    value={motivoCancelacion}
+                    onChange={(e) => setMotivoCancelacion(e.target.value)}
+                    placeholder="Ingresa el motivo de la cancelación..."
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-slate-700 dark:text-slate-100 resize-none"
+                    rows={3}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setShowCancelModal(false)
+                  setMotivoCancelacion('')
+                }}
+                className="flex-1"
+                disabled={isCancelando}
+              >
+                Volver
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleCancelarConteo}
+                loading={isCancelando}
+                className="flex-1"
+              >
+                {isCancelando ? 'Cancelando...' : 'Cancelar Conteo'}
               </Button>
             </div>
           </div>

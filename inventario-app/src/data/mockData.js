@@ -379,6 +379,20 @@ export const mockConteos = [
       { nombre: 'TAPIOCA', stock_sistema: 50, stock_fisico: 50 },
       { nombre: 'TAPIOCA MUQUI', stock_sistema: 45, stock_fisico: 43 }
     ]
+  },
+  {
+    id: 'CONT003',
+    ubicacion_id: 'LM005',
+    tipo_ubicacion: 'PUNTO_VENTA',
+    tipo_conteo: 'MENSUAL',
+    estado: 'CANCELADO',
+    usuario_responsable_id: 'USR001',
+    usuario_cancelacion_id: 'USR001',
+    fecha_programada: new Date(Date.now() - 172800000).toISOString(),
+    fecha_cancelacion: new Date(Date.now() - 86400000).toISOString(),
+    motivo_cancelacion: 'Inventario no disponible por mantenimiento',
+    observaciones: 'Conteo mensual programado',
+    productos: []
   }
 ]
 

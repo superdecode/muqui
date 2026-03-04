@@ -170,6 +170,10 @@ const dataService = {
     return await firestoreService.ejecutarConteo(data)
   },
 
+  cancelarConteo: async (data) => {
+    return await firestoreService.cancelarConteo(data)
+  },
+
   // INVENTARIO
   ajustarInventario: async (data) => {
     return await firestoreService.ajustarInventario(data)

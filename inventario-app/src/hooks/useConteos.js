@@ -127,6 +127,27 @@ export const useConteos = (ubicacionId) => {
     }
   })
 
+  // Cancelar conteo
+  const cancelarConteo = useMutation({
+    mutationFn: async (data) => {
+      return await dataService.cancelarConteo(data)
+    },
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['conteos'] })
+      queryClient.invalidateQueries({ queryKey: ['alertas'] })
+      toast.success(
+        'Conteo Cancelado',
+        response.message || 'El conteo se ha cancelado exitosamente'
+      )
+    },
+    onError: (error) => {
+      toast.error(
+        'Error al Cancelar',
+        error.message || 'No se pudo cancelar el conteo. Intenta nuevamente.'
+      )
+    }
+  })
+
   // Eliminar detalle de conteo (producto individual)
   const eliminarDetalleConteo = useMutation({
     mutationFn: async (detalleId) => {
@@ -146,13 +167,15 @@ export const useConteos = (ubicacionId) => {
     const pendientes = conteosConNombres.filter(c => c.estado === 'PENDIENTE').length
     const enProgreso = conteosConNombres.filter(c => c.estado === 'EN_PROGRESO').length
     const completados = conteosConNombres.filter(c => c.estado === 'COMPLETADO' || c.estado === 'PARCIALMENTE_COMPLETADO').length
+    const cancelados = conteosConNombres.filter(c => c.estado === 'CANCELADO').length
     const total = conteosConNombres.length
 
     return {
       total,
       pendientes,
       enProgreso,
-      completados
+      completados,
+      cancelados
     }
   }
 
@@ -170,6 +193,8 @@ export const useConteos = (ubicacionId) => {
     isEjecutando: ejecutarConteo.isPending,
     eliminarConteo: eliminarConteo.mutate,
     isEliminando: eliminarConteo.isPending,
+    cancelarConteo: cancelarConteo.mutate,
+    isCancelando: cancelarConteo.isPending,
     eliminarDetalleConteo: eliminarDetalleConteo.mutate,
     isEliminandoDetalle: eliminarDetalleConteo.isPending,
     estadisticas: getEstadisticas()

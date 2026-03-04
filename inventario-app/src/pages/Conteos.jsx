@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ClipboardCheck, Plus, Play, Download, CheckCircle, Clock, AlertCircle, Trash2, Printer, Search, Eye, Pencil } from 'lucide-react'
+import { ClipboardCheck, Plus, Play, Download, CheckCircle, Clock, AlertCircle, Trash2, Printer, Search, Building2, Filter, Edit3, Eye, XCircle, Pencil } from 'lucide-react'
 import Card from '../components/common/Card'
 import DataTable from '../components/common/DataTable'
 import Button from '../components/common/Button'
@@ -56,12 +56,13 @@ export default function Conteos() {
     isLoading,
     crearConteo,
     isCreando,
-    iniciarConteo,
-    isIniciando,
     ejecutarConteo,
     isEjecutando,
     eliminarConteo,
-    isEliminando
+    isEliminando,
+    cancelarConteo,
+    isCancelando,
+    estadisticas
   } = useConteos()
 
   // Función para obtener nombre del usuario
@@ -327,22 +328,18 @@ export default function Conteos() {
     total: conteosAccessibles.length,
     pendientes: conteosAccessibles.filter(c => c.estado === 'PENDIENTE').length,
     enProgreso: conteosAccessibles.filter(c => c.estado === 'EN_PROGRESO').length,
-    completados: conteosAccessibles.filter(c => c.estado === 'COMPLETADO' || c.estado === 'PARCIALMENTE_COMPLETADO').length
+    completados: conteosAccessibles.filter(c => c.estado === 'COMPLETADO' || c.estado === 'PARCIALMENTE_COMPLETADO').length,
+    cancelados: conteosAccessibles.filter(c => c.estado === 'CANCELADO').length
   }
 
   // Filtrar conteos según el tab activo, búsqueda, sede y asignaciones de usuario
   const conteosFiltrados = conteosAccessibles.filter(c => {
-    const matchTab = activeTab === 'todos' ? true
-      : activeTab === 'pendientes' ? c.estado === 'PENDIENTE'
-      : activeTab === 'enProgreso' ? c.estado === 'EN_PROGRESO'
-      : activeTab === 'completados' ? (c.estado === 'COMPLETADO' || c.estado === 'PARCIALMENTE_COMPLETADO')
-      : true
-    const matchSearch = !searchTerm ||
-      (c.codigo_legible || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (c.ubicacion_nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (c.tipo_conteo || '').toLowerCase().includes(searchTerm.toLowerCase())
-    const matchSede = !effectiveSedeFilter || c.ubicacion_id === effectiveSedeFilter
-
+    if (activeTab === 'todos') return true
+    if (activeTab === 'pendientes') return c.estado === 'PENDIENTE'
+    if (activeTab === 'enProgreso') return c.estado === 'EN_PROGRESO'
+    if (activeTab === 'completados') return c.estado === 'COMPLETADO' || c.estado === 'PARCIALMENTE_COMPLETADO'
+    if (activeTab === 'cancelados') return c.estado === 'CANCELADO'
+    return true
     return matchTab && matchSearch && matchSede
   })
 
@@ -440,7 +437,8 @@ export default function Conteos() {
           PENDIENTE: { color: 'bg-yellow-100 text-yellow-800', icon: Clock },
           EN_PROGRESO: { color: 'bg-blue-100 text-blue-800', icon: AlertCircle },
           PARCIALMENTE_COMPLETADO: { color: 'bg-orange-100 text-orange-800', icon: AlertCircle },
-          COMPLETADO: { color: 'bg-green-100 text-green-800', icon: CheckCircle }
+          COMPLETADO: { color: 'bg-green-100 text-green-800', icon: CheckCircle },
+          CANCELADO: { color: 'bg-red-100 text-red-800', icon: XCircle }
         }
         const estado = estados[value] || estados.PENDIENTE
         const Icon = estado.icon
@@ -599,6 +597,23 @@ export default function Conteos() {
     setShowExecute(true)
   }
 
+  const handleCancelar = async (motivoCancelacion) => {
+    if (!selectedConteo) return
+
+    const dataCancelacion = {
+      conteo_id: selectedConteo.id,
+      motivo_cancelacion: motivoCancelacion,
+      usuario_cancelacion_id: user?.id || 'USR001'
+    }
+
+    cancelarConteo(dataCancelacion, {
+      onSuccess: () => {
+        setShowDetail(false)
+        setSelectedConteo(null)
+      }
+    })
+  }
+
   const handleCloseForm = () => {
     setShowForm(false)
   }
@@ -720,6 +735,18 @@ export default function Conteos() {
             </div>
           </div>
         </Card>
+
+        <Card className="bg-gradient-to-br from-red-50 to-white dark:from-red-900/20 dark:to-slate-800 border-red-100 dark:border-red-900/30">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Cancelados</p>
+              <p className="text-3xl font-bold text-red-600">{estadisticasCalculadas.cancelados}</p>
+            </div>
+            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+              <XCircle className="text-red-600" size={24} />
+            </div>
+          </div>
+        </Card>
       </div>
 
       {/* Search and Sede Filter */}
@@ -759,7 +786,8 @@ export default function Conteos() {
               { id: 'todos', label: 'Todos', count: estadisticasCalculadas.total },
               { id: 'pendientes', label: 'Pendientes', count: estadisticasCalculadas.pendientes },
               { id: 'enProgreso', label: 'En Progreso', count: estadisticasCalculadas.enProgreso },
-              { id: 'completados', label: 'Completados', count: estadisticasCalculadas.completados }
+              { id: 'completados', label: 'Completados', count: estadisticasCalculadas.completados },
+              { id: 'cancelados', label: 'Cancelados', count: estadisticasCalculadas.cancelados }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -829,6 +857,8 @@ export default function Conteos() {
           conteo={selectedConteo}
           onClose={handleCloseDetail}
           onEdit={handleEditarDesdeDetalle}
+          onCancelar={handleCancelar}
+          isCancelando={isCancelando}
         />
       )}
     </div>

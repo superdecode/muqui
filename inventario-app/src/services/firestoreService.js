@@ -1946,6 +1946,55 @@ const firestoreService = {
     }
   },
 
+  cancelarConteo: async (data) => {
+    try {
+      const db = getDB()
+      const batch = writeBatch(db)
+
+      const conteoRef = doc(db, 'conteos', data.conteo_id)
+      const conteoDoc = await getDoc(conteoRef)
+
+      if (!conteoDoc.exists()) {
+        return { success: false, message: 'Conteo no encontrado' }
+      }
+
+      const conteoData = conteoDoc.data()
+
+      // Verificar que el conteo esté en estado PENDIENTE o EN_PROGRESO
+      if (conteoData.estado !== 'PENDIENTE' && conteoData.estado !== 'EN_PROGRESO') {
+        return { success: false, message: 'Solo se pueden cancelar conteos en estado PENDIENTE o EN_PROGRESO' }
+      }
+
+      // Actualizar el conteo a estado CANCELADO
+      batch.update(conteoRef, {
+        estado: 'CANCELADO',
+        fecha_cancelacion: serverTimestamp(),
+        usuario_cancelacion_id: data.usuario_cancelacion_id,
+        motivo_cancelacion: data.motivo_cancelacion
+      })
+
+      // Si el conteo tiene detalles registrados, marcarlos como cancelados
+      // pero NO afectar el inventario (según requerimiento)
+      const detalles = await firestoreService.getDetalleConteos(data.conteo_id)
+      if (detalles.length > 0) {
+        detalles.forEach(detalle => {
+          const detalleRef = doc(db, 'detalle_conteos', detalle.id)
+          batch.update(detalleRef, {
+            cancelado: true,
+            fecha_cancelacion: serverTimestamp()
+          })
+        })
+      }
+
+      await batch.commit()
+
+      return { success: true, message: 'Conteo cancelado exitosamente' }
+    } catch (error) {
+      console.error('❌ Error cancelando conteo:', error)
+      throw new Error(error.message || 'Error al cancelar el conteo')
+    }
+  },
+
   deleteConteo: async (conteoId) => {
     try {
       const db = getDB()
