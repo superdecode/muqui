@@ -56,6 +56,8 @@ export default function Conteos() {
     isLoading,
     crearConteo,
     isCreando,
+    iniciarConteo,
+    isIniciando,
     ejecutarConteo,
     isEjecutando,
     eliminarConteo,
