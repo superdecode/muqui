@@ -216,33 +216,33 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-card p-6 border border-slate-100 dark:border-slate-700">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-6">Acciones Rápidas</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Link to="/productos" className="group relative overflow-hidden p-6 rounded-2xl bg-gradient-ocean text-white shadow-soft hover:shadow-glow transition-all duration-300 transform hover:-translate-y-1">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-card p-4 border border-slate-100 dark:border-slate-700">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-3">Acciones Rápidas</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Link to="/productos" className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-ocean text-white shadow-soft hover:shadow-glow transition-all duration-300 transform hover:-translate-y-1">
             <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-500"></div>
             <div className="relative z-10">
-              <Package className="mb-3" size={32} />
-              <p className="text-lg font-semibold">Ver Productos</p>
-              <p className="text-sm text-white/80 mt-1">Gestiona tus productos</p>
+              <Package className="mb-2" size={28} />
+              <p className="text-base font-semibold">Ver Productos</p>
+              <p className="text-xs text-white/80 mt-0.5">Gestiona tus productos</p>
             </div>
           </Link>
 
-          <Link to="/transferencias" className="group relative overflow-hidden p-6 rounded-2xl bg-gradient-sunset text-white shadow-soft hover:shadow-glow transition-all duration-300 transform hover:-translate-y-1">
+          <Link to="/transferencias" className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-sunset text-white shadow-soft hover:shadow-glow transition-all duration-300 transform hover:-translate-y-1">
             <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-500"></div>
             <div className="relative z-10">
-              <ArrowRightLeft className="mb-3" size={32} />
-              <p className="text-lg font-semibold">Nueva Transferencia</p>
-              <p className="text-sm text-white/80 mt-1">Mueve productos entre ubicaciones</p>
+              <ArrowRightLeft className="mb-2" size={28} />
+              <p className="text-base font-semibold">Nueva Transferencia</p>
+              <p className="text-xs text-white/80 mt-0.5">Mueve productos entre ubicaciones</p>
             </div>
           </Link>
 
-          <Link to="/conteos" className="group relative overflow-hidden p-6 rounded-2xl bg-gradient-purple text-slate-800 shadow-soft hover:shadow-glow transition-all duration-300 transform hover:-translate-y-1">
+          <Link to="/conteos" className="group relative overflow-hidden p-4 rounded-2xl bg-gradient-purple text-slate-800 shadow-soft hover:shadow-glow transition-all duration-300 transform hover:-translate-y-1">
             <div className="absolute top-0 right-0 w-24 h-24 bg-white/20 rounded-full blur-2xl -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-500"></div>
             <div className="relative z-10">
-              <ClipboardCheck className="mb-3" size={32} />
-              <p className="text-lg font-semibold">Ejecutar Conteo</p>
-              <p className="text-sm text-slate-700 mt-1">Verifica tu inventario</p>
+              <ClipboardCheck className="mb-2" size={28} />
+              <p className="text-base font-semibold">Ejecutar Conteo</p>
+              <p className="text-xs text-slate-700 mt-0.5">Verifica tu inventario</p>
             </div>
           </Link>
         </div>

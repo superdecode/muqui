@@ -1,9 +1,8 @@
 /**
  * NotificationPopups Component
  * Shows popup notifications for new alerts
- * - 1 notification: Individual popup
- * - 2-4 notifications: Stacked popups
- * - 5+ notifications: Consolidated "You have X new notifications"
+ * - 1-3 notifications: Individual popups
+ * - 4+ notifications: Consolidated "You have X new notifications"
  */
 import { useState, useEffect } from 'react'
 import { X, Bell, ExternalLink, AlertTriangle, Package, ArrowRightLeft, ClipboardList, Inbox } from 'lucide-react'
@@ -13,7 +12,7 @@ import { markAsRead } from '../../services/notificationService'
 import { NOTIFICATION_TYPES } from '../../services/notificationService'
 
 const POPUP_DURATION = 5000 // 5 seconds auto-close
-const MAX_STACKED = 4
+const MAX_INDIVIDUAL = 3 // Show max 3 individual notifications before consolidating
 
 // Get icon based on notification type
 function getNotificationIcon(tipo) {
@@ -64,8 +63,8 @@ export default function NotificationPopups() {
       return
     }
 
-    if (popupNotifications.length >= 5) {
-      // Consolidated popup
+    if (popupNotifications.length > MAX_INDIVIDUAL) {
+      // Consolidated popup for 4+ notifications
       setVisiblePopups([{
         id: 'consolidated',
         type: 'consolidated',
@@ -73,8 +72,8 @@ export default function NotificationPopups() {
         notifications: popupNotifications
       }])
     } else {
-      // Individual or stacked popups (1-4)
-      setVisiblePopups(popupNotifications.slice(0, MAX_STACKED).map(n => ({
+      // Individual popups (1-3)
+      setVisiblePopups(popupNotifications.slice(0, MAX_INDIVIDUAL).map(n => ({
         ...n,
         type: 'individual'
       })))

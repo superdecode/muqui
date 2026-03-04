@@ -11,7 +11,7 @@ import ProductoForm from '../components/productos/ProductoForm'
 import { useToastStore } from '../stores/toastStore'
 import { usePermissions } from '../hooks/usePermissions'
 import { useAuthStore } from '../stores/authStore'
-import { safeParseDate } from '../utils/formatters'
+import { safeParseDate, formatNumberForCard } from '../utils/formatters'
 import { exportToCSV } from '../utils/exportUtils'
 import { getUserAllowedUbicacionIds } from '../utils/userFilters'
 import dataService from '../services/dataService'
@@ -29,6 +29,7 @@ export default function Stock() {
   const [filterUbicaciones, setFilterUbicaciones] = useState([])
   const [filterProductos, setFilterProductos] = useState([])
   const [filterCategoria, setFilterCategoria] = useState('')
+  const [filterEstado, setFilterEstado] = useState('')
   const [editingProducto, setEditingProducto] = useState(null)
   const [editingStockMin, setEditingStockMin] = useState(null)
   const [stockMinValue, setStockMinValue] = useState('')
@@ -201,6 +202,10 @@ export default function Stock() {
       result = result.filter(r => r.categoria === filterCategoria)
     }
 
+    if (filterEstado) {
+      result = result.filter(r => r.estado === filterEstado)
+    }
+
     if (searchTerm) {
       const term = searchTerm.toLowerCase()
       result = result.filter(r =>
@@ -213,7 +218,7 @@ export default function Stock() {
 
     result.sort((a, b) => a.nombre.localeCompare(b.nombre) || a.ubicacion_nombre.localeCompare(b.ubicacion_nombre))
     return result
-  }, [inventario, productos, ubicaciones, conteos, detalleConteos, movimientos, detalleMovimientos, filterUbicaciones, filterProductos, filterCategoria, searchTerm])
+  }, [inventario, productos, ubicaciones, conteos, detalleConteos, movimientos, detalleMovimientos, filterUbicaciones, filterProductos, filterCategoria, filterEstado, searchTerm])
 
   // Stats
   const stats = useMemo(() => ({
@@ -416,20 +421,41 @@ export default function Stock() {
         </div>
         <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
           <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Total Unidades</p>
-          <p className="text-2xl font-bold text-primary-600">{stats.totalUnidades}</p>
+          <p className="text-2xl font-bold text-primary-600">{formatNumberForCard(stats.totalUnidades)}</p>
         </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-green-200 dark:border-green-900/30">
-          <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Normal</p>
-          <p className="text-2xl font-bold text-green-600">{stats.normal}</p>
-        </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-yellow-200 dark:border-yellow-900/30">
-          <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Stock Bajo</p>
-          <p className="text-2xl font-bold text-yellow-600">{stats.bajo}</p>
-        </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-red-200 dark:border-red-900/30">
-          <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Agotados</p>
-          <p className="text-2xl font-bold text-red-600">{stats.agotado}</p>
-        </div>
+        <button
+          onClick={() => setFilterEstado(filterEstado === 'Normal' ? '' : 'Normal')}
+          className={`bg-white dark:bg-slate-800 rounded-xl p-4 border transition-all hover:shadow-md ${
+            filterEstado === 'Normal' 
+              ? 'border-green-500 ring-2 ring-green-500 ring-opacity-50' 
+              : 'border-green-200 dark:border-green-900/30'
+          }`}
+        >
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-1 text-left">Normal</p>
+          <p className="text-2xl font-bold text-green-600 text-left">{stats.normal}</p>
+        </button>
+        <button
+          onClick={() => setFilterEstado(filterEstado === 'Bajo' ? '' : 'Bajo')}
+          className={`bg-white dark:bg-slate-800 rounded-xl p-4 border transition-all hover:shadow-md ${
+            filterEstado === 'Bajo' 
+              ? 'border-yellow-500 ring-2 ring-yellow-500 ring-opacity-50' 
+              : 'border-yellow-200 dark:border-yellow-900/30'
+          }`}
+        >
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-1 text-left">Stock Bajo</p>
+          <p className="text-2xl font-bold text-yellow-600 text-left">{stats.bajo}</p>
+        </button>
+        <button
+          onClick={() => setFilterEstado(filterEstado === 'Agotado' ? '' : 'Agotado')}
+          className={`bg-white dark:bg-slate-800 rounded-xl p-4 border transition-all hover:shadow-md ${
+            filterEstado === 'Agotado' 
+              ? 'border-red-500 ring-2 ring-red-500 ring-opacity-50' 
+              : 'border-red-200 dark:border-red-900/30'
+          }`}
+        >
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-1 text-left">Agotados</p>
+          <p className="text-2xl font-bold text-red-600 text-left">{stats.agotado}</p>
+        </button>
       </div>
 
       {/* Filters */}

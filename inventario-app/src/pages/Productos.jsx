@@ -17,7 +17,7 @@ export default function Productos() {
   const queryClient = useQueryClient()
   const [searchTerm, setSearchTerm] = useState('')
   const [categoriaFilter, setCategoriaFilter] = useState('')
-  const [unidadFilter, setUnidadFilter] = useState('')
+  const [tipoConteoFilter, setTipoConteoFilter] = useState('')
   const [estadoFilter, setEstadoFilter] = useState('')
   const [especificacionFilter, setEspecificacionFilter] = useState('')
   const [sortColumn, setSortColumn] = useState('nombre')
@@ -52,7 +52,7 @@ export default function Productos() {
   const filteredProductos = productos.filter(item => {
     const matchesSearch = !searchTerm || item.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || (item.especificacion || '').toLowerCase().includes(searchTerm.toLowerCase()) || (item.id || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesCategory = !categoriaFilter || item.categoria === categoriaFilter
-    const matchesUnidad = !unidadFilter || item.unidad_medida === unidadFilter
+    const matchesTipoConteo = !tipoConteoFilter || item.frecuencia_inventario === tipoConteoFilter
     const matchesEstado = !estadoFilter || item.estado === estadoFilter
     const matchesEspec = !especificacionFilter || item.especificacion === especificacionFilter
     
@@ -73,7 +73,7 @@ export default function Productos() {
       }
     }
     
-    return matchesSearch && matchesCategory && matchesUnidad && matchesEstado && matchesEspec && matchesUbicacion && matchesEmpresa
+    return matchesSearch && matchesCategory && matchesTipoConteo && matchesEstado && matchesEspec && matchesUbicacion && matchesEmpresa
   }).sort((a, b) => {
     if (!sortColumn) return 0
     const valA = a[sortColumn] ?? ''
@@ -156,7 +156,7 @@ export default function Productos() {
   const handleLimpiarFiltros = () => {
     setSearchTerm('')
     setCategoriaFilter('')
-    setUnidadFilter('')
+    setTipoConteoFilter('')
     setEstadoFilter('')
     setEspecificacionFilter('')
     setUbicacionFilter('')
@@ -170,7 +170,7 @@ export default function Productos() {
   }
 
   const categorias = [...new Set(productos.map(item => item.categoria).filter(Boolean))]
-  const unidades = [...new Set(productos.map(item => item.unidad_medida).filter(Boolean))]
+  const tiposConteo = [...new Set(productos.map(item => item.frecuencia_inventario).filter(Boolean))]
   const especificaciones = [...new Set(productos.map(item => item.especificacion).filter(Boolean))]
   const estados = [...new Set(productos.map(item => item.estado).filter(Boolean))]
 
@@ -190,7 +190,7 @@ export default function Productos() {
     </span>
   )
 
-  const activeFilters = [categoriaFilter, unidadFilter, estadoFilter, especificacionFilter, ubicacionFilter, empresaFilter].filter(Boolean).length
+  const activeFilters = [categoriaFilter, tipoConteoFilter, estadoFilter, especificacionFilter, ubicacionFilter, empresaFilter].filter(Boolean).length
 
   const isSaving = createMutation.isPending || updateMutation.isPending
 
@@ -304,10 +304,10 @@ export default function Productos() {
                 {especificaciones.map(e => <option key={e} value={e}>{e}</option>)}
               </select>
             )}
-            <select value={unidadFilter} onChange={e => setUnidadFilter(e.target.value)}
+            <select value={tipoConteoFilter} onChange={e => setTipoConteoFilter(e.target.value)}
               className="px-3 py-1.5 text-xs font-medium rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary-500 cursor-pointer">
-              <option value="">Unidad</option>
-              {unidades.map(u => <option key={u} value={u}>{u}</option>)}
+              <option value="">Tipo de Conteo</option>
+              {tiposConteo.map(t => <option key={t} value={t}>{formatLabel(t)}</option>)}
             </select>
             <select value={estadoFilter} onChange={e => setEstadoFilter(e.target.value)}
               className="px-3 py-1.5 text-xs font-medium rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary-500 cursor-pointer">
@@ -320,7 +320,7 @@ export default function Productos() {
           {activeFilters > 0 && (
             <button onClick={() => { 
               setCategoriaFilter(''); 
-              setUnidadFilter(''); 
+              setTipoConteoFilter(''); 
               setEstadoFilter(''); 
               setEspecificacionFilter('');
               setUbicacionFilter('');
@@ -375,6 +375,9 @@ export default function Productos() {
                   <th onClick={() => handleSort('categoria')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Categoría<SortIcon column="categoria" /></span>
                   </th>
+                  <th onClick={() => handleSort('frecuencia_inventario')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                    <span className="inline-flex items-center">Tipo de Conteo<SortIcon column="frecuencia_inventario" /></span>
+                  </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                     <span className="inline-flex items-center gap-1">
                       <MapPin size={14} />
@@ -418,6 +421,11 @@ export default function Productos() {
                     <td className="px-6 py-4">
                       <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full text-xs font-medium">
                         {item.categoria}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-xs font-medium">
+                        {item.frecuencia_inventario ? formatLabel(item.frecuencia_inventario) : '-'}
                       </span>
                     </td>
                     <td className="px-6 py-4">

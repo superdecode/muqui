@@ -132,6 +132,24 @@ export const formatNumber = (number, decimals = 0) => {
   }).format(number)
 }
 
+// Formatear número para tarjetas (máximo 1 decimal)
+export const formatNumberForCard = (number) => {
+  if (number === null || number === undefined) return '0'
+  return new Intl.NumberFormat('es-CO', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1
+  }).format(number)
+}
+
+// Formatear número para reportes (máximo 2 decimales)
+export const formatNumberForReport = (number) => {
+  if (number === null || number === undefined) return '0'
+  return new Intl.NumberFormat('es-CO', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(number)
+}
+
 // Formatear moneda
 export const formatCurrency = (amount) => {
   if (amount === null || amount === undefined) return '$0'
