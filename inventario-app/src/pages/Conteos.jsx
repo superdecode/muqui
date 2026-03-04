@@ -737,18 +737,6 @@ export default function Conteos() {
             </div>
           </div>
         </Card>
-
-        <Card className="bg-gradient-to-br from-red-50 to-white dark:from-red-900/20 dark:to-slate-800 border-red-100 dark:border-red-900/30">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Cancelados</p>
-              <p className="text-3xl font-bold text-red-600">{estadisticasCalculadas.cancelados}</p>
-            </div>
-            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-              <XCircle className="text-red-600" size={24} />
-            </div>
-          </div>
-        </Card>
       </div>
 
       {/* Search and Sede Filter */}
