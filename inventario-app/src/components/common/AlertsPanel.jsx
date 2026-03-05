@@ -25,6 +25,7 @@ const AlertsPanel = ({ isOpen, onClose, anchorRef }) => {
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (panelRef.current && !panelRef.current.contains(event.target) && anchorRef?.current && !anchorRef.current.contains(event.target)) {
+        setDetailModal(null) // Cerrar modal de detalles al cerrar panel
         onClose()
       }
     }
@@ -33,6 +34,13 @@ const AlertsPanel = ({ isOpen, onClose, anchorRef }) => {
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [isOpen, onClose, anchorRef])
+
+  // Cerrar modal de detalles cuando se cierra el panel
+  useEffect(() => {
+    if (!isOpen) {
+      setDetailModal(null)
+    }
+  }, [isOpen])
 
   // Update panel when notifications change
   useEffect(() => {

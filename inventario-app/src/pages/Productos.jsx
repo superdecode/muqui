@@ -360,7 +360,7 @@ export default function Productos() {
             <table className="w-full">
               <thead className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-700">
                 <tr>
-                  <th onClick={() => handleSort('nombre')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                  <th onClick={() => handleSort('nombre')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none" style={{width: '30%'}}>
                     <span className="inline-flex items-center">Producto<SortIcon column="nombre" /></span>
                   </th>
                   <th onClick={() => handleSort('especificacion')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
@@ -379,10 +379,7 @@ export default function Productos() {
                     <span className="inline-flex items-center">Tipo de Conteo<SortIcon column="frecuencia_inventario" /></span>
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                    <span className="inline-flex items-center gap-1">
-                      <MapPin size={14} />
-                      Ubicaciones
-                    </span>
+                    Ubicaciones
                   </th>
                   <th onClick={() => handleSort('estado')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Estado<SortIcon column="estado" /></span>

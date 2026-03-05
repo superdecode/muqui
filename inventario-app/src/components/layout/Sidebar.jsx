@@ -179,8 +179,9 @@ export default function Sidebar() {
                       )}
                     </button>
                     {/* Submenu items */}
-                    <div className={`mt-1 space-y-1 ${isCollapsed ? 'lg:flex lg:flex-col lg:items-center lg:space-y-2 lg:px-2' : 'ml-4'}`}>
-                      {item.submenu.map((subitem) => (
+                    {isExpanded && (
+                      <div className={`mt-1 space-y-1 ${isCollapsed ? 'lg:flex lg:flex-col lg:items-center lg:space-y-2 lg:px-2' : 'ml-4'}`}>
+                        {item.submenu.map((subitem) => (
                         <NavLink
                           key={subitem.to}
                           to={subitem.to}
@@ -197,8 +198,9 @@ export default function Sidebar() {
                           <subitem.icon size={isCollapsed ? 18 : 16} />
                           <span className={`${isCollapsed ? 'lg:hidden' : 'block'}`}>{subitem.label}</span>
                         </NavLink>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )
               }

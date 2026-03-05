@@ -336,12 +336,22 @@ export default function Conteos() {
 
   // Filtrar conteos según el tab activo, búsqueda, sede y asignaciones de usuario
   const conteosFiltrados = conteosAccessibles.filter(c => {
-    if (activeTab === 'todos') return true
-    if (activeTab === 'pendientes') return c.estado === 'PENDIENTE'
-    if (activeTab === 'enProgreso') return c.estado === 'EN_PROGRESO'
-    if (activeTab === 'completados') return c.estado === 'COMPLETADO' || c.estado === 'PARCIALMENTE_COMPLETADO'
-    if (activeTab === 'cancelados') return c.estado === 'CANCELADO'
-    return true
+    // Filtro por tab/estado
+    let matchTab = true
+    if (activeTab === 'pendientes') matchTab = c.estado === 'PENDIENTE'
+    else if (activeTab === 'enProgreso') matchTab = c.estado === 'EN_PROGRESO'
+    else if (activeTab === 'completados') matchTab = c.estado === 'COMPLETADO' || c.estado === 'PARCIALMENTE_COMPLETADO'
+    else if (activeTab === 'cancelados') matchTab = c.estado === 'CANCELADO'
+    
+    // Filtro por búsqueda
+    const matchSearch = !searchTerm || 
+      (c.codigo_legible || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.ubicacion_nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.tipo || '').toLowerCase().includes(searchTerm.toLowerCase())
+    
+    // Filtro por sede
+    const matchSede = !effectiveSedeFilter || c.ubicacion_id === effectiveSedeFilter
+    
     return matchTab && matchSearch && matchSede
   })
 

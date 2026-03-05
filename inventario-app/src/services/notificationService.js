@@ -525,7 +525,7 @@ export async function triggerSolicitudRecibida({ solicitud, productos, origen, d
 
   const notificationData = {
     tipo: NOTIFICATION_TYPES.SOLICITUD_RECIBIDA,
-    prioridad: PRIORITY.ALTA,
+    prioridad: PRIORITY.MEDIA,
     titulo: `Nueva solicitud: ${solicitud?.codigo_legible || 'N/A'}`,
     mensaje: `${usuarioCreador?.nombre || 'Usuario'} solicita productos desde ${origen?.nombre || 'origen'}`,
     datos_adicionales: datosAdicionales,
