@@ -8,8 +8,10 @@ import { initializeFirebase } from './config/firebase.config'
 if (import.meta.env.VITE_ENABLE_FIREBASE === 'true') {
   try {
     initializeFirebase()
+    console.log('✅ Firebase inicializado correctamente')
   } catch (error) {
-    console.error('Error inicializando Firebase:', error)
+    console.error('❌ Error inicializando Firebase:', error)
+    // Continuar sin Firebase si hay error
   }
 }
 
