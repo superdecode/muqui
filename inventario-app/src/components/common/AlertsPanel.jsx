@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, AlertCircle, AlertTriangle, Info, CheckCircle, Package, ArrowRightLeft, ClipboardList, Trash2 } from 'lucide-react'
+import { X, AlertCircle, AlertTriangle, Info, CheckCircle, Package, ArrowRightLeft, ClipboardList, Trash2, FileText } from 'lucide-react'
 import { useAlertasStore } from '../../stores/alertasStore'
 import { useNavigate } from 'react-router-dom'
 import { safeFormatDate } from '../../utils/formatters'
@@ -70,8 +70,10 @@ const AlertsPanel = ({ isOpen, onClose, anchorRef }) => {
     if (tipo === 'stock_bajo') return <AlertTriangle className="text-amber-500" size={20} />
     if (tipo === 'transferencia_recibida') return <ArrowRightLeft className="text-green-600" size={20} />
     if (tipo === 'transferencia_pendiente') return <AlertCircle className="text-blue-600" size={20} />
+    if (tipo === 'solicitud_recibida') return <FileText className="text-cyan-600" size={20} />
     if (tipo === 'conteo_recordatorio' || tipo === 'conteo_inventario') return <ClipboardList className="text-purple-600" size={20} />
     if (prioridad === 'alta') return <AlertCircle className="text-red-600" size={20} />
+    if (prioridad === 'media') return <AlertTriangle className="text-amber-500" size={20} />
     return <Info className="text-slate-500" size={20} />
   }
 

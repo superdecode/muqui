@@ -181,42 +181,69 @@ export default function NotificationPopups() {
             </div>
           ) : (
             // Individual notification
-            <div
-              className="flex items-start justify-between cursor-pointer"
-              onClick={() => handleClick(popup)}
-            >
-              <div className="flex items-start gap-3 flex-1">
-                <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
-                  {getNotificationIcon(popup.tipo)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">
-                    {popup.titulo}
-                  </p>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">
-                    {popup.mensaje}
-                  </p>
-                  {popup.datos_adicionales?.usuario_creador && (
-                    <p className="text-xs text-slate-500 dark:text-slate-500 mt-0.5">
-                      <span className="font-medium">Por:</span> {popup.datos_adicionales.usuario_creador}
-                    </p>
-                  )}
-                  {(popup.accionUrl || popup.datos_adicionales?.accionUrl) && (
-                    <p className="text-xs text-primary-600 mt-1 flex items-center gap-1">
-                      Click para ver detalles <ExternalLink size={10} />
-                    </p>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleClose(popup.id)
-                }}
-                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors ml-2"
+            <div className="flex flex-col">
+              <div
+                className="flex items-start justify-between cursor-pointer"
+                onClick={() => handleClick(popup)}
               >
-                <X size={16} className="text-slate-400" />
-              </button>
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
+                    {getNotificationIcon(popup.tipo)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                      {popup.titulo}
+                    </p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">
+                      {popup.mensaje}
+                    </p>
+                    {popup.datos_adicionales?.usuario_creador && (
+                      <p className="text-xs text-slate-500 dark:text-slate-500 mt-0.5">
+                        <span className="font-medium">Por:</span> {popup.datos_adicionales.usuario_creador}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleClose(popup.id)
+                  }}
+                  className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors ml-2"
+                >
+                  <X size={16} className="text-slate-400" />
+                </button>
+              </div>
+              {/* Footer con botón para ir al módulo */}
+              <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    marcarComoLeida(popup.id)
+                    markAsRead(popup.id, userId)
+                    
+                    // Navigate based on notification type
+                    if (popup.tipo === NOTIFICATION_TYPES.STOCK_BAJO) {
+                      navigate('/stock')
+                    } else if (popup.tipo === NOTIFICATION_TYPES.TRANSFERENCIA_RECIBIDA || popup.tipo === NOTIFICATION_TYPES.TRANSFERENCIA_PENDIENTE) {
+                      navigate('/movimientos')
+                    } else if (popup.tipo === NOTIFICATION_TYPES.SOLICITUD_RECIBIDA) {
+                      navigate('/movimientos/solicitudes')
+                    } else if (popup.tipo === NOTIFICATION_TYPES.CONTEO_RECORDATORIO || popup.tipo === NOTIFICATION_TYPES.CONTEO_INVENTARIO) {
+                      navigate('/conteos')
+                    } else {
+                      // Fallback to accionUrl if available
+                      const accionUrl = popup.accionUrl || popup.datos_adicionales?.accionUrl
+                      if (accionUrl) navigate(accionUrl)
+                    }
+                    
+                    handleClose(popup.id)
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors flex items-center gap-1"
+                >
+                  Ir al módulo <ExternalLink size={12} />
+                </button>
+              </div>
             </div>
           )}
         </div>
