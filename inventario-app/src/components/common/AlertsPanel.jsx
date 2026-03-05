@@ -105,11 +105,13 @@ const AlertsPanel = ({ isOpen, onClose, anchorRef }) => {
 
     // Fallback: navigate based on type
     if (alerta.tipo === 'transferencia_pendiente' || alerta.tipo === 'transferencia_recibida') {
-      navigate('/transferencias'); onClose()
+      navigate('/movimientos'); onClose()
+    } else if (alerta.tipo === 'solicitud_recibida') {
+      navigate('/movimientos/solicitudes'); onClose()
     } else if (alerta.tipo === 'conteo_recordatorio' || alerta.tipo === 'conteo_inventario') {
       navigate('/conteos'); onClose()
     } else if (alerta.tipo === 'stock_bajo') {
-      navigate('/inventario'); onClose()
+      navigate('/stock'); onClose()
     }
   }
 
@@ -288,8 +290,9 @@ const AlertsPanel = ({ isOpen, onClose, anchorRef }) => {
               <button onClick={() => { handleResolve({ stopPropagation: () => {} }, detailModal.id); setDetailModal(null) }} className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">Resolver</button>
               <button onClick={() => {
                 setDetailModal(null)
-                if (detailModal.tipo === 'stock_bajo') navigate('/inventario')
-                else if (detailModal.tipo?.includes('transferencia')) navigate('/transferencias')
+                if (detailModal.tipo === 'stock_bajo') navigate('/stock')
+                else if (detailModal.tipo?.includes('transferencia')) navigate('/movimientos')
+                else if (detailModal.tipo?.includes('solicitud')) navigate('/movimientos/solicitudes')
                 else if (detailModal.tipo?.includes('conteo')) navigate('/conteos')
                 onClose()
               }} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg">Ir al módulo</button>
