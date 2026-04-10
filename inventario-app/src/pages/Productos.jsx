@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Package, Plus, Edit2, Trash2, Search, Download, ChevronUp, ChevronDown, X, MapPin, Building2 } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Package, Plus, Edit2, Trash2, Search, Download, ChevronUp, ChevronDown, X, MapPin, Building2, Upload, FileSpreadsheet, CheckCircle, Save } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import Button from '../components/common/Button'
@@ -11,6 +11,41 @@ import { usePermissions } from '../hooks/usePermissions'
 import dataService from '../services/dataService'
 import { formatLabel } from '../utils/formatters'
 import { filtrarProductosPorUbicacion, getUbicacionesPermitidasParaProducto } from '../utils/productosPorUbicacion'
+
+const getCategoryColor = (category) => {
+  const cat = String(category || '').trim().toUpperCase();
+  if (!cat) return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
+  
+  const colors = [
+    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+    'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+    'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
+    'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
+    'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300',
+    'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+    'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
+    'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300',
+    'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-300',
+    'bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-300',
+    'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
+    'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300',
+    'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
+    'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
+    'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200',
+  ];
+  
+  // Custom hash with multiple shifts for high variance
+  let hash = 0;
+  for (let i = 0; i < cat.length; i++) {
+    const char = cat.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = (hash ^ (hash >> 3)) * (i + 1); // Add position-based noise
+  }
+  
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
+};
 
 export default function Productos() {
   const toast = useToastStore()
@@ -27,6 +62,12 @@ export default function Productos() {
   const [selectedProducto, setSelectedProducto] = useState(null)
   const [ubicacionFilter, setUbicacionFilter] = useState('')
   const [empresaFilter, setEmpresaFilter] = useState('')
+  
+  // States Modal Importación Excel
+  const [modalImport, setModalImport] = useState(false)
+  const [previewData, setPreviewData] = useState(null)
+  const [importando, setImportando] = useState(false)
+  const fileRef = useRef()
 
   const { hasPermission } = useAuthStore()
   const { canEdit } = usePermissions()
@@ -85,8 +126,10 @@ export default function Productos() {
 
   // Mutation para crear producto
   const createMutation = useMutation({
-    mutationFn: (data) => {
-      return dataService.createProducto(data)
+    mutationFn: async (data) => {
+      const res = await dataService.createProducto(data)
+      if (!res.success) throw new Error(res.message)
+      return res
     },
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['productos'] })
@@ -102,8 +145,10 @@ export default function Productos() {
 
   // Mutation para actualizar producto
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => {
-      return dataService.updateProducto(id, data)
+    mutationFn: async ({ id, data }) => {
+      const res = await dataService.updateProducto(id, data)
+      if (!res.success) throw new Error(res.message)
+      return res
     },
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['productos'] })
@@ -119,7 +164,11 @@ export default function Productos() {
 
   // Mutation para eliminar producto
   const deleteMutation = useMutation({
-    mutationFn: (id) => dataService.deleteProducto(id),
+    mutationFn: async (id) => {
+      const res = await dataService.deleteProducto(id)
+      if (!res.success) throw new Error(res.message)
+      return res
+    },
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['productos'] })
       queryClient.invalidateQueries({ queryKey: ['inventario'] })
@@ -218,6 +267,136 @@ export default function Productos() {
     setSelectedProducto(null)
   }
 
+  // LÓGICA IMPORTAR/ACTUALIZAR DESDE EXCEL ──────────────────────────────────
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    try {
+      const buffer = await file.arrayBuffer()
+      const wb = XLSX.read(buffer, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1 })
+      
+      if (data.length < 2) throw new Error("El archivo está vacío o sin datos.")
+
+      const headers = data[0].map(h => String(h).toLowerCase().trim())
+      const idxId = headers.findIndex(h => h.includes('id interno') || h === 'id')
+      const idxNombre = headers.findIndex(h => h.includes('nombre') || h.includes('producto'))
+      const idxCodigo = headers.findIndex(h => h.includes('codigo') || h.includes('código'))
+      const idxCosto = headers.findIndex(h => h === 'costo unitario' || h === 'costo')
+      const idxCostoNuevo = headers.findIndex(h => h.includes('costo nuevo'))
+      const idxUnidad = headers.findIndex(h => h.includes('unidad'))
+      const idxStockMin = headers.findIndex(h => h.includes('stock min') || h.includes('stock mín'))
+      const idxTipoConteo = headers.findIndex(h => h.includes('frecuencia') || h.includes('tipo conteo'))
+      const idxCategoria = headers.findIndex(h => h.includes('categoria') || h.includes('categoría'))
+      const idxEspecificacion = headers.findIndex(h => h.includes('especificacion') || h.includes('especificación'))
+
+      if (idxId === -1 && idxNombre === -1) {
+        throw new Error("El archivo debe contener al menos la columna 'ID Interno' o 'Nombre'")
+      }
+
+      // Filtramos filas que tengan al menos ID o Nombre
+      const validRows = data.slice(1).filter(r => (idxId !== -1 && r[idxId]) || (idxNombre !== -1 && r[idxNombre]))
+
+      const previewArr = validRows.map(row => {
+        const id = idxId !== -1 ? (row[idxId] || null) : null
+        const nombre = idxNombre !== -1 ? row[idxNombre] : null
+        const codigo_legible = idxCodigo !== -1 ? row[idxCodigo] : null
+        const costo_unidad = idxCostoNuevo !== -1 && row[idxCostoNuevo] !== undefined ? row[idxCostoNuevo] : 
+                             (idxCosto !== -1 && row[idxCosto] !== undefined ? row[idxCosto] : undefined)
+        const unidad_medida = idxUnidad !== -1 ? row[idxUnidad] : undefined
+        const stock_minimo = idxStockMin !== -1 && row[idxStockMin] !== undefined ? parseInt(row[idxStockMin]) : undefined
+        const frecuencia_inventario = idxTipoConteo !== -1 ? row[idxTipoConteo] : undefined
+        const categoria = idxCategoria !== -1 ? row[idxCategoria] : undefined
+        const especificacion = idxEspecificacion !== -1 ? row[idxEspecificacion] : undefined
+
+        const existe = (id ? productos.find(p => String(p.id).trim() === String(id).trim()) : null) || 
+                       (nombre ? productos.find(p => String(p.nombre).trim().toLowerCase() === String(nombre).trim().toLowerCase()) : null)
+        
+        let accion = existe ? 'ACTUALIZAR' : 'NUEVO'
+        if (accion === 'NUEVO' && !nombre) {
+          accion = 'ERROR (Falta Nombre)'
+        }
+        
+        return {
+          id: id ? String(id).trim() : (existe ? String(existe.id).trim() : null),
+          nombre: nombre || (existe ? existe.nombre : '—'),
+          codigo_legible,
+          costo_unidad: costo_unidad !== undefined ? parseFloat(costo_unidad) || 0 : undefined,
+          unidad_medida,
+          stock_minimo: stock_minimo !== undefined && !isNaN(stock_minimo) ? stock_minimo : undefined,
+          frecuencia_inventario,
+          categoria,
+          especificacion,
+          accion,
+          original: existe || null
+        }
+      })
+      setPreviewData(previewArr)
+    } catch (err) {
+      toast.error('Error', `Error al leer Excel: ${err.message}`)
+    }
+  }
+
+  const handleDescargarPlantilla = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['ID Interno', 'Código Legible', 'Nombre', 'Especificacion', 'Costo Unitario', 'Unidad Medida', 'Stock Minimo', 'Tipo Conteo', 'Categoria'],
+      ['', 'PRD-001', 'Ejemplo Producto', 'Caja de 10', 15.50, 'kg', 5, 'MENSUAL', 'Insumos']
+    ])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Importar')
+    XLSX.writeFile(wb, 'plantilla_productos.xlsx')
+  }
+
+  const handleConfirmarImport = async () => {
+    if (!previewData?.length) return
+    setImportando(true)
+    let exitos = 0
+    let erroresList = []
+    try {
+      for (const item of previewData) {
+        if (item.accion.includes('ERROR')) {
+          erroresList.push(`${item.nombre || 'Fila s/nombre'} (Dato faltante)`)
+          continue
+        }
+        
+        const dataPayload = {
+          ...(item.nombre && { nombre: item.nombre }),
+          ...(item.codigo_legible && { codigo_legible: item.codigo_legible }),
+          ...(item.costo_unidad !== undefined && { costo_unidad: item.costo_unidad }),
+          ...(item.unidad_medida && { unidad_medida: item.unidad_medida }),
+          ...(item.stock_minimo !== undefined && { stock_minimo: item.stock_minimo }),
+          ...(item.especificacion && { especificacion: item.especificacion }),
+          ...(item.frecuencia_inventario && { frecuencia_inventario: item.frecuencia_inventario }),
+          ...(item.categoria && { categoria: item.categoria })
+        }
+        try {
+          if (item.accion === 'ACTUALIZAR') {
+            await dataService.updateProducto(item.id, dataPayload)
+          } else {
+            await dataService.createProducto(dataPayload)
+          }
+          exitos++
+        } catch (e) { 
+          erroresList.push(`${item.nombre || item.id} (Fallo al guardar)`) 
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ['productos'] })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
+      
+      if (erroresList.length > 0) {
+        const trunc = erroresList.length > 4 ? erroresList.slice(0, 4).join(', ') + ` ...y ${erroresList.length - 4} más` : erroresList.join(', ')
+        toast.error('Importación con observaciones', `${exitos} exitosos. Errores en: ${trunc}`)
+      } else {
+        toast.success('Importación finalizada', `${exitos} procesados.`)
+      }
+      
+      setModalImport(false)
+      setPreviewData(null)
+    } finally { setImportando(false) }
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
   const categorias = [...new Set(productos.map(item => item.categoria).filter(Boolean))]
   const tiposConteo = [...new Set(productos.map(item => item.frecuencia_inventario).filter(Boolean))]
   const especificaciones = [...new Set(productos.map(item => item.especificacion).filter(Boolean))]
@@ -257,15 +436,19 @@ export default function Productos() {
               </div>
               <p className="text-white/90">Gestiona el catálogo completo de productos</p>
             </div>
-            <Button
-              variant="white"
-              onClick={() => setShowForm(true)}
-              disabled={!canWriteProductos}
-              title={!canWriteProductos ? 'Sin permisos de escritura' : undefined}
-            >
-              <Plus size={20} className="mr-2" />
-              Nuevo Producto
-            </Button>
+            <div className="flex items-center gap-3">
+
+              <Button
+                variant="white"
+                className="shadow-sm h-11"
+                onClick={() => setShowForm(true)}
+                disabled={!canWriteProductos}
+                title={!canWriteProductos ? 'Sin permisos de escritura' : undefined}
+              >
+                <Plus size={20} className="mr-2" />
+                Nuevo Producto
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -299,6 +482,16 @@ export default function Productos() {
             </select>
           </div>
 
+          {canWriteProductos && (
+            <Button
+              variant="outline"
+              className="md:w-auto"
+              onClick={() => { setModalImport(true); setPreviewData(null); if (fileRef.current) fileRef.current.value = '' }}
+            >
+              <Upload size={20} className="mr-2" />
+              Importar
+            </Button>
+          )}
           <Button
             variant="outline"
             className="md:w-auto"
@@ -307,15 +500,6 @@ export default function Productos() {
           >
             <Download size={20} className="mr-2" />
             Exportar
-          </Button>
-          <Button
-            variant="outline"
-            className="md:w-auto"
-            onClick={handleLimpiarFiltros}
-            disabled={activeFilters === 0}
-          >
-            <X size={20} className="mr-2" />
-            Limpiar Filtros
           </Button>
         </div>
 
@@ -459,7 +643,11 @@ export default function Productos() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm text-slate-600 dark:text-slate-400">{item.especificacion || '-'}</span>
+                      <span className="text-sm text-slate-600 dark:text-slate-400">
+                        {item.purchase_unit_qty
+                          ? `${item.purchase_unit_qty}${(item.unidad_medida || '').toLowerCase()}`
+                          : (item.especificacion || '-')}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm text-slate-600 dark:text-slate-400">{item.unidad_medida}</span>
@@ -473,8 +661,8 @@ export default function Productos() {
                       <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{item.stock_minimo || 0}</span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full text-xs font-medium">
-                        {item.categoria}
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${getCategoryColor(item.categoria)}`}>
+                        {item.categoria || 'SIN CATEGORÍA'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -567,6 +755,123 @@ export default function Productos() {
           onSave={handleSave}
           isLoading={isSaving}
         />
+      )}
+
+      {/* Modal: Importar/Actualizar Excel */}
+      {modalImport && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="relative overflow-hidden bg-gradient-ocean p-6 shrink-0 rounded-t-3xl">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16" />
+              <div className="relative z-10 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <FileSpreadsheet className="text-white" size={24} />
+                  <h3 className="text-xl font-bold text-white">Importar Productos</h3>
+                </div>
+                <button onClick={() => setModalImport(false)} className="p-2 hover:bg-white/20 rounded-xl transition-colors">
+                  <X size={20} className="text-white" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 space-y-6">
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-5 rounded-2xl border border-blue-100 dark:border-blue-800/30 text-blue-800 dark:text-blue-300">
+                <h4 className="font-bold flex items-center gap-2 mb-2"><CheckCircle size={16} /> Instrucciones Inteligentes</h4>
+                <div className="text-sm space-y-2 ml-6">
+                  <p><strong>Para Crear:</strong> Deja "ID Interno" vacío. <strong>(Obligatorio: Nombre)</strong></p>
+                  <p><strong>Para Actualizar Masivamente:</strong> Coloca el "ID Interno" de tus productos. Puedes dejar vacías las columnas en las que no haya cambios, usando el Excel para actualizar solo precios o stocks mínimos.</p>
+                  <p className="text-xs pt-2 text-blue-600 dark:text-blue-400">Columnas clave: <span className="font-mono bg-blue-100 dark:bg-blue-800/50 px-1.5 py-0.5 rounded text-[11px]">ID Interno | ... | Costo Unitario | Unidad Medida | Stock Minimo | Tipo Conteo | Categoria</span></p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <button onClick={handleDescargarPlantilla} className="flex items-center gap-2 px-4 py-2 text-sm font-bold border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition-all shadow-sm">
+                  <Download size={16} /> Descargar plantilla
+                </button>
+                <div className="flex-1 bg-slate-50 dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl px-4 py-2 relative hover:border-primary-500 transition-colors cursor-pointer">
+                  <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                  <div className="flex items-center justify-center gap-2 text-sm text-slate-500 font-medium">
+                    <Upload size={16} /> {fileRef.current?.files?.[0]?.name || 'Haz clic para seleccionar o arrastra tu archivo Excel aquí'}
+                  </div>
+                </div>
+              </div>
+              
+              {previewData && (
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  <div className="flex items-center justify-between mb-3 border-t border-slate-200 dark:border-slate-700 pt-6">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle size={18} className="text-green-600 shadow-sm rounded-full" />
+                      <h4 className="font-bold text-slate-800 dark:text-slate-200 text-lg">Resultados del Análisis</h4>
+                    </div>
+                    <span className="px-3 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold rounded-full">{previewData.length} productos</span>
+                  </div>
+                  
+                  <div className="max-h-72 overflow-y-auto border border-slate-200 dark:border-slate-600 rounded-2xl shadow-inner bg-slate-50/50 dark:bg-slate-800/50">
+                    <table className="w-full text-sm">
+                      <thead className="bg-white dark:bg-slate-700 sticky top-0 shadow-sm z-10 border-b border-slate-200 dark:border-slate-600">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-28">Acción</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Producto (Nombre)</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">ID Inteligente</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Datos Detectados</th>
+                          <th className="px-2 py-3 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50 bg-white dark:bg-slate-800">
+                        {previewData.map((r, i) => (
+                          <tr key={i} className="group hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                            <td className="px-4 py-3">
+                              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider ${r.accion === 'ACTUALIZAR' ? 'bg-amber-100 text-amber-700 border border-amber-200' : r.accion.includes('ERROR') ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-green-100 text-green-700 border border-green-200'}`}>
+                                {r.accion}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">
+                              <span className="block">{r.nombre}</span>
+                              {r.especificacion && <span className="block text-xs font-normal text-slate-500">{r.especificacion}</span>}
+                              
+                              {r.accion === 'ACTUALIZAR' && r.original && (
+                                <div className="mt-1.5 p-1.5 bg-slate-100 dark:bg-slate-900/50 rounded-lg text-[10px] text-slate-500 font-normal">
+                                  <span className="font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">Versión Actual (BD)</span>
+                                  {r.original.nombre} {r.original.especificacion ? `(${r.original.especificacion})` : ''} • {r.original.unidad_medida || 'S/U'}
+                                </div>
+                              )}
+                              
+                              {r.accion.includes('ERROR') && <span className="block text-[10px] text-red-500 font-normal mt-1">Falta nombre para la creación.</span>}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-xs text-slate-500 bg-slate-50 dark:bg-slate-900/50">{r.id || 'NUEVO'}</td>
+                            <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400 space-x-3">
+                              {r.costo_unidad !== undefined && <span className="inline-flex bg-white dark:bg-slate-700 px-2 py-1 rounded border border-slate-200 dark:border-slate-600 shadow-sm">Costo: <strong className="text-slate-800 dark:text-slate-200 ml-1">${Number(r.costo_unidad).toLocaleString()}</strong></span>}
+                              {r.unidad_medida && <span className="inline-flex bg-white dark:bg-slate-700 px-2 py-1 rounded border border-slate-200 dark:border-slate-600 shadow-sm">U: <strong className="text-slate-800 dark:text-slate-200 ml-1">{r.unidad_medida}</strong></span>}
+                              {r.stock_minimo !== undefined && <span className="inline-flex bg-white dark:bg-slate-700 px-2 py-1 rounded border border-slate-200 dark:border-slate-600 shadow-sm">Min: <strong className="text-slate-800 dark:text-slate-200 ml-1">{r.stock_minimo}</strong></span>}
+                              {r.frecuencia_inventario && <span className="inline-flex bg-white dark:bg-slate-700 px-2 py-1 rounded border border-slate-200 dark:border-slate-600 shadow-sm">Conteo: <strong className="text-slate-800 dark:text-slate-200 ml-1">{r.frecuencia_inventario}</strong></span>}
+                              {r.categoria && <span className="inline-flex bg-white dark:bg-slate-700 px-2 py-1 rounded border border-slate-200 dark:border-slate-600 shadow-sm">Cat: <strong className="text-slate-800 dark:text-slate-200 ml-1">{r.categoria}</strong></span>}
+                            </td>
+                            <td className="px-2 py-3 text-right">
+                              <button 
+                                onClick={() => setPreviewData(prev => prev.filter((_, idx) => idx !== i))}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg opacity-0 group-hover:opacity-100 transition-all outline-none"
+                                title="Descartar fila"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex justify-end gap-3 p-5 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 shrink-0">
+              <Button variant="outline" onClick={() => { setModalImport(false); setPreviewData(null) }}>Cancelar y Cerrar</Button>
+              <Button onClick={handleConfirmarImport} disabled={!previewData?.length || importando} loading={importando}>
+                <Save size={16} className="mr-2" /> Ejecutar Cambios ({previewData?.length || 0})
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -15,6 +15,8 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
     nombre: '',
     especificacion: '',
     unidad_medida: '',
+    purchase_unit_id: '',
+    purchase_unit_qty: '',
     costo_unidad: 0,
     stock_minimo: 10,
     frecuencia_inventario: '',
@@ -90,6 +92,8 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
         nombre: producto.nombre || '',
         especificacion: producto.especificacion || '',
         unidad_medida: producto.unidad_medida || 'KG',
+        purchase_unit_id: producto.purchase_unit_id || '',
+        purchase_unit_qty: producto.purchase_unit_qty || '',
         costo_unidad: producto.costo_unidad || 0,
         stock_minimo: producto.stock_minimo || producto.stock_minimo_default || 10,
         frecuencia_inventario: (producto.frecuencia_inventario || '').toLowerCase(),
@@ -309,35 +313,59 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
               />
             </div>
 
-            {/* Especificación */}
-            <div>
-              <Input
-                label="Especificación"
-                name="especificacion"
-                value={formData.especificacion}
-                onChange={handleChange}
-                placeholder="Ej: 3 KG, 900 ML"
-              />
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Tamaño, peso o presentación</p>
-            </div>
-
-            {/* Unidad de Medida */}
+            {/* Unidad de Compra */}
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Unidad de Medida <span className="text-danger-500">*</span>
+                Unidad de Compra <span className="text-danger-500">*</span>
               </label>
               <select
-                name="unidad_medida"
-                value={formData.unidad_medida}
-                onChange={handleChange}
+                name="purchase_unit_id"
+                value={formData.purchase_unit_id}
+                onChange={e => {
+                  const unitId = e.target.value
+                  const unit = (unidadesDB || []).find(u => u.id === unitId)
+                  setFormData(prev => ({
+                    ...prev,
+                    purchase_unit_id: unitId,
+                    unidad_medida: unit ? unit.nombre : prev.unidad_medida
+                  }))
+                }}
                 className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                 required
               >
                 <option value="">Seleccionar unidad...</option>
-                {unidadesOptions.map(unidad => (
-                  <option key={unidad} value={unidad}>{unidad}</option>
+                {(unidadesDB || []).filter(u => u.estado !== 'INACTIVO' && u.estado !== 'ELIMINADO').map(u => (
+                  <option key={u.id} value={u.id}>{u.nombre} ({u.abreviatura || ''})</option>
                 ))}
               </select>
+            </div>
+
+            {/* Cantidad por Unidad de Compra */}
+            <div>
+              <Input
+                label="Cantidad por unidad de compra"
+                name="purchase_unit_qty"
+                type="number"
+                value={formData.purchase_unit_qty}
+                onChange={e => {
+                  const qty = e.target.value
+                  const unit = (unidadesDB || []).find(u => u.id === formData.purchase_unit_id)
+                  const symbol = unit?.abreviatura || formData.unidad_medida || ''
+                  setFormData(prev => ({
+                    ...prev,
+                    purchase_unit_qty: qty,
+                    especificacion: qty ? `${qty} ${symbol}`.trim() : ''
+                  }))
+                }}
+                min="0"
+                step="any"
+                placeholder="ej: 3 (si la bolsa trae 3 kg)"
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                {formData.purchase_unit_qty && formData.purchase_unit_id
+                  ? `Etiqueta: ${formData.nombre || 'Producto'} ${formData.purchase_unit_qty}${((unidadesDB || []).find(u => u.id === formData.purchase_unit_id)?.abreviatura || '').toLowerCase()}`
+                  : 'Tamanio, peso o presentacion del producto'}
+              </p>
             </div>
 
             {/* Costo por Unidad */}
@@ -389,6 +417,7 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
                 <option value="quincenal">Quincenal</option>
                 <option value="mensual">Mensual</option>
                 <option value="todos">Todos los conteos</option>
+                <option value="no-inventariable">No Inventariable</option>
               </select>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Tipo de conteo en el que se incluye este producto</p>
             </div>

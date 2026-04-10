@@ -1,16 +1,17 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import {
   BookOpen, Plus, Search, Download, Upload, Edit2, Trash2,
   ChevronDown, ChevronUp, X, Save, Package, DollarSign,
-  FileSpreadsheet, CheckCircle, ArrowDownLeft,
-  MapPin, Clock, CheckCircle2, XCircle, Store
+  FileSpreadsheet, CheckCircle, ArrowDownLeft, ArrowRightLeft,
+  MapPin, Clock, CheckCircle2, XCircle, Store, SlidersHorizontal
 } from 'lucide-react'
 import { useSalidasOdoo } from '../hooks/useSalidasOdoo'
 import { useToastStore } from '../stores/toastStore'
 import { usePermissions } from '../hooks/usePermissions'
 import dataService from '../services/dataService'
+import { buildEquivalenceMap, getCompatibleUnits, calcCostInConsumptionUnit } from '../utils/unitConversion'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import Button from '../components/common/Button'
 
@@ -150,6 +151,9 @@ function TabRecetas() {
   const readOnly = isReadOnly('recetarios')
 
   const [busqueda, setBusqueda] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState('todas') // 'todas', 'con_receta', 'sin_receta'
+  const [odooProducts, setOdooProducts] = useState([])
+  const [sincronizando, setSincronizando] = useState(false)
   const [expandido, setExpandido] = useState(null)
   const [modalForm, setModalForm] = useState(false)
   const [modalImport, setModalImport] = useState(false)
@@ -185,6 +189,64 @@ function TabRecetas() {
     finally { setImportando(false) }
   }
 
+  const handleSincronizarProductos = async () => {
+    setSincronizando(true)
+    try {
+      const response = await dataService.getOdooProducts()
+      setOdooProducts(response.products || [])
+      toast.success('Sincronizado', `${response.products?.length || 0} productos de Odoo cargados`)
+    } catch (error) {
+      console.error('Error sincronizando productos Odoo:', error)
+      toast.error('Error', 'No se pudieron traer los productos de Odoo')
+    } finally {
+      setSincronizando(false)
+    }
+  }
+
+  // Lógica de filtrado y comparación
+  const displayData = useMemo(() => {
+    const list = recetarios || []
+    const b = busqueda.toLowerCase()
+    
+    // 1. Calcular los 'Con Receta' (Emparejados) primero y recalcular sus costos dinámicamente
+    const listConReceta = list.filter(r => {
+      const activo = r.activo !== false
+      const matchesSearch = !busqueda || r.nombre?.toLowerCase().includes(b) || r.sku_odoo?.toLowerCase().includes(b)
+      return activo && matchesSearch
+    }).map(r => {
+      let nuevoCostoTotal = 0
+      const ingredientesActualizados = (r.ingredientes || []).map(ing => {
+        const prodMatch = productosParaImport.find(p => p.id === ing.producto_id)
+        const costoActual = prodMatch ? (parseFloat(prodMatch.costo_unidad) || 0) : (parseFloat(ing.costo_unitario) || 0)
+        nuevoCostoTotal += costoActual * (parseFloat(ing.cantidad) || 0)
+        return { ...ing, costo_unitario: costoActual }
+      })
+      return { ...r, ingredientes: ingredientesActualizados, costo_total: nuevoCostoTotal }
+    })
+
+    // 2. Calcular los 'Sin Receta' (Pendientes virtuales desde Odoo)
+    const skusConfigurados = new Set(list.filter(r => r.activo !== false).map(r => r.sku_odoo?.toUpperCase()))
+    const listSinReceta = odooProducts.filter(p => {
+      const sku = (p.default_code || '').toUpperCase()
+      const matchesSearch = !busqueda || p.name?.toLowerCase().includes(b) || sku.includes(b)
+      return matchesSearch && !skusConfigurados.has(sku)
+    }).map(p => ({
+      id: `odoo-${p.id}`,
+      nombre: p.display_name || p.name,
+      sku_odoo: p.default_code || `ID:${p.id}`,
+      id_odoo: p.id,
+      esVirtual: true,
+      ingredientes: []
+    }))
+
+    // 3. Retornar según el filtro seleccionado
+    if (filtroEstado === 'con_receta') return listConReceta
+    if (filtroEstado === 'sin_receta') return listSinReceta
+    
+    // Si es 'todas', combinamos ambas listas
+    return [...listConReceta, ...listSinReceta]
+  }, [recetarios, busqueda, filtroEstado, odooProducts])
+
   const handleDescargarPlantilla = () => {
     const ws = XLSX.utils.aoa_to_sheet([
       ['Producto', 'SKU_Odoo', 'Ingrediente', 'SKU_Ing (codigo_legible)', 'Cantidad', 'Unidad', 'Costo_Unit'],
@@ -205,38 +267,66 @@ function TabRecetas() {
   return (
     <div className="space-y-5">
       {/* Actions bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="relative flex-1 w-full sm:max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input type="text" placeholder="Buscar receta por nombre o SKU..."
-            value={busqueda} onChange={e => setBusqueda(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="relative flex-1 w-full sm:max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input type="text" placeholder="Buscar por nombre o SKU..."
+              value={busqueda} onChange={e => setBusqueda(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline"
+              size="sm"
+              onClick={handleSincronizarProductos}
+              loading={sincronizando}
+              disabled={sincronizando}
+            >
+              <ArrowRightLeft size={15} className={`mr-1.5 ${sincronizando ? 'animate-spin' : ''}`} /> Sincronizar Odoo
+            </Button>
+            <Button 
+              variant="outline"
+              size="sm"
+              onClick={() => { const c = exportarRecetarios(displayData); if (c) toast.success('Exportado', `${c} recetas exportadas`) }}
+            >
+              <Download size={15} className="mr-1.5" /> Exportar
+            </Button>
+            {canWrite && (
+              <>
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setModalImport(true); setPreview(null) }}
+                >
+                  <Upload size={15} className="mr-1.5" /> Importar
+                </Button>
+                <Button size="sm" onClick={() => { setEditando(null); setModalForm(true) }}>
+                  <Plus size={15} className="mr-1.5" /> Nueva Receta
+                </Button>
+              </>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => { const c = exportarRecetarios(recetasFiltradas); if (c) toast.success('Exportado', `${c} recetas exportadas`) }}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition-colors">
-            <Download size={15} /> Exportar
-          </button>
-          {canWrite && (
-            <>
-              <button onClick={() => { setModalImport(true); setPreview(null) }}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition-colors">
-                <Upload size={15} /> Importar
-              </button>
-              <Button size="sm" onClick={() => { setEditando(null); setModalForm(true) }}>
-                <Plus size={15} className="mr-1.5" /> Nueva Receta
-              </Button>
-            </>
-          )}
+
+        {/* Filtros de estado */}
+        <div className="flex p-1 bg-slate-100 dark:bg-slate-800/50 rounded-2xl w-fit border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+          <button onClick={() => setFiltroEstado('todas')} className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all ${filtroEstado === 'todas' ? 'bg-white dark:bg-slate-700 text-primary-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Todas</button>
+          <button onClick={() => setFiltroEstado('sin_receta')} className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all ${filtroEstado === 'sin_receta' ? 'bg-white dark:bg-slate-700 text-danger-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Pendiente</button>
+          <button onClick={() => setFiltroEstado('con_receta')} className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all ${filtroEstado === 'con_receta' ? 'bg-white dark:bg-slate-700 text-green-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Completado</button>
         </div>
       </div>
-      <p className="text-xs text-slate-500">{recetasFiltradas.length} receta{recetasFiltradas.length !== 1 ? 's' : ''}</p>
+      <p className="text-xs text-slate-500">{displayData.length} item{displayData.length !== 1 ? 's' : ''} {filtroEstado === 'sin_receta' ? 'pendientes de configuración' : 'en total'}</p>
 
       {/* Table */}
-      {isLoading ? <LoadingSpinner text="Cargando recetas..." /> : recetasFiltradas.length === 0 ? (
+      {isLoading ? <LoadingSpinner text="Cargando recetas..." /> : displayData.length === 0 ? (
         <div className="py-12 text-center">
           <BookOpen size={48} className="mx-auto text-slate-300 mb-3" />
-          <p className="text-slate-500">{busqueda ? 'Sin resultados' : 'No hay recetas. Crea una nueva o importa desde Excel.'}</p>
+          <p className="text-slate-500">
+            {busqueda ? 'Sin resultados para esta búsqueda.' : 
+             filtroEstado === 'sin_receta' ? '¡Increíble! Todos tus productos de Odoo están completados.' :
+             'No hay recetas. Crea una nueva o importa desde Excel.'}
+          </p>
           {canWrite && !busqueda && (
             <Button variant="primary" className="mt-4" onClick={() => { setEditando(null); setModalForm(true) }}>
               <Plus size={16} className="mr-1.5" /> Nueva Receta
@@ -257,11 +347,12 @@ function TabRecetas() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {recetasFiltradas.map(rec => (
+              {displayData.map(rec => (
                 <RecetaRow key={rec.id} rec={rec} expandido={expandido} setExpandido={setExpandido}
                   canWrite={canWrite} canDel={canDel}
                   onEdit={() => { setEditando(rec); setModalForm(true) }}
-                  onDelete={() => handleEliminar(rec.id, rec.nombre)} />
+                  onDelete={() => handleEliminar(rec.id, rec.nombre)}
+                  onCrear={() => { setEditando({ nombre: rec.nombre, sku_odoo: rec.sku_odoo }); setModalForm(true) }} />
               ))}
             </tbody>
           </table>
@@ -287,7 +378,7 @@ function TabRecetas() {
 
 // ─── Receta Row (expandable) ──────────────────────────────────────────────────
 
-function RecetaRow({ rec, expandido, setExpandido, canWrite, canDel, onEdit, onDelete }) {
+function RecetaRow({ rec, expandido, setExpandido, canWrite, canDel, onEdit, onDelete, onCrear }) {
   const isOpen = expandido === rec.id
   return (
     <>
@@ -301,12 +392,29 @@ function RecetaRow({ rec, expandido, setExpandido, canWrite, canDel, onEdit, onD
           </div>
         </td>
         <td className="px-4 py-3"><span className="px-2.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-semibold">{rec.sku_odoo}</span></td>
-        <td className="px-4 py-3 text-center"><span className="px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full text-xs font-semibold">{rec.ingredientes?.length || 0}</span></td>
+        <td className="px-4 py-3 text-center">
+          <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${(rec.ingredientes?.length || 0) > 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'}`}>
+            {rec.ingredientes?.length || 0}
+          </span>
+        </td>
         <td className="px-4 py-3 text-right font-bold text-sm text-slate-900 dark:text-slate-100">{fmtCosto(rec.costo_total)}</td>
         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
           <div className="flex justify-end gap-1">
-            <button onClick={onEdit} disabled={!canWrite} className={`p-1.5 rounded-lg transition-colors ${canWrite ? 'text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30' : 'text-slate-300 cursor-not-allowed'}`}><Edit2 size={14} /></button>
-            {canDel && <button onClick={onDelete} className="p-1.5 text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20 rounded-lg transition-colors"><Trash2 size={14} /></button>}
+            {rec.esVirtual ? (
+              <button 
+                onClick={onCrear} 
+                title="Configurar Receta"
+                disabled={!canWrite}
+                className={`p-1.5 rounded-lg transition-colors ${canWrite ? 'text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30' : 'text-slate-300 cursor-not-allowed'}`}
+              >
+                <SlidersHorizontal size={15} strokeWidth={2.5} />
+              </button>
+            ) : (
+              <>
+                <button onClick={onEdit} disabled={!canWrite} className={`p-1.5 rounded-lg transition-colors ${canWrite ? 'text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30' : 'text-slate-300 cursor-not-allowed'}`}><Edit2 size={14} /></button>
+                {canDel && <button onClick={onDelete} className="p-1.5 text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20 rounded-lg transition-colors"><Trash2 size={14} /></button>}
+              </>
+            )}
           </div>
         </td>
       </tr>
@@ -359,6 +467,9 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
   const [prodSearchTerm, setProdSearchTerm] = useState('')
 
   const { data: productos = [], isLoading: loadingProductos } = useQuery({ queryKey: ['productos'], queryFn: () => dataService.getProductos() })
+  const { data: unidadesDB = [] } = useQuery({ queryKey: ['config-unidades'], queryFn: () => dataService.getUnidadesMedida() })
+  const { data: equivalencias = [] } = useQuery({ queryKey: ['config-equivalencias'], queryFn: () => dataService.getUnitEquivalences() })
+  const eqMap = useMemo(() => buildEquivalenceMap(equivalencias), [equivalencias])
   const productosActivos = productos.filter(p => p.estado !== 'INACTIVO' && p.estado !== 'ELIMINADO')
   const productosFiltrados = prodSearchTerm.length > 1
     ? productosActivos.filter(p =>
@@ -372,14 +483,15 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const addIngrediente = () => {
-    setForm(f => ({ ...f, ingredientes: [...f.ingredientes, { nombre: '', sku: '', producto_id: null, especificacion: '', cantidad: 0, unidad_medida: '', costo_unitario: 0 }] }))
+    setForm(f => ({ ...f, ingredientes: [...f.ingredientes, { nombre: '', sku: '', producto_id: null, especificacion: '', cantidad: 0, unidad_medida: '', costo_unitario: 0, consumption_unit_id: '', purchase_unit_id: '' }] }))
     setTimeout(() => { setActiveSearchRow(form.ingredientes.length); setProdSearchTerm('') }, 50)
   }
 
   const selectProductForIngrediente = (i, prod) => {
     setForm(f => ({ ...f, ingredientes: f.ingredientes.map((ing, idx) => idx === i ? {
       ...ing, nombre: prod.nombre, sku: prod.codigo_legible || prod.id, producto_id: prod.id,
-      especificacion: prod.especificacion || '', unidad_medida: prod.unidad_medida || '', costo_unitario: prod.costo_unidad || 0
+      especificacion: prod.especificacion || '', unidad_medida: prod.unidad_medida || '', costo_unitario: prod.costo_unidad || 0,
+      purchase_unit_id: prod.purchase_unit_id || '', consumption_unit_id: prod.purchase_unit_id || ''
     } : ing) }))
     setActiveSearchRow(null); setProdSearchTerm('')
   }
@@ -389,9 +501,17 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
     setActiveSearchRow(i); setProdSearchTerm('')
   }
 
+  const updateConsumptionUnit = (i, unitId) => {
+    setForm(f => ({ ...f, ingredientes: f.ingredientes.map((ing, idx) => {
+      if (idx !== i) return ing
+      const unit = unidadesDB.find(u => u.id === unitId)
+      return { ...ing, consumption_unit_id: unitId, unidad_medida: unit?.nombre || ing.unidad_medida }
+    }) }))
+  }
+
   const updateCantidad = (i, v) => {
-    const val = v === '' ? 0 : parseFloat(parseFloat(v).toFixed(3)) || 0
-    setForm(f => ({ ...f, ingredientes: f.ingredientes.map((ing, idx) => idx === i ? { ...ing, cantidad: val } : ing) }))
+    // Al guardar la cantidad como string temporal logramos que permita ingresar decimales ej: '0.01'
+    setForm(f => ({ ...f, ingredientes: f.ingredientes.map((ing, idx) => idx === i ? { ...ing, cantidad: v } : ing) }))
   }
 
   const removeIngrediente = (i) => {
@@ -400,10 +520,33 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
   }
 
   const handleSubmit = async () => {
-    if (!form.nombre || !form.sku_odoo) return
+    if (!form.nombre || !form.sku_odoo) {
+      toast.error('Campos incompletos', 'El nombre y SKU de Odoo son obligatorios')
+      return
+    }
     setGuardando(true)
-    try { receta ? await onUpdate(receta.id, form) : await onCreate(form) }
-    finally { setGuardando(false) }
+    
+    // Parsear cantidades de string a números formales antes de subirlos a Firebase
+    const formPreparado = {
+      ...form, 
+      ingredientes: form.ingredientes.map(ing => ({ 
+        ...ing, 
+        cantidad: parseFloat(parseFloat(ing.cantidad).toFixed(3)) || 0 
+      }))
+    }
+
+    try { 
+      if (receta && receta.id) {
+        await onUpdate(receta.id, formPreparado) 
+      } else {
+        await onCreate(formPreparado) 
+      }
+    } catch (error) {
+      console.error('Error guardando receta:', error)
+      toast.error('Error', 'Hubo un problema al guardar la receta')
+    } finally { 
+      setGuardando(false) 
+    }
   }
 
   return (
@@ -513,8 +656,37 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
                             </div>
                           </td>
                           <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-400 truncate">{ing.especificacion || '—'}</td>
-                          <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-400">{ing.unidad_medida || '—'}</td>
-                          <td className="px-3 py-2.5 text-sm text-right font-medium text-slate-700 dark:text-slate-300">{fmtCosto(ing.costo_unitario)}</td>
+                          <td className="px-3 py-2.5">
+  {ing.purchase_unit_id ? (
+    <select
+      value={ing.consumption_unit_id || ing.purchase_unit_id || ''}
+      onChange={e => updateConsumptionUnit(i, e.target.value)}
+      disabled={readOnly}
+      className="w-full px-1.5 py-1 text-xs border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:ring-1 focus:ring-primary-500 disabled:opacity-60"
+    >
+      {getCompatibleUnits(ing.purchase_unit_id, eqMap).map(uid => {
+        const u = unidadesDB.find(u => u.id === uid)
+        return u ? <option key={uid} value={uid}>{u.abreviatura || u.nombre}</option> : null
+      })}
+    </select>
+  ) : (
+    <span className="text-xs text-slate-500">{ing.unidad_medida || '—'}</span>
+  )}
+</td>
+                          <td className="px-3 py-2.5 text-right">
+                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{fmtCosto(ing.costo_unitario)}</span>
+                            {ing.purchase_unit_id && ing.consumption_unit_id && ing.consumption_unit_id !== ing.purchase_unit_id && (
+                              <p className="text-[10px] text-blue-500 mt-0.5">
+                                {(() => {
+                                  const prod = productosActivos.find(p => p.id === ing.producto_id)
+                                  const qty = prod?.purchase_unit_qty || 1
+                                  const cost = calcCostInConsumptionUnit(ing.costo_unitario, qty, ing.purchase_unit_id, ing.consumption_unit_id, eqMap)
+                                  const u = unidadesDB.find(u => u.id === ing.consumption_unit_id)
+                                  return cost > 0 ? `${fmtCosto(cost)}/${u?.abreviatura || ''}` : ''
+                                })()}
+                              </p>
+                            )}
+                          </td>
                           <td className="px-3 py-2.5">
                             <input type="number" value={ing.cantidad || ''} onChange={e => updateCantidad(i, e.target.value)}
                               disabled={readOnly} min={0} step="0.001" placeholder="0.000"
