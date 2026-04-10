@@ -69,9 +69,9 @@ function getModulePermissionLevel(state, modulo) {
     }
   }
 
-  // 3. Fallback: admin roles get total
-  const rolName = cachedRole?.nombre || user.rol
-  if (rolName === 'Admin Global' || rolName === 'Administrador' || rolName === 'Admin Empresa') {
+  // 3. Fallback: admin roles get total (robust check — covers any casing/variant)
+  const rolName = String(cachedRole?.nombre || user.rol || '').toUpperCase()
+  if (rolName.includes('ADMIN') || rolName === 'ADMINISTRADOR') {
     return 'total'
   }
 
@@ -99,7 +99,10 @@ export const useAuthStore = create(
               user,
               token,
               isAuthenticated: true,
-              cachedRole: user.roleData || null
+            // Preserve persisted cachedRole if user.roleData is not available.
+            // This prevents a 1-2s flash where modules disappear while
+            // waiting for Firebase to re-fetch the role.
+            cachedRole: user.roleData || get().cachedRole || null
             })
           }
         } catch (error) {
@@ -173,9 +176,17 @@ export const useAuthStore = create(
         }
 
         // 3. Fallback: admin roles get full access
-        const rolName = cachedRole?.nombre || user.rol
-        if (rolName === 'Admin Global' || rolName === 'Administrador' || rolName === 'Admin Empresa') {
+        const rolName = String(cachedRole?.nombre || user.rol || '').toUpperCase()
+        if (rolName === 'ADMIN GLOBAL' || rolName === 'ADMINISTRADOR' || rolName === 'ADMIN EMPRESA' || rolName === 'ADMIN_GLOBAL' || rolName === 'ADMIN_EMPRESA') {
           return true
+        }
+
+        // 4. Critical Fix: Ensure 'salidas_odoo' shows up immediately if the role allows it (special core handling)
+        if (modulo === 'salidas_odoo' && accion === 'ver') {
+          const roleData = cachedRole || user.roleData
+          if (roleData?.permisos?.salidas_odoo?.ver || roleData?.permisos?.salidas_odoo === 'total' || roleData?.permisos?.salidas_odoo === 'lectura') {
+            return true
+          }
         }
 
         return false
@@ -219,7 +230,8 @@ export const useAuthStore = create(
         const { cachedRole } = get()
         const permisos = cachedRole?.permisos || user.permisos
         if (!permisos || typeof permisos !== 'object') {
-          return user.rol === 'ADMIN_GLOBAL' || user.rol === 'Administrador' || user.rol === 'ADMIN_EMPRESA'
+          const rolName = String(user.rol || '').toUpperCase()
+          return rolName === 'ADMIN_GLOBAL' || rolName === 'ADMINISTRADOR' || rolName === 'ADMIN_EMPRESA'
         }
         return Object.values(permisos).some(m =>
           (typeof m === 'object' && m !== null) ? m.eliminar === true : m === 'total'
@@ -234,9 +246,9 @@ export const useAuthStore = create(
         const user = get().user
         if (!user) return []
 
-        const rolName = get().cachedRole?.nombre || user.rol
+        const rolName = String(get().cachedRole?.nombre || user.rol || '').toUpperCase()
         // Admin roles get all modules
-        if (rolName === 'Admin Global' || rolName === 'Administrador' || rolName === 'Admin Empresa' ||
+        if (rolName === 'ADMIN GLOBAL' || rolName === 'ADMINISTRADOR' || rolName === 'ADMIN EMPRESA' ||
             rolName === 'ADMIN_GLOBAL' || rolName === 'ADMIN_EMPRESA') {
           return allModules
         }
@@ -255,9 +267,9 @@ export const useAuthStore = create(
         const user = get().user
         if (!user) return false
 
-        const rolName = get().cachedRole?.nombre || user.rol
+        const rolName = String(get().cachedRole?.nombre || user.rol || '').toUpperCase()
         // Admin roles always have permissions
-        if (rolName === 'Admin Global' || rolName === 'Administrador' || rolName === 'Admin Empresa' ||
+        if (rolName === 'ADMIN GLOBAL' || rolName === 'ADMINISTRADOR' || rolName === 'ADMIN EMPRESA' ||
             rolName === 'ADMIN_GLOBAL' || rolName === 'ADMIN_EMPRESA') {
           return true
         }
