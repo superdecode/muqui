@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Package, Plus, Edit2, Trash2, Search, Download, ChevronUp, ChevronDown, X, MapPin, Building2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import * as XLSX from 'xlsx'
 import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import ProductoForm from '../components/productos/ProductoForm'
@@ -149,8 +150,56 @@ export default function Productos() {
   }
 
   const handleExportar = () => {
-    // TODO: Implementar exportación de productos
-    toast.info('Exportar', 'Función de exportación en desarrollo')
+    if (filteredProductos.length === 0) {
+      toast.warning('Sin datos', 'No hay productos para exportar')
+      return
+    }
+
+    // Preparar datos para exportación
+    const dataToExport = filteredProductos.map(prod => ({
+      'ID Interno': prod.id || '',
+      'Código Legible': prod.codigo_legible || '',
+      'Nombre': prod.nombre || '',
+      'Especificación': prod.especificacion || '',
+      'Categoría': prod.categoria || '',
+      'Estado': prod.estado || '',
+      'Frecuencia Inventario': prod.frecuencia_inventario || '',
+      'Costo Unitario': prod.costo_unitario || 0,
+      'Costo Nuevo': prod.costo_nuevo || prod.costo_unitario || 0,
+      'Unidad Medida': prod.unidad_medida || '',
+      'Stock Mínimo': prod.stock_minimo || 0,
+      'Stock Máximo': prod.stock_maximo || 0,
+      'Proveedor': prod.proveedor || '',
+      'Ubicación': prod.ubicacion || ''
+    }))
+
+    // Crear workbook y worksheet
+    const ws = XLSX.utils.json_to_sheet(dataToExport)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Productos')
+
+    // Ajustar ancho de columnas
+    ws['!cols'] = [
+      { wch: 20 }, // ID Interno
+      { wch: 15 }, // Código Legible
+      { wch: 25 }, // Nombre
+      { wch: 20 }, // Especificación
+      { wch: 15 }, // Categoría
+      { wch: 12 }, // Estado
+      { wch: 18 }, // Frecuencia Inventario
+      { wch: 15 }, // Costo Unitario
+      { wch: 15 }, // Costo Nuevo
+      { wch: 12 }, // Unidad Medida
+      { wch: 12 }, // Stock Mínimo
+      { wch: 12 }, // Stock Máximo
+      { wch: 15 }, // Proveedor
+      { wch: 15 }  // Ubicación
+    ]
+
+    // Descargar archivo
+    const timestamp = new Date().toISOString().split('T')[0]
+    XLSX.writeFile(wb, `productos_${timestamp}.xlsx`)
+    toast.success('Exportado', `${filteredProductos.length} productos exportados correctamente`)
   }
 
   const handleLimpiarFiltros = () => {
@@ -369,6 +418,9 @@ export default function Productos() {
                   <th onClick={() => handleSort('unidad_medida')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Unidad<SortIcon column="unidad_medida" /></span>
                   </th>
+                  <th onClick={() => handleSort('costo_unidad')} className="px-6 py-4 text-right text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                    <span className="inline-flex items-center">Costo/Unidad<SortIcon column="costo_unidad" /></span>
+                  </th>
                   <th onClick={() => handleSort('stock_minimo')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Stock Mínimo<SortIcon column="stock_minimo" /></span>
                   </th>
@@ -411,6 +463,11 @@ export default function Productos() {
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm text-slate-600 dark:text-slate-400">{item.unidad_medida}</span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        {item.costo_unidad ? `$${Number(item.costo_unidad).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '-'}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{item.stock_minimo || 0}</span>
