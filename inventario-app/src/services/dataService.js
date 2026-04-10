@@ -344,7 +344,14 @@ const dataService = {
   },
   actualizarSolicitudesProcesadasSinCodigo: async () => {
     return await firestoreService.actualizarSolicitudesProcesadasSinCodigo()
-  }
+  },
+
+  // RECETARIOS
+  getRecetarios: async () => firestoreService.getRecetarios(),
+  createRecetario: async (data) => firestoreService.createRecetario(data),
+  updateRecetario: async (id, data) => firestoreService.updateRecetario(id, data),
+  deleteRecetario: async (id) => firestoreService.deleteRecetario(id),
+  batchCreateRecetarios: async (recetarios) => firestoreService.batchCreateRecetarios(recetarios)
 }
 
 export default dataService

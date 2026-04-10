@@ -1,5 +1,4 @@
 const xmlrpc = require('xmlrpc');
-const https = require('https');
 
 class OdooClient {
   constructor(url, db, username, password) {
@@ -12,102 +11,126 @@ class OdooClient {
     const urlObj = new URL(url);
     const isHttps = urlObj.protocol === 'https:';
 
-    this.client = xmlrpc.createSecureClient({
+    const createClient = isHttps ? xmlrpc.createSecureClient : xmlrpc.createClient;
+    this.client = createClient({
       host: urlObj.hostname,
       port: isHttps ? 443 : 80,
-      path: '/xmlrpc/2',
-      isSecure: isHttps,
-      rejectUnauthorized: false
+      path: '/xmlrpc/2/common',
+      rejectUnauthorized: false,
+    });
+
+    this.objectClient = (isHttps ? xmlrpc.createSecureClient : xmlrpc.createClient)({
+      host: urlObj.hostname,
+      port: isHttps ? 443 : 80,
+      path: '/xmlrpc/2/object',
+      rejectUnauthorized: false,
+    });
+  }
+
+  _call(client, method, params) {
+    return new Promise((resolve, reject) => {
+      client.methodCall(method, params, (error, value) => {
+        if (error) reject(new Error(String(error)));
+        else resolve(value);
+      });
     });
   }
 
   async authenticate() {
-    return new Promise((resolve, reject) => {
-      this.client.methodCall(
-        'common',
-        ['authenticate', this.db, this.username, this.password, {}],
-        (error, value) => {
-          if (error) {
-            reject(new Error(`Odoo auth failed: ${error}`));
-          } else {
-            this.uid = value;
-            resolve(value);
-          }
-        }
-      );
-    });
+    this.uid = await this._call(this.client, 'authenticate', [
+      this.db, this.username, this.password, {},
+    ]);
+    if (!this.uid) throw new Error('Odoo auth failed: invalid credentials');
+    return this.uid;
   }
 
   async callKW(model, method, args = [], kwargs = {}) {
     if (!this.uid) await this.authenticate();
-
-    return new Promise((resolve, reject) => {
-      this.client.methodCall(
-        'object',
-        ['execute_kw', this.db, this.uid, this.password, model, method, args, kwargs],
-        (error, value) => {
-          if (error) {
-            reject(new Error(`Odoo call failed on ${model}.${method}: ${error}`));
-          } else {
-            resolve(value);
-          }
-        }
-      );
-    });
+    return this._call(this.objectClient, 'execute_kw', [
+      this.db, this.uid, this.password, model, method, args, kwargs,
+    ]);
   }
 
+  // Enriquece un product_id con SKU de variante y SKU del template padre
+  async enrichProductSKUs(productIds) {
+    const products = await this.callKW('product.product', 'read', [productIds], {
+      fields: ['id', 'default_code', 'product_tmpl_id'],
+    });
+
+    const templateIds = [...new Set(products.map(p => p.product_tmpl_id[0]))];
+    const templates = await this.callKW('product.template', 'read', [templateIds], {
+      fields: ['id', 'default_code'],
+    });
+
+    const templateMap = Object.fromEntries(templates.map(t => [t.id, t.default_code]));
+
+    return Object.fromEntries(products.map(p => [
+      p.id,
+      {
+        productSKU: p.default_code || null,
+        productTemplateSKU: templateMap[p.product_tmpl_id[0]] || null,
+      },
+    ]));
+  }
+
+  // Obtiene líneas de una sale.order con SKU de variante + template
   async getOrderLines(orderId) {
-    const saleOrder = await this.callKW('sale.order', 'read', [[orderId]], { fields: ['order_line'] });
+    const saleOrder = await this.callKW('sale.order', 'read', [[orderId]], {
+      fields: ['order_line'],
+    });
+
     if (!saleOrder || saleOrder.length === 0) {
       throw new Error(`Sale order ${orderId} not found`);
     }
 
     const lineIds = saleOrder[0].order_line;
+    if (!lineIds || lineIds.length === 0) return [];
+
     const lines = await this.callKW('sale.order.line', 'read', [lineIds], {
-      fields: ['product_id', 'product_uom_qty', 'product_uom'],
+      fields: ['product_id', 'product_uom_qty', 'price_unit'],
     });
+
+    const productIds = lines.map(l => l.product_id[0]);
+    const skuMap = await this.enrichProductSKUs(productIds);
 
     return lines.map(line => ({
       productId: line.product_id[0],
       productName: line.product_id[1],
+      productSKU: skuMap[line.product_id[0]]?.productSKU || null,
+      productTemplateSKU: skuMap[line.product_id[0]]?.productTemplateSKU || null,
       quantity: line.product_uom_qty,
-      uom: line.product_uom[1],
+      priceUnit: line.price_unit,
     }));
   }
 
-  async getBOM(productId) {
-    const boms = await this.callKW('mrp.bom', 'search_read', [
-      [['product_id', '=', productId], ['active', '=', true]],
-    ], {
-      fields: ['bom_line_ids'],
-      limit: 1,
+  // Obtiene líneas de un pos.order con SKU de variante + template
+  async getPOSOrderLines(posOrderId) {
+    const posOrder = await this.callKW('pos.order', 'read', [[posOrderId]], {
+      fields: ['lines'],
     });
 
-    if (!boms || boms.length === 0) {
-      return [];
+    if (!posOrder || posOrder.length === 0) {
+      throw new Error(`POS order ${posOrderId} not found`);
     }
 
-    const bomLineIds = boms[0].bom_line_ids;
-    const bomLines = await this.callKW('mrp.bom.line', 'read', [bomLineIds], {
-      fields: ['product_id', 'product_qty'],
+    const lineIds = posOrder[0].lines;
+    if (!lineIds || lineIds.length === 0) return [];
+
+    const lines = await this.callKW('pos.order.line', 'read', [lineIds], {
+      fields: ['product_id', 'qty', 'price_unit'],
     });
 
-    return bomLines.map(line => ({
-      componentId: line.product_id[0],
-      componentName: line.product_id[1],
-      quantity: line.product_qty,
+    const productIds = lines.map(l => l.product_id[0]);
+    const skuMap = await this.enrichProductSKUs(productIds);
+
+    return lines.map(line => ({
+      productId: line.product_id[0],
+      productName: line.product_id[1],
+      productSKU: skuMap[line.product_id[0]]?.productSKU || null,
+      productTemplateSKU: skuMap[line.product_id[0]]?.productTemplateSKU || null,
+      quantity: line.qty,
+      priceUnit: line.price_unit,
     }));
-  }
-
-  async getProductSKU(productId) {
-    const products = await this.callKW('product.product', 'read', [[productId]], { fields: ['default_code', 'name'] });
-    if (!products || products.length === 0) {
-      return { sku: null, name: 'Unknown' };
-    }
-    return {
-      sku: products[0].default_code,
-      name: products[0].name,
-    };
   }
 }
 

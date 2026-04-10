@@ -25,6 +25,7 @@ import Reportes from './pages/Reportes'
 import MiPerfil from './pages/MiPerfil'
 import Configuraciones from './pages/Configuraciones'
 import Administracion from './pages/Administracion'
+import Recetarios from './pages/Recetarios'
 
 // Layout
 import Layout from './components/layout/Layout'
@@ -163,6 +164,7 @@ function App() {
             <Route path="reportes" element={<PermissionRoute module="reportes"><Reportes /></PermissionRoute>} />
             <Route path="perfil" element={<MiPerfil />} />
             <Route path="configuraciones" element={<PermissionRoute module="configuracion"><Configuraciones /></PermissionRoute>} />
+            <Route path="recetarios" element={<PermissionRoute module="configuracion"><Recetarios /></PermissionRoute>} />
             <Route path="admin" element={<PermissionRoute module="administracion"><Administracion /></PermissionRoute>} />
           </Route>
 

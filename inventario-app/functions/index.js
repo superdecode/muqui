@@ -226,40 +226,49 @@ exports.verificarConteosPendientes = functions.pubsub
   });
 
 /**
- * Webhook HTTP para recibir eventos de Odoo cuando se confirma una venta
- * Requiere header X-Odoo-Secret con el secreto configurado
+ * Webhook HTTP para recibir eventos de Odoo cuando se confirma una venta.
+ * Soporta sale.order y pos.order.
+ *
+ * Body esperado:
+ *   { tipo: 'sale_order' | 'pos_order', sale_order_id: N, ubicacion_id: '...' }
+ *   { tipo: 'pos_order', pos_order_id: N, ubicacion_id: '...' }
+ *
+ * Requiere header X-Odoo-Secret con el secreto configurado.
  */
 exports.odooWebhook = functions.https.onRequest(async (req, res) => {
-  // Validar método
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Validar secreto
   const secret = req.headers['x-odoo-secret'];
   const expectedSecret = process.env.ODOO_WEBHOOK_SECRET;
 
   if (!secret || secret !== expectedSecret) {
-    console.warn('❌ Webhook llamado con secreto inválido');
+    console.warn('❌ Webhook: secreto inválido');
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   try {
-    const { sale_order_id, ubicacion_id = 'tienda_principal' } = req.body;
+    const {
+      tipo = 'sale_order',
+      sale_order_id,
+      pos_order_id,
+      ubicacion_id = 'tienda_principal',
+    } = req.body;
 
-    if (!sale_order_id) {
-      return res.status(400).json({ error: 'Missing sale_order_id' });
+    const orderId = tipo === 'pos_order' ? pos_order_id : sale_order_id;
+
+    if (!orderId) {
+      return res.status(400).json({ error: `Missing ${tipo === 'pos_order' ? 'pos_order_id' : 'sale_order_id'}` });
     }
 
-    console.log(`🎯 Webhook recibido - Orden: ${sale_order_id}, Ubicación: ${ubicacion_id}`);
+    console.log(`🎯 Webhook recibido - Tipo: ${tipo}, Orden: #${orderId}, Ubicación: ${ubicacion_id}`);
 
-    // Procesar venta de forma asincrónica (no esperar respuesta)
-    procesarVentaOdoo(sale_order_id, ubicacion_id).catch((error) => {
+    procesarVentaOdoo(orderId, ubicacion_id, tipo).catch((error) => {
       console.error('❌ Error procesando venta en background:', error);
     });
 
-    // Responder inmediatamente al webhook
-    return res.status(200).json({ success: true, message: 'Procesando venta', orderId: sale_order_id });
+    return res.status(200).json({ success: true, tipo, orderId, ubicacion_id });
   } catch (error) {
     console.error('❌ Error en webhook:', error);
     return res.status(500).json({ error: 'Internal server error' });

@@ -16,7 +16,8 @@ import {
   Circle,
   PackageCheck,
   ArrowUpRight,
-  ArrowDownLeft
+  ArrowDownLeft,
+  BookOpen
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { formatLabel } from '../../utils/formatters'
@@ -70,6 +71,7 @@ export default function Sidebar() {
     },
     { to: '/conteos', icon: ClipboardCheck, label: 'Conteos', permission: 'conteos.ver' },
     { to: '/reportes', icon: FileBarChart, label: 'Reportes', permission: 'reportes.ver' },
+    { to: '/recetarios', icon: BookOpen, label: 'Recetarios', permission: 'configuracion.ver' },
     { to: '/configuraciones', icon: Settings, label: 'Configuraciones', permission: 'configuracion.ver' },
     { to: '/admin', icon: Shield, label: 'Administración', permission: 'administracion.ver' }
   ]
@@ -179,9 +181,8 @@ export default function Sidebar() {
                       )}
                     </button>
                     {/* Submenu items */}
-                    {isExpanded && (
-                      <div className={`mt-1 space-y-1 ${isCollapsed ? 'lg:flex lg:flex-col lg:items-center lg:space-y-2 lg:px-2' : 'ml-4'}`}>
-                        {item.submenu.map((subitem) => (
+                    <div className={`mt-1 space-y-1 ${isCollapsed ? 'lg:flex lg:flex-col lg:items-center lg:space-y-2 lg:px-2' : 'ml-4'}`}>
+                      {item.submenu.map((subitem) => (
                         <NavLink
                           key={subitem.to}
                           to={subitem.to}
@@ -198,9 +199,8 @@ export default function Sidebar() {
                           <subitem.icon size={isCollapsed ? 18 : 16} />
                           <span className={`${isCollapsed ? 'lg:hidden' : 'block'}`}>{subitem.label}</span>
                         </NavLink>
-                        ))}
-                      </div>
-                    )}
+                      ))}
+                    </div>
                   </div>
                 )
               }

@@ -3502,7 +3502,82 @@ const firestoreService = {
       console.error('Error actualizando detalles del movimiento:', error)
       return { success: false, message: error.message }
     }
+  },
+
+  // ========== RECETARIOS (BOM) ==========
+
+  getRecetarios: async () => {
+    const db = getDB()
+    const snap = await getDocs(
+      query(collection(db, 'recetarios'), orderBy('nombre'))
+    )
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  },
+
+  createRecetario: async (data) => {
+    const db = getDB()
+    const id = await getNextSequentialCode('REC')
+    const costoTotal = calcularCostoTotal(data.ingredientes)
+    await setDoc(doc(db, 'recetarios', id), {
+      ...data,
+      costo_total: costoTotal,
+      activo: true,
+      fecha_creacion: serverTimestamp(),
+      ultima_actualizacion: serverTimestamp()
+    })
+    return id
+  },
+
+  updateRecetario: async (id, data) => {
+    const db = getDB()
+    const costoTotal = calcularCostoTotal(data.ingredientes)
+    await updateDoc(doc(db, 'recetarios', id), {
+      ...data,
+      costo_total: costoTotal,
+      ultima_actualizacion: serverTimestamp()
+    })
+  },
+
+  deleteRecetario: async (id) => {
+    const db = getDB()
+    await updateDoc(doc(db, 'recetarios', id), {
+      activo: false,
+      ultima_actualizacion: serverTimestamp()
+    })
+  },
+
+  batchCreateRecetarios: async (recetarios) => {
+    const db = getDB()
+    const batch = writeBatch(db)
+    const creados = []
+
+    for (const recetario of recetarios) {
+      const id = await getNextSequentialCode('REC')
+      const costoTotal = calcularCostoTotal(recetario.ingredientes)
+      const ref = doc(db, 'recetarios', id)
+      batch.set(ref, {
+        ...recetario,
+        costo_total: costoTotal,
+        activo: true,
+        fecha_creacion: serverTimestamp(),
+        ultima_actualizacion: serverTimestamp()
+      })
+      creados.push(id)
+    }
+
+    await batch.commit()
+    return creados
   }
+}
+
+/**
+ * Calcula el costo total de un recetario sumando cantidad * costo_unitario de cada ingrediente
+ */
+function calcularCostoTotal(ingredientes = []) {
+  return ingredientes.reduce((sum, ing) => {
+    const costo = (ing.costo_unitario || 0) * (ing.cantidad || 0)
+    return sum + costo
+  }, 0)
 }
 
 export default firestoreService
