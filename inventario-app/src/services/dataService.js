@@ -360,7 +360,16 @@ const dataService = {
   deleteMapeoPOS: async (id) => firestoreService.deleteMapeoPOS(id),
 
   // SALIDAS ODOO
-  getSalidasOdoo: async () => firestoreService.getSalidasOdoo()
+  getSalidasOdoo: async () => firestoreService.getSalidasOdoo(),
+
+  // Obtener puntos de venta directamente desde Odoo mediante Cloud Function
+  getOdooPOS: async () => {
+    const { getFunctions, httpsCallable } = await import('firebase/functions');
+    const functions = getFunctions();
+    const getPOS = httpsCallable(functions, 'getOdooPOS');
+    const result = await getPOS();
+    return result.data;
+  }
 }
 
 export default dataService

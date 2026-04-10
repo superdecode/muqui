@@ -132,6 +132,22 @@ class OdooClient {
       priceUnit: line.price_unit,
     }));
   }
+
+  /**
+   * Obtener lista de Puntos de Venta (pos.config)
+   */
+  async getPOSConfigs() {
+    await this.authenticate();
+    return await this._call(this.objectClient, 'execute_kw', [
+      this.db,
+      this.uid,
+      this.password,
+      'pos.config',
+      'search_read',
+      [[]], // Sin filtros
+      { fields: ['id', 'name'] },
+    ]);
+  }
 }
 
 module.exports = OdooClient;

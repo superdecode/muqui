@@ -603,6 +603,7 @@ function TabMapeoPOS() {
   const [showForm, setShowForm] = useState(false)
   const [editando, setEditando] = useState(null)
   const [form, setForm] = useState({ odoo_pos_name: '', odoo_pos_id: '', ubicacion_id: '', notas: '' })
+  const [sincronizando, setSincronizando] = useState(false)
 
   const ubicacionesActivas = ubicaciones.filter(u => u.estado !== 'INACTIVO' && u.estado !== 'ELIMINADO')
 
@@ -643,6 +644,49 @@ function TabMapeoPOS() {
     return ub ? `${ub.nombre}${emp ? ` (${emp.nombre})` : ''}` : id
   }
 
+  const handleSincronizarOdoo = async () => {
+    setSincronizando(true)
+    try {
+      const response = await dataService.getOdooPOS()
+      const posList = response.posList || []
+      
+      if (posList.length === 0) {
+        toast.info('Sin datos', 'No se encontraron puntos de venta en Odoo')
+        return
+      }
+
+      let creados = 0
+      for (const pos of posList) {
+        const existe = mapeos.find(m => 
+          m.odoo_pos_name === pos.name || 
+          String(m.odoo_pos_id) === String(pos.id)
+        )
+        
+        if (!existe) {
+          await dataService.createMapeoPOS({
+            odoo_pos_name: pos.name,
+            odoo_pos_id: String(pos.id),
+            ubicacion_id: '',
+            notas: 'Importado automáticamente desde Odoo'
+          })
+          creados++
+        }
+      }
+      
+      if (creados > 0) {
+        queryClient.invalidateQueries({ queryKey: ['mapeo-pos'] })
+        toast.success('Sincronizado', `Se importaron ${creados} nuevos puntos de venta`)
+      } else {
+        toast.info('Ya sincronizado', 'Todos los puntos de venta ya están configurados')
+      }
+    } catch (error) {
+      console.error('Error sincronizando POS:', error)
+      toast.error('Error', 'No se pudo conectar con Odoo. Verifica las credenciales.')
+    } finally {
+      setSincronizando(false)
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -650,7 +694,12 @@ function TabMapeoPOS() {
           <p className="text-sm text-slate-600 dark:text-slate-400">Configura qué Punto de Venta de Odoo corresponde a cada ubicación en la app.</p>
           <p className="text-xs text-slate-400 mt-1">Esto determina de qué ubicación se descuentan los ingredientes cuando llega una venta.</p>
         </div>
-        {canWrite && <Button size="sm" onClick={() => { resetForm(); setShowForm(true) }}><Plus size={15} className="mr-1.5" /> Nuevo Mapeo</Button>}
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleSincronizarOdoo} loading={sincronizando} disabled={sincronizando}>
+            <Download size={15} className="mr-1.5" /> Sincronizar con Odoo
+          </Button>
+          {canWrite && <Button size="sm" onClick={() => { resetForm(); setShowForm(true) }}><Plus size={15} className="mr-1.5" /> Nuevo Mapeo</Button>}
+        </div>
       </div>
 
       {showForm && (

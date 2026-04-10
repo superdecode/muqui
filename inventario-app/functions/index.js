@@ -274,3 +274,21 @@ exports.odooWebhook = functions.https.onRequest(async (req, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// SALIDAS ODOO: Obtener lista de Puntos de Venta (POS) desde Odoo
+exports.getOdooPOS = functions.https.onCall(async (data, context) => {
+  try {
+    const OdooClient = require('./src/odooClient');
+    const odoo = new OdooClient(
+      process.env.ODOO_URL,
+      process.env.ODOO_DB,
+      process.env.ODOO_USER,
+      process.env.ODOO_PASSWORD
+    );
+    const posList = await odoo.getPOSConfigs();
+    return { success: true, posList };
+  } catch (error) {
+    console.error('Error obteniendo POS de Odoo:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
