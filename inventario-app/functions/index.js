@@ -1,5 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { procesarVentaOdoo } = require('./src/procesarVenta');
 
 admin.initializeApp();
 
@@ -223,3 +224,44 @@ exports.verificarConteosPendientes = functions.pubsub
       throw error;
     }
   });
+
+/**
+ * Webhook HTTP para recibir eventos de Odoo cuando se confirma una venta
+ * Requiere header X-Odoo-Secret con el secreto configurado
+ */
+exports.odooWebhook = functions.https.onRequest(async (req, res) => {
+  // Validar método
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Validar secreto
+  const secret = req.headers['x-odoo-secret'];
+  const expectedSecret = process.env.ODOO_WEBHOOK_SECRET;
+
+  if (!secret || secret !== expectedSecret) {
+    console.warn('❌ Webhook llamado con secreto inválido');
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const { sale_order_id, ubicacion_id = 'tienda_principal' } = req.body;
+
+    if (!sale_order_id) {
+      return res.status(400).json({ error: 'Missing sale_order_id' });
+    }
+
+    console.log(`🎯 Webhook recibido - Orden: ${sale_order_id}, Ubicación: ${ubicacion_id}`);
+
+    // Procesar venta de forma asincrónica (no esperar respuesta)
+    procesarVentaOdoo(sale_order_id, ubicacion_id).catch((error) => {
+      console.error('❌ Error procesando venta en background:', error);
+    });
+
+    // Responder inmediatamente al webhook
+    return res.status(200).json({ success: true, message: 'Procesando venta', orderId: sale_order_id });
+  } catch (error) {
+    console.error('❌ Error en webhook:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
