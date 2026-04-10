@@ -259,6 +259,12 @@ const dataService = {
     return await firestoreService.deleteUnidadMedida(id)
   },
 
+  // Unit Equivalences
+  getUnitEquivalences: async () => firestoreService.getUnitEquivalences(),
+  createUnitEquivalence: async (data) => firestoreService.createUnitEquivalence(data),
+  updateUnitEquivalence: async (id, data) => firestoreService.updateUnitEquivalence(id, data),
+  deleteUnitEquivalence: async (id) => firestoreService.deleteUnitEquivalence(id),
+
   // Beneficiarios CRUD
   getBeneficiarios: async () => {
     return await firestoreService.getBeneficiarios()
@@ -368,6 +374,15 @@ const dataService = {
     const functions = getFunctions();
     const getPOS = httpsCallable(functions, 'getOdooPOS');
     const result = await getPOS();
+    return result.data;
+  },
+
+  // Obtener productos (variantes) directamente desde Odoo mediante Cloud Function
+  getOdooProducts: async () => {
+    const { getFunctions, httpsCallable } = await import('firebase/functions');
+    const functions = getFunctions();
+    const getProducts = httpsCallable(functions, 'getOdooProducts');
+    const result = await getProducts();
     return result.data;
   }
 }

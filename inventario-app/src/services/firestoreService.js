@@ -43,16 +43,15 @@ const getNextSequentialCode = async (prefix) => {
     const counterDoc = await getDoc(counterRef)
     let nextVal = 1
     if (counterDoc.exists()) {
-      nextVal = (counterDoc.data().valor || 0) + 1
+      const currentVal = Number(counterDoc.data().valor || 0)
+      nextVal = isNaN(currentVal) ? 1 : currentVal + 1
     }
     await setDoc(counterRef, { 
       valor: nextVal, 
-      updated_at: serverTimestamp(),
-      last_updated: serverTimestamp()
+      updated_at: serverTimestamp()
     })
     // Use 5 digits for PROD, 4 for others
-    const padding = prefix === 'PROD' ? 5 : 4
-    return `${prefix}${String(nextVal).padStart(padding, '0')}`
+    return `${prefix}${nextVal}`
   } catch (error) {
     console.warn('Error getting sequential code, using timestamp fallback:', error)
     return `${prefix}${Date.now()}`
@@ -147,8 +146,8 @@ const firestoreService = {
       const querySnapshot = await getDocs(q)
 
       return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        id: doc.id
       }))
     } catch (error) {
       console.error(`Error en query de ${collectionName}:`, error)
@@ -490,6 +489,68 @@ const firestoreService = {
       return { success: true, message: 'Unidad de medida desactivada' }
     } catch (error) {
       console.error('Error eliminando unidad de medida:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  // ========== EQUIVALENCIAS DE UNIDADES ==========
+
+  getUnitEquivalences: async () => {
+    try {
+      const db = getDB()
+      const snap = await getDocs(
+        query(collection(db, 'unit_equivalences'), orderBy('created_at', 'desc'))
+      )
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    } catch (error) {
+      console.error('Error obteniendo equivalencias:', error)
+      return []
+    }
+  },
+
+  createUnitEquivalence: async (data) => {
+    try {
+      const db = getDB()
+      const ref = collection(db, 'unit_equivalences')
+      const nuevo = {
+        from_unit_id: data.from_unit_id,
+        to_unit_id: data.to_unit_id,
+        factor: parseFloat(data.factor),
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp()
+      }
+      const docRef = await addDoc(ref, nuevo)
+      return { success: true, data: { id: docRef.id, ...nuevo } }
+    } catch (error) {
+      console.error('Error creando equivalencia:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  updateUnitEquivalence: async (id, data) => {
+    try {
+      const db = getDB()
+      const ref = doc(db, 'unit_equivalences', id)
+      await updateDoc(ref, {
+        from_unit_id: data.from_unit_id,
+        to_unit_id: data.to_unit_id,
+        factor: parseFloat(data.factor),
+        updated_at: serverTimestamp()
+      })
+      return { success: true }
+    } catch (error) {
+      console.error('Error actualizando equivalencia:', error)
+      return { success: false, message: error.message }
+    }
+  },
+
+  deleteUnitEquivalence: async (id) => {
+    try {
+      const db = getDB()
+      await deleteDoc(doc(db, 'unit_equivalences', id))
+      return { success: true }
+    } catch (error) {
+      console.error('Error eliminando equivalencia:', error)
       return { success: false, message: error.message }
     }
   },
