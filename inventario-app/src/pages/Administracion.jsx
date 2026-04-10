@@ -40,6 +40,7 @@ const MODULOS = [
   { id: 'conteos', label: 'Conteos' },
   { id: 'movimientos', label: 'Movimientos' },
   { id: 'reportes', label: 'Reportes' },
+  { id: 'salidas_odoo', label: 'Salidas Odoo' },
   { id: 'configuracion', label: 'Configuración' },
   { id: 'administracion', label: 'Administración' }
 ]
@@ -58,12 +59,12 @@ const NIVELES_ACCESO = [
 ]
 
 const PERMISOS_PLANTILLA = {
-  'Admin Global': { dashboard: 'total', productos: 'total', stock: 'total', conteos: 'total', movimientos: 'total', reportes: 'total', configuracion: 'total', administracion: 'total' },
-  'Admin Empresa': { dashboard: 'total', productos: 'total', stock: 'total', conteos: 'total', movimientos: 'total', reportes: 'total', configuracion: 'escritura', administracion: 'lectura' },
-  'Gerente': { dashboard: 'lectura', productos: 'escritura', stock: 'escritura', conteos: 'escritura', movimientos: 'escritura', reportes: 'escritura', configuracion: 'lectura', administracion: 'sin_acceso' },
-  'Jefe Punto': { dashboard: 'lectura', productos: 'lectura', stock: 'lectura', conteos: 'escritura', movimientos: 'escritura', reportes: 'lectura', configuracion: 'sin_acceso', administracion: 'sin_acceso' },
-  'Operador': { dashboard: 'lectura', productos: 'lectura', stock: 'lectura', conteos: 'escritura', movimientos: 'lectura', reportes: 'sin_acceso', configuracion: 'sin_acceso', administracion: 'sin_acceso' },
-  'Consulta': { dashboard: 'lectura', productos: 'lectura', stock: 'lectura', conteos: 'sin_acceso', movimientos: 'sin_acceso', reportes: 'lectura', configuracion: 'sin_acceso', administracion: 'sin_acceso' }
+  'Admin Global': { dashboard: 'total', productos: 'total', stock: 'total', conteos: 'total', movimientos: 'total', reportes: 'total', salidas_odoo: 'total', configuracion: 'total', administracion: 'total' },
+  'Admin Empresa': { dashboard: 'total', productos: 'total', stock: 'total', conteos: 'total', movimientos: 'total', reportes: 'total', salidas_odoo: 'total', configuracion: 'escritura', administracion: 'lectura' },
+  'Gerente': { dashboard: 'lectura', productos: 'escritura', stock: 'escritura', conteos: 'escritura', movimientos: 'escritura', reportes: 'escritura', salidas_odoo: 'escritura', configuracion: 'lectura', administracion: 'sin_acceso' },
+  'Jefe Punto': { dashboard: 'lectura', productos: 'lectura', stock: 'lectura', conteos: 'escritura', movimientos: 'escritura', reportes: 'lectura', salidas_odoo: 'lectura', configuracion: 'sin_acceso', administracion: 'sin_acceso' },
+  'Operador': { dashboard: 'lectura', productos: 'lectura', stock: 'lectura', conteos: 'escritura', movimientos: 'lectura', reportes: 'sin_acceso', salidas_odoo: 'sin_acceso', configuracion: 'sin_acceso', administracion: 'sin_acceso' },
+  'Consulta': { dashboard: 'lectura', productos: 'lectura', stock: 'lectura', conteos: 'sin_acceso', movimientos: 'sin_acceso', reportes: 'lectura', salidas_odoo: 'lectura', configuracion: 'sin_acceso', administracion: 'sin_acceso' }
 }
 
 // ========== MODAL ==========

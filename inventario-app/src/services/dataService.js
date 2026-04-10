@@ -346,12 +346,21 @@ const dataService = {
     return await firestoreService.actualizarSolicitudesProcesadasSinCodigo()
   },
 
-  // RECETARIOS
-  getRecetarios: async () => firestoreService.getRecetarios(),
-  createRecetario: async (data) => firestoreService.createRecetario(data),
-  updateRecetario: async (id, data) => firestoreService.updateRecetario(id, data),
-  deleteRecetario: async (id) => firestoreService.deleteRecetario(id),
-  batchCreateRecetarios: async (recetarios) => firestoreService.batchCreateRecetarios(recetarios)
+  // SALIDAS ODOO — RECETAS (BOM)
+  getRecetas: async () => firestoreService.getRecetas(),
+  createReceta: async (data) => firestoreService.createReceta(data),
+  updateReceta: async (id, data) => firestoreService.updateReceta(id, data),
+  deleteReceta: async (id) => firestoreService.deleteReceta(id),
+  batchCreateRecetas: async (recetas) => firestoreService.batchCreateRecetas(recetas),
+
+  // MAPEO POS (Odoo POS ↔ App Ubicación)
+  getMapeoPOS: async () => firestoreService.getMapeoPOS(),
+  createMapeoPOS: async (data) => firestoreService.createMapeoPOS(data),
+  updateMapeoPOS: async (id, data) => firestoreService.updateMapeoPOS(id, data),
+  deleteMapeoPOS: async (id) => firestoreService.deleteMapeoPOS(id),
+
+  // SALIDAS ODOO
+  getSalidasOdoo: async () => firestoreService.getSalidasOdoo()
 }
 
 export default dataService

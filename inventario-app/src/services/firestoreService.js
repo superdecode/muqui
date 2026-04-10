@@ -3504,21 +3504,21 @@ const firestoreService = {
     }
   },
 
-  // ========== RECETARIOS (BOM) ==========
+  // ========== SALIDAS ODOO — RECETAS (BOM) ==========
 
-  getRecetarios: async () => {
+  getRecetas: async () => {
     const db = getDB()
     const snap = await getDocs(
-      query(collection(db, 'recetarios'), orderBy('nombre'))
+      query(collection(db, 'salidas_odoo_recetas'), orderBy('nombre'))
     )
     return snap.docs.map(d => ({ id: d.id, ...d.data() }))
   },
 
-  createRecetario: async (data) => {
+  createReceta: async (data) => {
     const db = getDB()
     const id = await getNextSequentialCode('REC')
     const costoTotal = calcularCostoTotal(data.ingredientes)
-    await setDoc(doc(db, 'recetarios', id), {
+    await setDoc(doc(db, 'salidas_odoo_recetas', id), {
       ...data,
       costo_total: costoTotal,
       activo: true,
@@ -3528,35 +3528,35 @@ const firestoreService = {
     return id
   },
 
-  updateRecetario: async (id, data) => {
+  updateReceta: async (id, data) => {
     const db = getDB()
     const costoTotal = calcularCostoTotal(data.ingredientes)
-    await updateDoc(doc(db, 'recetarios', id), {
+    await updateDoc(doc(db, 'salidas_odoo_recetas', id), {
       ...data,
       costo_total: costoTotal,
       ultima_actualizacion: serverTimestamp()
     })
   },
 
-  deleteRecetario: async (id) => {
+  deleteReceta: async (id) => {
     const db = getDB()
-    await updateDoc(doc(db, 'recetarios', id), {
+    await updateDoc(doc(db, 'salidas_odoo_recetas', id), {
       activo: false,
       ultima_actualizacion: serverTimestamp()
     })
   },
 
-  batchCreateRecetarios: async (recetarios) => {
+  batchCreateRecetas: async (recetas) => {
     const db = getDB()
     const batch = writeBatch(db)
     const creados = []
 
-    for (const recetario of recetarios) {
+    for (const receta of recetas) {
       const id = await getNextSequentialCode('REC')
-      const costoTotal = calcularCostoTotal(recetario.ingredientes)
-      const ref = doc(db, 'recetarios', id)
+      const costoTotal = calcularCostoTotal(receta.ingredientes)
+      const ref = doc(db, 'salidas_odoo_recetas', id)
       batch.set(ref, {
-        ...recetario,
+        ...receta,
         costo_total: costoTotal,
         activo: true,
         fecha_creacion: serverTimestamp(),
@@ -3567,6 +3567,53 @@ const firestoreService = {
 
     await batch.commit()
     return creados
+  },
+
+  // ========== MAPEO POS (Odoo POS ↔ App Ubicación) ==========
+
+  getMapeoPOS: async () => {
+    const db = getDB()
+    const snap = await getDocs(collection(db, 'mapeo_pos'))
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  },
+
+  createMapeoPOS: async (data) => {
+    const db = getDB()
+    const ref = await addDoc(collection(db, 'mapeo_pos'), {
+      ...data,
+      activo: true,
+      fecha_creacion: serverTimestamp(),
+      ultima_actualizacion: serverTimestamp()
+    })
+    return { id: ref.id, ...data }
+  },
+
+  updateMapeoPOS: async (id, data) => {
+    const db = getDB()
+    await updateDoc(doc(db, 'mapeo_pos', id), {
+      ...data,
+      ultima_actualizacion: serverTimestamp()
+    })
+  },
+
+  deleteMapeoPOS: async (id) => {
+    const db = getDB()
+    await deleteDoc(doc(db, 'mapeo_pos', id))
+  },
+
+  // ========== SALIDAS ODOO ==========
+
+  getSalidasOdoo: async () => {
+    try {
+      const db = getDB()
+      const snap = await getDocs(
+        query(collection(db, 'salidas_odoo'), orderBy('fecha_creacion', 'desc'))
+      )
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    } catch (error) {
+      console.error('Error obteniendo salidas odoo:', error)
+      return []
+    }
   }
 }
 

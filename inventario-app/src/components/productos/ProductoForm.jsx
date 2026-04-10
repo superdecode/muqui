@@ -15,6 +15,7 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
     nombre: '',
     especificacion: '',
     unidad_medida: '',
+    costo_unidad: 0,
     stock_minimo: 10,
     frecuencia_inventario: '',
     categoria: '',
@@ -89,6 +90,7 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
         nombre: producto.nombre || '',
         especificacion: producto.especificacion || '',
         unidad_medida: producto.unidad_medida || 'KG',
+        costo_unidad: producto.costo_unidad || 0,
         stock_minimo: producto.stock_minimo || producto.stock_minimo_default || 10,
         frecuencia_inventario: (producto.frecuencia_inventario || '').toLowerCase(),
         categoria: producto.categoria || 'OTROS',
@@ -336,6 +338,21 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
                   <option key={unidad} value={unidad}>{unidad}</option>
                 ))}
               </select>
+            </div>
+
+            {/* Costo por Unidad */}
+            <div>
+              <Input
+                label="Costo por Unidad"
+                name="costo_unidad"
+                type="number"
+                value={formData.costo_unidad}
+                onChange={handleChange}
+                min="0"
+                step="0.001"
+                placeholder="Ej: 10000"
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Precio de este producto en su presentación (ej: Harina 500g = $10,000)</p>
             </div>
 
             {/* Stock Mínimo */}
