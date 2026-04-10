@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Card from '../components/common/Card'
 import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import { Settings, Bell, Phone, Mail, MessageCircle, HelpCircle, Headphones, LogOut, Moon, Sun, Monitor, User, BookOpen, FileText, Video, Download, Package, Tag, Ruler, Plus, Edit2, Trash2, Save, X, Volume2, BellRing, Clock, Globe } from 'lucide-react'
+import { Settings, Bell, Phone, Mail, MessageCircle, HelpCircle, Headphones, LogOut, Moon, Sun, Monitor, User, BookOpen, FileText, Video, Download, Package, Tag, Ruler, Plus, Edit2, Trash2, Save, X, Volume2, BellRing, Clock, Globe, ArrowLeftRight, Scale } from 'lucide-react'
 import { useToastStore } from '../stores/toastStore'
 import { useAuthStore } from '../stores/authStore'
 import { usePermissions } from '../hooks/usePermissions'
@@ -171,6 +171,153 @@ function CrudSection({ title, icon: Icon, iconColor, items, isLoading, fields, o
   )
 }
 
+// ========== EQUIVALENCIAS SECTION ==========
+function EquivalenciasSection({ equivalencias, unidades, isLoading, canWrite, onCreate, onUpdate, onDelete }) {
+  const toast = useToastStore()
+  const [showModal, setShowModal] = useState(false)
+  const [editing, setEditing] = useState(null)
+  const [form, setForm] = useState({ from_unit_id: '', to_unit_id: '', factor: '' })
+
+  const activeUnidades = (unidades || []).filter(u => u.estado !== 'INACTIVO')
+  const unitMap = Object.fromEntries(activeUnidades.map(u => [u.id, u]))
+
+  const openCreate = () => {
+    setEditing(null)
+    setForm({ from_unit_id: '', to_unit_id: '', factor: '' })
+    setShowModal(true)
+  }
+
+  const openEdit = (item) => {
+    setEditing(item)
+    setForm({ from_unit_id: item.from_unit_id || '', to_unit_id: item.to_unit_id || '', factor: item.factor || '' })
+    setShowModal(true)
+  }
+
+  const handleSave = () => {
+    if (!form.from_unit_id || !form.to_unit_id) { toast.error('Requerido', 'Selecciona ambas unidades'); return }
+    if (form.from_unit_id === form.to_unit_id) { toast.error('Error', 'Las unidades deben ser diferentes'); return }
+    const factor = parseFloat(form.factor)
+    if (!factor || factor <= 0) { toast.error('Error', 'El factor debe ser mayor a 0'); return }
+    const data = { from_unit_id: form.from_unit_id, to_unit_id: form.to_unit_id, factor }
+    if (editing) {
+      onUpdate({ id: editing.id, data })
+    } else {
+      onCreate(data)
+    }
+    setShowModal(false)
+  }
+
+  const handleDelete = (item) => {
+    const fromName = unitMap[item.from_unit_id]?.nombre || '?'
+    const toName = unitMap[item.to_unit_id]?.nombre || '?'
+    if (window.confirm(`¿Eliminar equivalencia "${fromName} -> ${toName}"?`)) onDelete(item.id)
+  }
+
+  const fromUnit = unitMap[form.from_unit_id]
+  const toUnit = unitMap[form.to_unit_id]
+  const factorNum = parseFloat(form.factor)
+  const previewText = fromUnit && toUnit && factorNum > 0
+    ? `1 ${fromUnit.abreviatura || fromUnit.nombre} = ${factorNum} ${toUnit.abreviatura || toUnit.nombre}`
+    : null
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ArrowLeftRight size={18} className="text-purple-600" />
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100">Equivalencias</h3>
+          <span className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full">{(equivalencias || []).length}</span>
+        </div>
+        {canWrite && (
+          <button onClick={openCreate} className="flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors">
+            <Plus size={16} />Agregar
+          </button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="py-6 text-center"><LoadingSpinner /></div>
+      ) : (equivalencias || []).length === 0 ? (
+        <div className="py-8 text-center bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
+          <ArrowLeftRight size={32} className="mx-auto text-slate-300 dark:text-slate-500 mb-2" />
+          <p className="text-sm text-slate-500 dark:text-slate-400">No hay equivalencias registradas</p>
+          {canWrite && <button onClick={openCreate} className="text-sm text-primary-600 font-medium mt-2 hover:underline">Crear primera</button>}
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+                <th className="pb-2 font-medium">Unidad Compra</th>
+                <th className="pb-2 font-medium">Factor</th>
+                <th className="pb-2 font-medium">Unidad Consumo</th>
+                <th className="pb-2 font-medium">Inverso</th>
+                <th className="pb-2 font-medium">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+              {(equivalencias || []).map(eq => {
+                const from = unitMap[eq.from_unit_id]
+                const to = unitMap[eq.to_unit_id]
+                const inverse = eq.factor ? (1 / eq.factor).toFixed(4) : '-'
+                return (
+                  <tr key={eq.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                    <td className="py-2 text-slate-900 dark:text-slate-100">{from?.abreviatura || from?.nombre || '?'}</td>
+                    <td className="py-2 text-slate-900 dark:text-slate-100 font-mono">{eq.factor}</td>
+                    <td className="py-2 text-slate-900 dark:text-slate-100">{to?.abreviatura || to?.nombre || '?'}</td>
+                    <td className="py-2 text-slate-500 dark:text-slate-400 font-mono text-xs">{inverse}</td>
+                    <td className="py-2">
+                      <div className="flex items-center gap-1">
+                        {canWrite && <button onClick={() => openEdit(eq)} className="p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg text-blue-600"><Edit2 size={14} /></button>}
+                        {canWrite && <button onClick={() => handleDelete(eq)} className="p-1.5 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg text-red-600"><Trash2 size={14} /></button>}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <MiniModal isOpen={showModal} onClose={() => setShowModal(false)} title={editing ? 'Editar Equivalencia' : 'Nueva Equivalencia'}>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Unidad de Compra *</label>
+            <select value={form.from_unit_id} onChange={e => setForm({ ...form, from_unit_id: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 text-sm">
+              <option value="">Seleccionar...</option>
+              {activeUnidades.map(u => <option key={u.id} value={u.id}>{u.nombre} ({u.abreviatura})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Unidad de Consumo *</label>
+            <select value={form.to_unit_id} onChange={e => setForm({ ...form, to_unit_id: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 text-sm">
+              <option value="">Seleccionar...</option>
+              {activeUnidades.map(u => <option key={u.id} value={u.id}>{u.nombre} ({u.abreviatura})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Factor de Conversion *</label>
+            <input type="number" step="any" min="0" value={form.factor} onChange={e => setForm({ ...form, factor: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 text-sm" placeholder="Ej: 1000" />
+          </div>
+          {previewText && (
+            <div className="p-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-sm text-blue-700 dark:text-blue-300 font-medium text-center">{previewText}</p>
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-700">
+            <Button variant="outline" size="sm" onClick={() => setShowModal(false)}>Cancelar</Button>
+            <Button size="sm" onClick={handleSave}><Save size={14} className="mr-1" />Guardar</Button>
+          </div>
+        </div>
+      </MiniModal>
+    </div>
+  )
+}
+
 // ========== MAIN COMPONENT ==========
 export default function Configuraciones() {
   const navigate = useNavigate()
@@ -219,6 +366,12 @@ export default function Configuraciones() {
   const uniUpdate = useMutation({ mutationFn: ({ id, data }) => dataService.updateUnidadMedida(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['config-unidades'] }); toast.success('Actualizada', 'Unidad actualizada') } })
   const uniDelete = useMutation({ mutationFn: id => dataService.deleteUnidadMedida(id), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['config-unidades'] }); toast.success('Desactivada', 'Unidad desactivada') } })
 
+  // Equivalencias
+  const { data: equivalencias = [], isLoading: loadEquiv } = useQuery({ queryKey: ['config-equivalencias'], queryFn: () => dataService.getUnitEquivalences() })
+  const equivCreate = useMutation({ mutationFn: d => dataService.createUnitEquivalence(d), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['config-equivalencias'] }); toast.success('Creada', 'Equivalencia creada') } })
+  const equivUpdate = useMutation({ mutationFn: ({ id, data }) => dataService.updateUnitEquivalence(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['config-equivalencias'] }); toast.success('Actualizada', 'Equivalencia actualizada') } })
+  const equivDelete = useMutation({ mutationFn: id => dataService.deleteUnitEquivalence(id), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['config-equivalencias'] }); toast.success('Eliminada', 'Equivalencia eliminada') } })
+
   const handleLogout = () => {
     if (window.confirm('¿Cerrar sesión?')) { logout(); navigate('/login') }
   }
@@ -226,6 +379,7 @@ export default function Configuraciones() {
   const TABS = [
     { id: 'general', label: 'General', icon: Settings },
     { id: 'productos', label: 'Productos', icon: Package },
+    { id: 'unidades', label: 'Unidades y UM', icon: Scale },
     { id: 'soporte', label: 'Soporte', icon: Headphones }
   ]
 
@@ -416,7 +570,12 @@ export default function Configuraciones() {
               onDelete={id => catDelete.mutate(id)}
             />
           </Card>
+        </div>
+      )}
 
+      {/* ========== TAB: UNIDADES ========== */}
+      {activeTab === 'unidades' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CrudSection
               title="Unidades de Medida" icon={Ruler} iconColor="text-green-600"
@@ -426,11 +585,24 @@ export default function Configuraciones() {
               fields={[
                 { key: 'nombre', label: 'Nombre', required: true, placeholder: 'Ej: Kilogramo' },
                 { key: 'abreviatura', label: 'Abreviatura', required: true, placeholder: 'Ej: kg' },
+                { key: 'tipo', label: 'Tipo', type: 'select', default: 'unit', options: [{ value: 'mass', label: 'Masa (kg, g, lb...)' }, { value: 'volume', label: 'Volumen (L, ml, cc...)' }, { value: 'length', label: 'Longitud (m, cm, mm...)' }, { value: 'unit', label: 'Unidad (pza, bolsa, caja...)' }] },
                 { key: 'descripcion', label: 'Descripción', type: 'textarea', placeholder: 'Descripción opcional' }
               ]}
               onCreate={d => uniCreate.mutate(d)}
               onUpdate={d => uniUpdate.mutate(d)}
               onDelete={id => uniDelete.mutate(id)}
+            />
+          </Card>
+
+          <Card>
+            <EquivalenciasSection
+              equivalencias={equivalencias}
+              unidades={unidades}
+              isLoading={loadEquiv}
+              canWrite={canWriteConfig}
+              onCreate={d => equivCreate.mutate(d)}
+              onUpdate={d => equivUpdate.mutate(d)}
+              onDelete={id => equivDelete.mutate(id)}
             />
           </Card>
         </div>
