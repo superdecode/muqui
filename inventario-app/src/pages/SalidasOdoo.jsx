@@ -5,7 +5,7 @@ import {
   BookOpen, Plus, Search, Download, Upload, Edit2, Trash2,
   ChevronDown, ChevronUp, X, Save, Package, DollarSign,
   FileSpreadsheet, CheckCircle, ArrowDownLeft, ArrowRightLeft,
-  MapPin, Clock, CheckCircle2, XCircle, Store, SlidersHorizontal
+  MapPin, Clock, CheckCircle2, XCircle, Store, SlidersHorizontal, RefreshCw
 } from 'lucide-react'
 import { useSalidasOdoo } from '../hooks/useSalidasOdoo'
 import { useToastStore } from '../stores/toastStore'
@@ -1034,26 +1034,25 @@ function TabMapeoPOS() {
 function TabSalidas() {
   const { data: salidas = [], isLoading } = useQuery({ queryKey: ['salidas-odoo'], queryFn: () => dataService.getSalidasOdoo() })
   const [filtroEstado, setFiltroEstado] = useState('')
-  const [filtroTipo, setFiltroTipo] = useState('')
   const queryClient = useQueryClient()
   const toast = useToastStore()
-  const exitTypeBadge = (type) => {
-    if (!type) return null
-    const map = {
-      VENTA_ODOO: { label: 'Venta Odoo', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' }
+  const [sincronizando, setSincronizando] = useState(false)
+
+  const handleSync = async () => {
+    setSincronizando(true)
+    try {
+      const result = await dataService.syncSalidasOdoo()
+      queryClient.invalidateQueries({ queryKey: ['salidas-odoo'] })
+      toast.success('Sincronizado', `${result.length} salidas cargadas`)
+    } catch {
+      toast.error('Error', 'No se pudo sincronizar las salidas')
+    } finally {
+      setSincronizando(false)
     }
-    const entry = map[type] || { label: type, cls: 'bg-slate-100 text-slate-700' }
-    return (
-      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${entry.cls}`}>
-        {entry.label}
-      </span>
-    )
   }
 
   const salidasFiltradas = salidas.filter(s => {
-    const matchEstado = !filtroEstado || s.estado === filtroEstado
-    const matchTipo = !filtroTipo || s.exit_type === filtroTipo
-    return matchEstado && matchTipo
+    return !filtroEstado || s.estado === filtroEstado
   })
 
   const formatFecha = (ts) => {
@@ -1073,8 +1072,16 @@ function TabSalidas() {
 
   return (
     <div className="space-y-5">
-      <div>
+      <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Salidas Odoo</h3>
+        <button
+          onClick={handleSync}
+          disabled={sincronizando}
+          className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors disabled:opacity-50"
+        >
+          <RefreshCw size={14} className={sincronizando ? 'animate-spin' : ''} />
+          {sincronizando ? 'Sincronizando...' : 'Sincronizar'}
+        </button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4 border border-slate-200 dark:border-slate-600">
@@ -1099,16 +1106,6 @@ function TabSalidas() {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <button
-          onClick={() => setFiltroTipo(f => f === 'VENTA_ODOO' ? '' : 'VENTA_ODOO')}
-          className={`px-2.5 py-0.5 rounded-full text-xs font-semibold cursor-pointer border transition-colors ${
-            filtroTipo === 'VENTA_ODOO'
-              ? 'bg-violet-200 text-violet-800 border-violet-300'
-              : 'bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-200'
-          }`}
-        >
-          Venta Odoo
-        </button>
         {filtroEstado && (
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-500">Filtrando por:</span>
@@ -1133,7 +1130,6 @@ function TabSalidas() {
               <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Cantidad</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Fecha</th>
               <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Estado</th>
-              <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Tipo</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {salidasFiltradas.map(s => (
@@ -1147,7 +1143,6 @@ function TabSalidas() {
                   <td className="px-4 py-3 text-center font-bold text-sm">{s.cantidad || 0}</td>
                   <td className="px-4 py-3 text-xs text-slate-500">{formatFecha(s.fecha_creacion)}</td>
                   <td className="px-4 py-3 text-center"><span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${estadoBadge(s.estado)}`}>{s.estado || 'PENDIENTE'}</span></td>
-                  <td className="px-4 py-3 text-center">{exitTypeBadge(s.exit_type)}</td>
                 </tr>
               ))}
             </tbody>
