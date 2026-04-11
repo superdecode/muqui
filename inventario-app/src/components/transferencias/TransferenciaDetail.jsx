@@ -160,6 +160,21 @@ export default function TransferenciaDetail({
     queryFn: () => dataService.getUnidadesMedida()
   })
 
+  // Fallback: when detalles subcollection is empty but transferencia.productos exists (e.g. VENTA COMPLETADO records)
+  const embeddedProductos = !isLoading && detalles.length === 0 && Array.isArray(transferencia.productos) && transferencia.productos.length > 0
+    ? transferencia.productos.map((p, i) => ({
+        id: `embedded-${i}`,
+        producto_id: p.producto_id || p.id || '',
+        nombre: p.nombre || p.producto_nombre || '',
+        cantidad_enviada: p.cantidad_enviada ?? p.cantidad ?? 0,
+        cantidad: p.cantidad_enviada ?? p.cantidad ?? 0,
+        cantidad_recibida: p.cantidad_recibida ?? null,
+        unidad_medida: p.unidad_medida || '',
+        costo_unitario: p.costo_unitario || 0,
+      }))
+    : null
+  const detallesDisplay = embeddedProductos ?? detalles
+
   const handleExportExcel = () => {
     try {
       exportTransferenciaToExcel(transferencia, detalles, productos, ubicaciones)
@@ -722,7 +737,7 @@ export default function TransferenciaDetail({
               <div className="py-12">
                 <LoadingSpinner text="Cargando detalles..." />
               </div>
-            ) : detalles.length === 0 ? (
+            ) : detallesDisplay.length === 0 ? (
               <div className="text-center py-12 bg-slate-50 dark:bg-slate-700/50 rounded-xl">
                 <Package size={64} className="mx-auto text-slate-300 mb-4" />
                 <p className="text-slate-600 dark:text-slate-400 text-lg">No hay productos en este movimiento</p>
@@ -755,7 +770,7 @@ export default function TransferenciaDetail({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                      {detalles.map((detalle, index) => {
+                      {detallesDisplay.map((detalle, index) => {
                         const productoInfo = getProductoInfo(detalle.producto_id)
                         const cantEnviada = detalle.cantidad_enviada ?? detalle.cantidad
                         const cantOriginal = detalle.cantidad_original !== undefined ? detalle.cantidad_original : cantEnviada
