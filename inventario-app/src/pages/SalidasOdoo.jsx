@@ -1050,7 +1050,7 @@ function TabSalidas() {
   const exitTypeBadge = (type) => {
     if (!type) return null
     const map = {
-      VENTA_ODDO: { label: 'Venta Odoo', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' }
+      VENTA_ODOO: { label: 'Venta Odoo', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' }
     }
     const entry = map[type] || { label: type, cls: 'bg-slate-100 text-slate-700' }
     return (
@@ -1118,9 +1118,9 @@ function TabSalidas() {
 
       <div className="flex items-center gap-2 flex-wrap">
         <button
-          onClick={() => setFiltroTipo(f => f === 'VENTA_ODDO' ? '' : 'VENTA_ODDO')}
+          onClick={() => setFiltroTipo(f => f === 'VENTA_ODOO' ? '' : 'VENTA_ODOO')}
           className={`px-2.5 py-0.5 rounded-full text-xs font-semibold cursor-pointer border transition-colors ${
-            filtroTipo === 'VENTA_ODDO'
+            filtroTipo === 'VENTA_ODOO'
               ? 'bg-violet-200 text-violet-800 border-violet-300'
               : 'bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-200'
           }`}
