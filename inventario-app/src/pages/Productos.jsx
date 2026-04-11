@@ -640,11 +640,8 @@ export default function Productos() {
                   <th onClick={() => handleSort('nombre')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none" style={{width: '30%'}}>
                     <span className="inline-flex items-center">Producto<SortIcon column="nombre" /></span>
                   </th>
-                  <th onClick={() => handleSort('especificacion')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                  <th onClick={() => handleSort('especificacion')} className="px-4 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">UoM de Compra<SortIcon column="especificacion" /></span>
-                  </th>
-                  <th onClick={() => handleSort('unidad_medida')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
-                    <span className="inline-flex items-center">Unidad<SortIcon column="unidad_medida" /></span>
                   </th>
                   <th onClick={() => handleSort('costo_unidad')} className="px-6 py-4 text-right text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Costo/Unidad<SortIcon column="costo_unidad" /></span>
@@ -686,16 +683,13 @@ export default function Productos() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4">
                       <UoMBadge
                         qty={item.purchase_unit_qty}
                         symbol={unidadesDB.find(u => u.id === item.purchase_unit_id)?.abreviatura}
                         unitName={unidadesDB.find(u => u.id === item.purchase_unit_id)?.nombre || item.unidad_medida}
                         size="sm"
                       />
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-slate-600 dark:text-slate-400">{item.unidad_medida}</span>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
