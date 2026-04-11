@@ -634,7 +634,7 @@ export default function Productos() {
       ) : (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-card border border-slate-100 dark:border-slate-700 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full table-fixed">
+            <table className="w-full table-fixed min-w-[1100px]">
               <colgroup>
                 <col style={{width: '22%'}} />
                 <col style={{width: '9%'}} />
