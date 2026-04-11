@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Button from '../common/Button'
 import LoadingSpinner from '../common/LoadingSpinner'
@@ -11,6 +11,8 @@ import { useToastStore } from '../../stores/toastStore'
 import { useAuthStore } from '../../stores/authStore'
 import { exportTransferenciaToExcel } from '../../utils/exportUtils'
 import { formatDisplayId, safeFormatDate } from '../../utils/formatters'
+import { buildEquivalenceMap, convertUnits } from '../../utils/unitConversion'
+import UoMBadge from '../common/UoMBadge'
 
 // Función para normalizar estados (importada del hook useMovimientos)
 const normalizeEstado = (estado) => {
@@ -43,6 +45,14 @@ export default function TransferenciaDetail({
   const toast = useToastStore()
   const { user } = useAuthStore()
   const queryClient = useQueryClient()
+  
+  // Cargar equivalencias para conversiones
+  const { data: equivalencias = [] } = useQuery({ 
+    queryKey: ['config-equivalencias'], 
+    queryFn: () => dataService.getUnitEquivalences() 
+  })
+  const eqMap = useMemo(() => buildEquivalenceMap(equivalencias), [equivalencias])
+
   const [modoRecepcion, setModoRecepcion] = useState(null) // null | 'total' | 'parcial' | 'editar'
   const [cantidadesRecibidas, setCantidadesRecibidas] = useState({})
   const inputRefs = useRef({})
@@ -142,6 +152,12 @@ export default function TransferenciaDetail({
     queryKey: ['insumos-produccion', transferencia.id],
     queryFn: () => dataService.getInsumosProduccion(transferencia.id),
     enabled: !!transferencia?.id && isProduccion
+  })
+
+  // Cargar unidades para mapear unidad_original_id
+  const { data: unidadesDB = [] } = useQuery({
+    queryKey: ['config-unidades'],
+    queryFn: () => dataService.getUnidadesMedida()
   })
 
   const handleExportExcel = () => {
@@ -424,13 +440,32 @@ export default function TransferenciaDetail({
   }
 
   const handleConfirmarParcial = () => {
-    const productosRecibidos = detalles.map(d => ({
-      detalle_id: (d.id ?? d.detalle_id),
-      producto_id: d.producto_id,
-      cantidad_recibida: cantidadesRecibidas[(d.id ?? d.detalle_id)] !== undefined
-        ? cantidadesRecibidas[(d.id ?? d.detalle_id)]
-        : (d.cantidad_enviada !== undefined ? d.cantidad_enviada : d.cantidad)
-    }))
+    const productosRecibidos = detalles.map(d => {
+      const detalleId = (d.id ?? d.detalle_id)
+      const producto = productos.find(p => p.id === d.producto_id)
+      const baseUnitId = producto?.purchase_unit_id
+      
+      let cantRec = cantidadesRecibidas[detalleId] !== undefined
+        ? cantidadesRecibidas[detalleId]
+        : (d.cantidad_original !== undefined ? d.cantidad_original : (d.cantidad_enviada !== undefined ? d.cantidad_enviada : d.cantidad))
+      
+      // Si la cantidad ingresada está en una unidad original, convertir a la unidad base para el stock
+      let cantidad_base = cantRec
+      if (d.unidad_original_id && baseUnitId && d.unidad_original_id !== baseUnitId) {
+        // Necesitamos el ratio de conversión. Usamos convertUnits.
+        // Como cantRec está en unidad_original_id, convertimos a baseUnitId (unidad base)
+        const converted = convertUnits(cantRec, d.unidad_original_id, baseUnitId, eqMap)
+        if (converted !== null) cantidad_base = parseFloat(converted.toFixed(6))
+      }
+
+      return {
+        detalle_id: detalleId,
+        producto_id: d.producto_id,
+        cantidad_recibida: cantidad_base, // Siempre guardar en base en el campo principal
+        cantidad_recibida_original: d.unidad_original_id ? cantRec : undefined,
+        unidad_recibida_id: d.unidad_original_id || undefined
+      }
+    })
     if (onConfirmarParcial) {
       onConfirmarParcial(productosRecibidos, observacionesRecepcion)
     } else if (onConfirmar) {
@@ -723,9 +758,9 @@ export default function TransferenciaDetail({
                       {detalles.map((detalle, index) => {
                         const productoInfo = getProductoInfo(detalle.producto_id)
                         const cantEnviada = detalle.cantidad_enviada ?? detalle.cantidad
-                        const cantRecibida = detalle.cantidad_recibida
+                        const cantOriginal = detalle.cantidad_original !== undefined ? detalle.cantidad_original : cantEnviada
                         const detalleId = detalle.id ?? detalle.detalle_id ?? `idx_${index}`
-                        const currentValue = cantidadesRecibidas[detalleId] !== undefined ? cantidadesRecibidas[detalleId] : cantEnviada
+                        const currentValue = cantidadesRecibidas[detalleId] !== undefined ? cantidadesRecibidas[detalleId] : cantOriginal
                         return (
                           <tr key={detalle.id || index} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                             <td className="px-4 py-4">
@@ -739,19 +774,39 @@ export default function TransferenciaDetail({
                               </div>
                             </td>
                             <td className="px-4 py-4">
-                              <p className="text-sm text-slate-700 dark:text-slate-300">
-                                {productoInfo.especificacion || <span className="text-slate-400 italic">—</span>}
-                                {productoInfo.unidad_medida && (
-                                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                    {productoInfo.unidad_medida}
-                                  </span>
-                                )}
-                              </p>
+                              <UoMBadge
+                                qty={productoInfo.purchase_unit_qty}
+                                symbol={unidadesDB.find(u => u.id === productoInfo.purchase_unit_id)?.abreviatura}
+                                unitName={unidadesDB.find(u => u.id === productoInfo.purchase_unit_id)?.nombre || productoInfo.unidad_medida}
+                                size="sm"
+                              />
                             </td>
                             <td className="px-4 py-4 text-center">
-                              <span className="text-lg font-bold text-primary-600">
-                                {cantEnviada}
-                              </span>
+                              <div className="flex flex-col items-center">
+                                <span className="text-lg font-bold text-primary-600">
+                                  {detalle?.cantidad_original_ingresada !== undefined ? detalle.cantidad_original_ingresada : (cantOriginal ?? '—')}
+                                </span>
+                                {detalle?.unidad_original_nombre ? (
+                                  <span className="text-[10px] font-medium text-slate-500 uppercase">
+                                    {detalle.unidad_original_nombre}
+                                  </span>
+                                ) : detalle?.unidad_original_id ? (
+                                  <span className="text-[10px] font-medium text-slate-500 uppercase">
+                                    {(unidadesDB || []).find(u => u?.id === detalle.unidad_original_id)?.abreviatura || 
+                                     (unidadesDB || []).find(u => u?.id === detalle.unidad_original_id)?.nombre || 
+                                     productoInfo?.unidad_medida || '—'}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-medium text-slate-500 uppercase">
+                                    {productoInfo?.unidad_medida || '—'}
+                                  </span>
+                                )}
+                                {(detalle?.cantidad_original !== undefined || detalle?.cantidad_original_ingresada !== undefined) && (
+                                  <span className="text-[10px] text-blue-500 mt-0.5" title="Impacto exacto en DB (Unidades Base)">
+                                    ({cantEnviada ?? 0} {productoInfo?.unidad_medida || '—'})
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             {(modoRecepcion === 'parcial' || modoRecepcion === 'editar') && (
                               <td className="px-4 py-4 text-center">
@@ -773,19 +828,19 @@ export default function TransferenciaDetail({
                                     }
                                   }}
                                   className={`w-24 px-2 py-1.5 text-center border rounded-lg text-sm font-bold focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                                    currentValue > cantEnviada
+                                    currentValue > cantOriginal
                                       ? 'border-orange-300 bg-orange-50 text-orange-700'
-                                      : currentValue < cantEnviada
+                                      : currentValue < cantOriginal
                                         ? 'border-blue-300 bg-blue-50 text-blue-700'
                                         : 'border-slate-300 bg-white text-slate-700'
                                   }`}
                                 />
-                                {(currentValue !== cantEnviada) && (
+                                {(currentValue !== cantOriginal) && (
                                   <div className="text-xs mt-1">
-                                    {(currentValue > cantEnviada) ? (
-                                      <span className="text-orange-600 font-medium">+{(currentValue - cantEnviada)}</span>
+                                    {(currentValue > cantOriginal) ? (
+                                      <span className="text-orange-600 font-medium">+{(currentValue - cantOriginal).toFixed(2)}</span>
                                     ) : (
-                                      <span className="text-blue-600 font-medium">-{(cantEnviada - currentValue)}</span>
+                                      <span className="text-blue-600 font-medium">-{(cantOriginal - currentValue).toFixed(2)}</span>
                                     )}
                                   </div>
                                 )}
@@ -840,14 +895,12 @@ export default function TransferenciaDetail({
                               </div>
                             </td>
                             <td className="px-4 py-3">
-                              <p className="text-sm text-slate-600 dark:text-slate-400">
-                                {info.especificacion || '—'}
-                                {info.unidad_medida && (
-                                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                                    {info.unidad_medida}
-                                  </span>
-                                )}
-                              </p>
+                              <UoMBadge
+                                qty={info.purchase_unit_qty}
+                                symbol={unidadesDB.find(u => u.id === info.purchase_unit_id)?.abreviatura}
+                                unitName={unidadesDB.find(u => u.id === info.purchase_unit_id)?.nombre || info.unidad_medida}
+                                size="sm"
+                              />
                             </td>
                             <td className="px-4 py-3 text-center">
                               <span className="text-lg font-bold text-orange-600">{insumo.cantidad}</span>
