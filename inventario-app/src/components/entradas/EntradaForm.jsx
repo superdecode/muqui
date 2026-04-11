@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Button from '../common/Button'
 import Alert from '../common/Alert'
@@ -8,6 +8,8 @@ import dataService from '../../services/dataService'
 import { useAuthStore } from '../../stores/authStore'
 import { useToastStore } from '../../stores/toastStore'
 import ProduccionForm from './ProduccionForm'
+import { buildEquivalenceMap, getCompatibleUnits } from '../../utils/unitConversion'
+import UoMBadge from '../common/UoMBadge'
 
 // ========== PROVEEDOR MODAL ==========
 function ProveedorModal({ isOpen, onClose, onCreate }) {
@@ -197,6 +199,11 @@ export default function EntradaForm({ onClose, onSave, isLoading = false }) {
     enabled: !!formData.destino_id
   })
 
+  // Cargar Unidades y Equivalencias
+  const { data: unidadesDB = [] } = useQuery({ queryKey: ['config-unidades'], queryFn: () => dataService.getUnidadesMedida() })
+  const { data: equivalencias = [] } = useQuery({ queryKey: ['config-equivalencias'], queryFn: () => dataService.getUnitEquivalences() })
+  const eqMap = useMemo(() => buildEquivalenceMap(equivalencias), [equivalencias])
+
   // Filtrar productos por búsqueda
   const filteredProducts = productos
     .filter(product => {
@@ -215,7 +222,16 @@ export default function EntradaForm({ onClose, onSave, isLoading = false }) {
 
   const handleAddProducto = (producto) => {
     if (selectedProductos.find(p => p.id === producto.id)) return
-    setSelectedProductos([...selectedProductos, { ...producto, cantidad: 1, precio_unitario: 0 }])
+    
+    const qQty = producto.purchase_unit_qty || 1
+    const defaultUnit = qQty !== 1 ? '__presentation__' : (producto.purchase_unit_id || '')
+    
+    setSelectedProductos([...selectedProductos, { 
+      ...producto, 
+      cantidad: 1, 
+      precio_unitario: 0,
+      unidad_ingreso_id: defaultUnit 
+    }])
     setError('')
     setSearchTerm('')
   }
@@ -237,6 +253,15 @@ export default function EntradaForm({ onClose, onSave, isLoading = false }) {
     setSelectedProductos(selectedProductos.map(p => {
       if (p.id === productoId) {
         return { ...p, precio_unitario: Math.max(0, precio) }
+      }
+      return p
+    }))
+  }
+
+  const handleUnidadChange = (productoId, unidadId) => {
+    setSelectedProductos(selectedProductos.map(p => {
+      if (p.id === productoId) {
+        return { ...p, unidad_ingreso_id: unidadId }
       }
       return p
     }))
@@ -286,11 +311,32 @@ export default function EntradaForm({ onClose, onSave, isLoading = false }) {
       tipo_entrada: tipoEntrada,
       tipo_movimiento: tipoEntrada,
       usuario_creacion_id: user?.id || 'USR001',
-      productos: selectedProductos.map(p => ({
-        producto_id: p.id,
-        cantidad: p.cantidad,
-        precio_unitario: tipoEntrada === 'COMPRA' ? (p.precio_unitario || 0) : undefined
-      }))
+      productos: selectedProductos.map(p => {
+        let finalCantidad = p.cantidad
+        if (p.unidad_ingreso_id && p.unidad_ingreso_id !== '__presentation__') {
+          const factorToBase = p.unidad_ingreso_id === p.purchase_unit_id ? 1 : (convertUnits(1, p.unidad_ingreso_id, p.purchase_unit_id, eqMap) || 1)
+          const qtyBase = p.cantidad * factorToBase
+          finalCantidad = qtyBase / (p.purchase_unit_qty || 1)
+        }
+        let unidadNombre = ''
+        if (p.unidad_ingreso_id === '__presentation__') {
+          const unitTarget = unidadesDB.find(u => u.id === p.purchase_unit_id)
+          const bSym = unitTarget?.abreviatura || unitTarget?.nombre || p.unidad_medida || ''
+          unidadNombre = `Unidad (${p.purchase_unit_qty || 1} ${bSym})`.trim()
+        } else {
+          const u = unidadesDB.find(x => x.id === p.unidad_ingreso_id)
+          unidadNombre = u ? (u.abreviatura || u.nombre) : ''
+        }
+
+        return {
+          producto_id: p.id,
+          cantidad: parseFloat(finalCantidad.toFixed(6)),
+          precio_unitario: tipoEntrada === 'COMPRA' ? (p.precio_unitario || 0) : undefined,
+          unidad_original_id: p.unidad_ingreso_id,
+          unidad_original_nombre: unidadNombre,
+          cantidad_original_ingresada: p.cantidad
+        }
+      })
     }
 
     // Agregar nombre del proveedor si es compra
@@ -581,6 +627,7 @@ export default function EntradaForm({ onClose, onSave, isLoading = false }) {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">ID</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider">Stock Actual</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider">Cantidad</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider">Unidad</th>
                     {tipoEntrada === 'COMPRA' && (
                       <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider">Precio Unit.</th>
                     )}
@@ -613,7 +660,7 @@ export default function EntradaForm({ onClose, onSave, isLoading = false }) {
                             ? 'bg-red-100 text-red-800'
                             : 'bg-green-100 text-green-800'
                         }`}>
-                          {producto.stock} {producto.unidad_medida}
+                          {producto.stock}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -625,6 +672,31 @@ export default function EntradaForm({ onClose, onSave, isLoading = false }) {
                             onChange={(e) => handleCantidadChange(producto.id, parseFloat(e.target.value) || 0)}
                             className="w-24 px-3 py-2 border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-center font-bold focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                           />
+                      </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={producto.unidad_ingreso_id || ''}
+                          onChange={(e) => handleUnidadChange(producto.id, e.target.value)}
+                          className="w-full px-2 py-2 border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-sm font-semibold focus:ring-2 focus:ring-primary-500"
+                        >
+                          {(() => {
+                            const unitTarget = unidadesDB.find(u => u.id === producto.purchase_unit_id)
+                            const bSym = unitTarget?.abreviatura || unitTarget?.nombre || producto.unidad_medida || ''
+                            const qQty = producto.purchase_unit_qty || 1
+                            return (
+                              <>
+                                {qQty > 1 && (
+                                  <option value="__presentation__">Unidad ({qQty} {bSym})</option>
+                                )}
+                                {getCompatibleUnits(producto.purchase_unit_id, eqMap).map(uId => {
+                                  const u = unidadesDB.find(x => x.id === uId)
+                                  if (!u) return null
+                                  return <option key={u.id} value={u.id}>{u.nombre}</option>
+                                })}
+                              </>
+                            )
+                          })()}
+                        </select>
                       </td>
                       {tipoEntrada === 'COMPRA' && (
                         <td className="px-4 py-3">
@@ -708,12 +780,18 @@ export default function EntradaForm({ onClose, onSave, isLoading = false }) {
                                       <Package size={18} className="text-primary-600" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                      <p className="font-semibold text-slate-900 truncate">{product.nombre}</p>
-                                      <p className="text-xs text-slate-500 truncate">
-                                        ID: {product.id} | {product.especificacion || 'Sin especificación'}
-                                      </p>
-                                      <p className="text-sm font-medium text-green-700">
-                                        Stock actual: {product.stock} {product.unidad_medida}
+                                      <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">{product.nombre}</p>
+                                      <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 flex-wrap">
+                                        <span>{product.codigo_legible || product.id}</span>
+                                        <span className="text-slate-300">|</span>
+                                        <UoMBadge
+                                          qty={product.purchase_unit_qty}
+                                          symbol={unidadesDB.find(u => u.id === product.purchase_unit_id)?.abreviatura}
+                                          unitName={unidadesDB.find(u => u.id === product.purchase_unit_id)?.nombre || product.unidad_medida}
+                                          size="sm"
+                                        />
+                                        <span className="text-slate-300">|</span>
+                                        <span>Stock: {product.stock ?? 0}</span>
                                       </p>
                                     </div>
                                   </div>
