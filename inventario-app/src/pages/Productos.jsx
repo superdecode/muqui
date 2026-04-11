@@ -634,10 +634,21 @@ export default function Productos() {
       ) : (
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-card border border-slate-100 dark:border-slate-700 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full table-fixed">
+              <colgroup>
+                <col style={{width: '30%'}} />
+                <col style={{width: '10%'}} />
+                <col style={{width: '10%'}} />
+                <col style={{width: '8%'}} />
+                <col style={{width: '13%'}} />
+                <col style={{width: '10%'}} />
+                <col style={{width: '9%'}} />
+                <col style={{width: '6%'}} />
+                <col style={{width: '4%'}} />
+              </colgroup>
               <thead className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-700">
                 <tr>
-                  <th onClick={() => handleSort('nombre')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none" style={{width: '39%'}}>
+                  <th onClick={() => handleSort('nombre')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Producto<SortIcon column="nombre" /></span>
                   </th>
                   <th onClick={() => handleSort('especificacion')} className="px-4 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
