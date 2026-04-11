@@ -640,7 +640,7 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
                     <colgroup>
                       <col className="w-[35%]" />
                       <col className="w-[12%]" />
-                      <col className="w-[8%]" />
+                      <col className="w-[12%]" />
                       <col className="w-[13%]" />
                       <col className="w-[12%]" />
                       <col className="w-[14%]" />
@@ -747,7 +747,12 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
                                 })()}
                               </select>
                             ) : (
-                              <span className="text-xs text-slate-500">{ing.unidad_medida || '—'}</span>
+                              <select
+                                disabled
+                                className="w-full px-1.5 py-1 text-xs border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-lg opacity-60 cursor-not-allowed"
+                              >
+                                <option>{ing.unidad_medida || 'Sin UoM'}</option>
+                              </select>
                             )}
                           </td>
                           <td className="px-3 py-2.5 text-right text-sm font-bold text-slate-900 dark:text-slate-100">{fmtCosto((ing.costo_unitario || 0) * (ing.cantidad || 0))}</td>
