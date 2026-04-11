@@ -4,12 +4,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import UoMBadge from '../components/common/UoMBadge'
 import ProductoForm from '../components/productos/ProductoForm'
 import { useToastStore } from '../stores/toastStore'
 import { useAuthStore } from '../stores/authStore'
 import { usePermissions } from '../hooks/usePermissions'
 import dataService from '../services/dataService'
-import { formatLabel } from '../utils/formatters'
+import { formatLabel, getUoMCompra } from '../utils/formatters'
 import { filtrarProductosPorUbicacion, getUbicacionesPermitidasParaProducto } from '../utils/productosPorUbicacion'
 
 const getCategoryColor = (category) => {
@@ -88,6 +89,12 @@ export default function Productos() {
   const { data: ubicaciones = [] } = useQuery({
     queryKey: ['ubicaciones'],
     queryFn: () => dataService.getUbicaciones()
+  })
+
+  // Cargar unidades de medida para enriquecer la tabla
+  const { data: unidadesDB = [] } = useQuery({
+    queryKey: ['config-unidades'],
+    queryFn: () => dataService.getUnidadesMedida()
   })
 
   // Filtrar productos
@@ -204,23 +211,32 @@ export default function Productos() {
       return
     }
 
-    // Preparar datos para exportación
-    const dataToExport = filteredProductos.map(prod => ({
-      'ID Interno': prod.id || '',
-      'Código Legible': prod.codigo_legible || '',
-      'Nombre': prod.nombre || '',
-      'Especificación': prod.especificacion || '',
-      'Categoría': prod.categoria || '',
-      'Estado': prod.estado || '',
-      'Frecuencia Inventario': prod.frecuencia_inventario || '',
-      'Costo Unitario': prod.costo_unitario || 0,
-      'Costo Nuevo': prod.costo_nuevo || prod.costo_unitario || 0,
-      'Unidad Medida': prod.unidad_medida || '',
-      'Stock Mínimo': prod.stock_minimo || 0,
-      'Stock Máximo': prod.stock_maximo || 0,
-      'Proveedor': prod.proveedor || '',
-      'Ubicación': prod.ubicacion || ''
-    }))
+    // Preparar datos para exportación — resolviendo unidades desde catálogo
+    const dataToExport = filteredProductos.map(prod => {
+      const unit = unidadesDB.find(u => u.id === prod.purchase_unit_id)
+      const unitNombre = unit?.nombre || prod.unidad_medida || ''
+      const unitSymbol = unit?.abreviatura || unit?.nombre || prod.unidad_medida || ''
+      const especificacion = prod.purchase_unit_qty && unitSymbol
+        ? `${prod.purchase_unit_qty} ${unitSymbol}`.trim()
+        : (prod.especificacion || '')
+
+      return {
+        'ID Interno': prod.id || '',
+        'Código Legible': prod.codigo_legible || '',
+        'Nombre': prod.nombre || '',
+        'Categoría': prod.categoria || '',
+        'Estado': prod.estado || '',
+        'Frecuencia Inventario': (prod.frecuencia_inventario || '').toUpperCase(),
+        'Costo Unitario': prod.costo_unidad || 0,
+        'Unidad de Medida': unitNombre,
+        'Cant. por Unidad': prod.purchase_unit_qty || '',
+        'Especificación': especificacion,
+        'Stock Mínimo': prod.stock_minimo || 0,
+        'Etiquetas': Array.isArray(prod.etiquetas) ? prod.etiquetas.join(', ') : (prod.etiquetas || ''),
+        'Proveedor': prod.proveedor || '',
+        'N° Ubicaciones': (prod.ubicaciones_permitidas || []).length
+      }
+    })
 
     // Crear workbook y worksheet
     const ws = XLSX.utils.json_to_sheet(dataToExport)
@@ -229,25 +245,30 @@ export default function Productos() {
 
     // Ajustar ancho de columnas
     ws['!cols'] = [
-      { wch: 20 }, // ID Interno
+      { wch: 15 }, // ID Interno
       { wch: 15 }, // Código Legible
-      { wch: 25 }, // Nombre
-      { wch: 20 }, // Especificación
+      { wch: 28 }, // Nombre
       { wch: 15 }, // Categoría
       { wch: 12 }, // Estado
-      { wch: 18 }, // Frecuencia Inventario
-      { wch: 15 }, // Costo Unitario
-      { wch: 15 }, // Costo Nuevo
-      { wch: 12 }, // Unidad Medida
-      { wch: 12 }, // Stock Mínimo
-      { wch: 12 }, // Stock Máximo
+      { wch: 20 }, // Frecuencia Inventario
+      { wch: 13 }, // Costo Unitario
+      { wch: 20 }, // Unidad de Medida
+      { wch: 14 }, // Cant. por Unidad
+      { wch: 16 }, // Especificación
+      { wch: 13 }, // Stock Mínimo
+      { wch: 22 }, // Etiquetas
       { wch: 15 }, // Proveedor
-      { wch: 15 }  // Ubicación
+      { wch: 13 }  // N° Ubicaciones
     ]
+
+    // Determinar secuencia creciente
+    const currSeq = parseInt(localStorage.getItem('export_sequence') || '0', 10) + 1
+    localStorage.setItem('export_sequence', currSeq.toString())
+    const seqStr = currSeq.toString().padStart(3, '0')
 
     // Descargar archivo
     const timestamp = new Date().toISOString().split('T')[0]
-    XLSX.writeFile(wb, `productos_${timestamp}.xlsx`)
+    XLSX.writeFile(wb, `productos_${seqStr}_${timestamp}.xlsx`)
     toast.success('Exportado', `${filteredProductos.length} productos exportados correctamente`)
   }
 
@@ -285,11 +306,13 @@ export default function Productos() {
       const idxCodigo = headers.findIndex(h => h.includes('codigo') || h.includes('código'))
       const idxCosto = headers.findIndex(h => h === 'costo unitario' || h === 'costo')
       const idxCostoNuevo = headers.findIndex(h => h.includes('costo nuevo'))
-      const idxUnidad = headers.findIndex(h => h.includes('unidad'))
+      const idxUnidad = headers.findIndex(h => h.includes('unidad') && !h.includes('cant') && !h.includes('costo'))
       const idxStockMin = headers.findIndex(h => h.includes('stock min') || h.includes('stock mín'))
       const idxTipoConteo = headers.findIndex(h => h.includes('frecuencia') || h.includes('tipo conteo'))
       const idxCategoria = headers.findIndex(h => h.includes('categoria') || h.includes('categoría'))
       const idxEspecificacion = headers.findIndex(h => h.includes('especificacion') || h.includes('especificación'))
+      const idxEtiquetas = headers.findIndex(h => h.includes('etiqueta') || h.includes('tags'))
+      const idxPurchaseUnitQty = headers.findIndex(h => h.includes('cant. por unidad') || h.includes('cant x compra') || h.includes('cant'))
 
       if (idxId === -1 && idxNombre === -1) {
         throw new Error("El archivo debe contener al menos la columna 'ID Interno' o 'Nombre'")
@@ -309,6 +332,21 @@ export default function Productos() {
         const frecuencia_inventario = idxTipoConteo !== -1 ? row[idxTipoConteo] : undefined
         const categoria = idxCategoria !== -1 ? row[idxCategoria] : undefined
         const especificacion = idxEspecificacion !== -1 ? row[idxEspecificacion] : undefined
+        const etiquetasStr = idxEtiquetas !== -1 ? (row[idxEtiquetas] || '') : ''
+        const etiquetas = etiquetasStr ? String(etiquetasStr).split(',').map(s => s.trim()).filter(Boolean) : []
+        const purchase_unit_qty = idxPurchaseUnitQty !== -1 ? parseFloat(row[idxPurchaseUnitQty]) || undefined : undefined
+        
+        // Reconocimiento inteligente de unidad de medida
+        let purchase_unit_id = undefined
+        if (unidad_medida) {
+          const uStr = String(unidad_medida).trim().toLowerCase()
+          const matched = unidadesDB.find(u => 
+            u.nombre.toLowerCase() === uStr || 
+            (u.abreviatura && u.abreviatura.toLowerCase() === uStr) ||
+            (u.simbolo && u.simbolo.toLowerCase() === uStr)
+          )
+          if (matched) purchase_unit_id = matched.id
+        }
 
         const existe = (id ? productos.find(p => String(p.id).trim() === String(id).trim()) : null) || 
                        (nombre ? productos.find(p => String(p.nombre).trim().toLowerCase() === String(nombre).trim().toLowerCase()) : null)
@@ -328,6 +366,9 @@ export default function Productos() {
           frecuencia_inventario,
           categoria,
           especificacion,
+          etiquetas,
+          purchase_unit_id,
+          purchase_unit_qty,
           accion,
           original: existe || null
         }
@@ -340,8 +381,8 @@ export default function Productos() {
 
   const handleDescargarPlantilla = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['ID Interno', 'Código Legible', 'Nombre', 'Especificacion', 'Costo Unitario', 'Unidad Medida', 'Stock Minimo', 'Tipo Conteo', 'Categoria'],
-      ['', 'PRD-001', 'Ejemplo Producto', 'Caja de 10', 15.50, 'kg', 5, 'MENSUAL', 'Insumos']
+      ['ID Interno', 'Código Legible', 'Nombre', 'Categoría', 'Estado', 'Frecuencia Inventario', 'Costo Unitario', 'Unidad de Medida', 'Cant. por Unidad', 'Especificación', 'Stock Mínimo', 'Etiquetas'],
+      ['', 'PRD-001', 'Ejemplo Producto', 'Insumos', 'ACTIVO', 'MENSUAL', 15500, 'Kilogramos', 1, 'Bolsa 1 KG', 5, 'Urgente, Frágil']
     ])
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Importar')
@@ -368,7 +409,10 @@ export default function Productos() {
           ...(item.stock_minimo !== undefined && { stock_minimo: item.stock_minimo }),
           ...(item.especificacion && { especificacion: item.especificacion }),
           ...(item.frecuencia_inventario && { frecuencia_inventario: item.frecuencia_inventario }),
-          ...(item.categoria && { categoria: item.categoria })
+          ...(item.categoria && { categoria: item.categoria }),
+          ...(item.etiquetas && { etiquetas: item.etiquetas }),
+          ...(item.purchase_unit_id && { purchase_unit_id: item.purchase_unit_id }),
+          ...(item.purchase_unit_qty && { purchase_unit_qty: item.purchase_unit_qty })
         }
         try {
           if (item.accion === 'ACTUALIZAR') {
@@ -597,7 +641,7 @@ export default function Productos() {
                     <span className="inline-flex items-center">Producto<SortIcon column="nombre" /></span>
                   </th>
                   <th onClick={() => handleSort('especificacion')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
-                    <span className="inline-flex items-center">Especificación<SortIcon column="especificacion" /></span>
+                    <span className="inline-flex items-center">UoM de Compra<SortIcon column="especificacion" /></span>
                   </th>
                   <th onClick={() => handleSort('unidad_medida')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Unidad<SortIcon column="unidad_medida" /></span>
@@ -643,11 +687,12 @@ export default function Productos() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm text-slate-600 dark:text-slate-400">
-                        {item.purchase_unit_qty
-                          ? `${item.purchase_unit_qty}${(item.unidad_medida || '').toLowerCase()}`
-                          : (item.especificacion || '-')}
-                      </span>
+                      <UoMBadge
+                        qty={item.purchase_unit_qty}
+                        symbol={unidadesDB.find(u => u.id === item.purchase_unit_id)?.abreviatura}
+                        unitName={unidadesDB.find(u => u.id === item.purchase_unit_id)?.nombre || item.unidad_medida}
+                        size="sm"
+                      />
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm text-slate-600 dark:text-slate-400">{item.unidad_medida}</span>
@@ -667,7 +712,7 @@ export default function Productos() {
                     </td>
                     <td className="px-6 py-4">
                       <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-xs font-medium">
-                        {item.frecuencia_inventario ? formatLabel(item.frecuencia_inventario) : '-'}
+                        {item.frecuencia_inventario ? item.frecuencia_inventario.toUpperCase() : '-'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
