@@ -636,15 +636,15 @@ export default function Productos() {
           <div className="overflow-x-auto">
             <table className="w-full table-fixed">
               <colgroup>
-                <col style={{width: '24%'}} />
-                <col style={{width: '10%'}} />
-                <col style={{width: '10%'}} />
-                <col style={{width: '8%'}} />
-                <col style={{width: '14%'}} />
-                <col style={{width: '12%'}} />
-                <col style={{width: '10%'}} />
+                <col style={{width: '22%'}} />
+                <col style={{width: '9%'}} />
+                <col style={{width: '9%'}} />
                 <col style={{width: '7%'}} />
-                <col style={{width: '5%'}} />
+                <col style={{width: '13%'}} />
+                <col style={{width: '11%'}} />
+                <col style={{width: '10%'}} />
+                <col style={{width: '11%'}} />
+                <col style={{width: '8%'}} />
               </colgroup>
               <thead className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-700">
                 <tr>
