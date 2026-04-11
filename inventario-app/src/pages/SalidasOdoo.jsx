@@ -46,7 +46,7 @@ function exportarRecetarios(recetarios) {
   return recetarios.length
 }
 
-function parseExcelRecetarios(buffer, productos = []) {
+function parseExcelRecetarios(buffer, productos = [], unidadesDB = []) {
   const wb = XLSX.read(buffer, { type: 'array' })
   const ws = wb.Sheets[wb.SheetNames[0]]
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
@@ -66,7 +66,27 @@ function parseExcelRecetarios(buffer, productos = []) {
     const ingSku    = String(row[3] || '').trim().toUpperCase()
     const cantidad  = parseFloat(row[4]) || 0
     const unidad    = String(row[5] || '').trim()
-    const costo     = parseFloat(row[6]) || 0
+    const purchaseUnitQty = parseFloat(row[6]) || null
+    const costoRaw  = parseFloat(row[7]) || 0
+
+    // Resolve unit_id from unidadesDB
+    let resolvedUnitId = null
+    let unitError = null
+    if (unidad) {
+      const uStr = unidad.toLowerCase()
+      const matched = unidadesDB.find(u =>
+        u.nombre?.toLowerCase() === uStr ||
+        u.abreviatura?.toLowerCase() === uStr ||
+        u.simbolo?.toLowerCase() === uStr
+      )
+      if (matched) {
+        resolvedUnitId = matched.id
+      } else {
+        unitError = `Unidad "${unidad}" no encontrada`
+      }
+    }
+
+    const costo = costoRaw
     if (!skuOdoo || !ingNombre) continue
     if (!map.has(skuOdoo)) map.set(skuOdoo, { nombre, sku_odoo: skuOdoo, ingredientes: [] })
 
@@ -79,7 +99,10 @@ function parseExcelRecetarios(buffer, productos = []) {
       especificacion: matchedProd?.especificacion || '',
       cantidad,
       unidad_medida: matchedProd ? (matchedProd.unidad_medida || unidad) : unidad,
-      costo_unitario: matchedProd ? (matchedProd.costo_unidad || costo) : costo
+      costo_unitario: matchedProd ? (matchedProd.costo_unidad || costo) : costo,
+      purchase_unit_id: resolvedUnitId,
+      purchase_unit_qty: purchaseUnitQty,
+      unit_error: unitError,
     })
   }
   return Array.from(map.values())
@@ -182,7 +205,7 @@ function TabRecetas() {
   const handleFileChange = async (e) => {
     const file = e.target.files[0]
     if (!file) return
-    try { setPreview(parseExcelRecetarios(await file.arrayBuffer(), productosParaImport)) }
+    try { setPreview(parseExcelRecetarios(await file.arrayBuffer(), productosParaImport, unidadesDB)) }
     catch (err) { toast.error('Error', `Error al leer Excel: ${err.message}`) }
   }
 
@@ -254,9 +277,9 @@ function TabRecetas() {
 
   const handleDescargarPlantilla = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['Producto', 'SKU_Odoo', 'Ingrediente', 'SKU_Ing (codigo_legible)', 'Cantidad', 'Unidad', 'Costo_Unit'],
-      ['Bubble Tea', 'BB-TEA-M', 'Té Negro Base', 'PROD00001', 200, 'ml', 0.012],
-      ['Bubble Tea', 'BB-TEA-M', 'Perlas de Tapioca', 'PROD00003', 50, 'g', 0.08],
+      ['Producto', 'SKU_Odoo', 'Ingrediente', 'SKU_Ing (codigo_legible)', 'Cantidad', 'Unidad', 'Cant x Compra', 'Costo_Unit'],
+      ['Bubble Tea', 'BB-TEA-M', 'Té Negro Base', 'PROD00001', 200, 'ml', 1, 0.012],
+      ['Bubble Tea', 'BB-TEA-M', 'Perlas de Tapioca', 'PROD00003', 50, 'g', 1, 0.08],
       ['Yogo Fresa', 'YG-FRESA-M', 'Base de Yogur', 'PROD00005', 250, 'ml', 0.02],
       ['Yogo Fresa', 'YG-FRESA-M', 'Fresas Congeladas', 'PROD00006', 80, 'g', 0.06],
       ['Maracuya Fusion', 'MA-FUSION-M', 'Jugo de Maracuyá', 'PROD00008', 150, 'ml', 0.025],
@@ -765,7 +788,7 @@ function ModalImportExcel({ fileRef, preview, importando, onFileChange, onDescar
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"><X size={20} className="text-slate-500" /></button>
         </div>
         <div className="p-5 overflow-y-auto max-h-[calc(90vh-80px)] space-y-4">
-          <p className="text-sm text-slate-600 dark:text-slate-400">Columnas: <span className="font-semibold">Producto | SKU_Odoo | Ingrediente | SKU_Ing | Cantidad | Unidad | Costo_Unit</span></p>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Columnas: <span className="font-semibold">Producto | SKU_Odoo | Ingrediente | SKU_Ing | Cantidad | Unidad | Cant x Compra | Costo_Unit</span></p>
           <button onClick={onDescargar} className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl"><Download size={16} /> Descargar plantilla</button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onFileChange} className="block text-sm text-slate-600" />
           {preview && (
@@ -774,10 +797,27 @@ function ModalImportExcel({ fileRef, preview, importando, onFileChange, onDescar
               <div className="max-h-52 overflow-y-auto border border-slate-200 dark:border-slate-600 rounded-xl">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 dark:bg-slate-700 sticky top-0"><tr>
-                    {['Nombre', 'SKU Odoo', 'Ing.', 'Costo'].map(h => <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">{h}</th>)}
+                    {['Nombre', 'SKU Odoo', 'Ing.', 'Costo', 'Alertas'].map(h => <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">{h}</th>)}
                   </tr></thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-600">
-                    {preview.map((r, i) => <tr key={i}><td className="px-3 py-2 font-medium">{r.nombre}</td><td className="px-3 py-2"><span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">{r.sku_odoo}</span></td><td className="px-3 py-2 text-center">{r.ingredientes.length}</td><td className="px-3 py-2 font-semibold">{fmtCosto(calcularCostoTotal(r.ingredientes))}</td></tr>)}
+                    {preview.map((r, i) => {
+                      const unitErrors = r.ingredientes.filter(ing => ing.unit_error)
+                      return (
+                        <tr key={i}>
+                          <td className="px-3 py-2 font-medium">{r.nombre}</td>
+                          <td className="px-3 py-2"><span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">{r.sku_odoo}</span></td>
+                          <td className="px-3 py-2 text-center">{r.ingredientes.length}</td>
+                          <td className="px-3 py-2 font-semibold">{fmtCosto(calcularCostoTotal(r.ingredientes))}</td>
+                          <td className="px-3 py-2">
+                            {unitErrors.map((ing, j) => (
+                              <span key={j} className="ml-1 px-1.5 py-0.5 text-xs bg-red-100 text-red-600 rounded">
+                                {ing.unit_error}
+                              </span>
+                            ))}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
