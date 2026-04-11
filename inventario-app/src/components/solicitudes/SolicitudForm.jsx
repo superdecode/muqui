@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
 import Alert from '../common/Alert'
+import UoMBadge from '../common/UoMBadge'
 import LoadingSpinner from '../common/LoadingSpinner'
 import { Search, Package, ArrowRight, AlertCircle, X, Triangle, Trash2 } from 'lucide-react'
 import dataService from '../../services/dataService'
@@ -34,6 +35,11 @@ export default function SolicitudForm({ onClose, onSave, onEnviar, isLoading = f
   const { data: productos = [], isLoading: isLoadingProductos } = useQuery({
     queryKey: ['productos'],
     queryFn: () => dataService.getProductos()
+  })
+
+  const { data: unidadesDB = [] } = useQuery({
+    queryKey: ['config-unidades'],
+    queryFn: () => dataService.getUnidadesMedida()
   })
 
   // Cargar inventario de la ubicación origen seleccionada
@@ -349,7 +355,12 @@ export default function SolicitudForm({ onClose, onSave, onEnviar, isLoading = f
                                         </span>
                                       )}
                                     </div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">{producto.especificacion || 'Sin especificación'}</p>
+                                    <UoMBadge
+                                      qty={producto.purchase_unit_qty}
+                                      symbol={unidadesDB.find(u => u.id === producto.purchase_unit_id)?.abreviatura}
+                                      unitName={unidadesDB.find(u => u.id === producto.purchase_unit_id)?.nombre || producto.unidad_medida}
+                                      size="md"
+                                    />
                                   </div>
                                 </div>
                               </td>
