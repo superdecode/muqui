@@ -8,6 +8,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner'
 import DataTable from '../components/common/DataTable'
 import MultiSelectUbicaciones from '../components/reportes/MultiSelectUbicaciones'
 import ProductoForm from '../components/productos/ProductoForm'
+import UoMBadge from '../components/common/UoMBadge'
 import { useToastStore } from '../stores/toastStore'
 import { usePermissions } from '../hooks/usePermissions'
 import { useAuthStore } from '../stores/authStore'
@@ -42,6 +43,7 @@ export default function Stock() {
   const { data: conteos = [] } = useQuery({ queryKey: ['conteos'], queryFn: () => dataService.getConteos() })
   const { data: detalleConteos = [] } = useQuery({ queryKey: ['detalle-conteos-all'], queryFn: () => dataService.getDetalleConteos() })
   const { data: detalleMovimientos = [] } = useQuery({ queryKey: ['detalle-movimientos-all'], queryFn: () => dataService.getDetalleMovimientos() })
+  const { data: unidadesDB = [] } = useQuery({ queryKey: ['config-unidades'], queryFn: () => dataService.getUnidadesMedida() })
 
   const updateProductoMut = useMutation({
     mutationFn: ({ id, data }) => dataService.updateProducto(id, data),
@@ -243,15 +245,20 @@ export default function Stock() {
   // Export
   const handleExportar = () => {
     if (stockData.length === 0) { toast.error('Sin datos', 'No hay datos para exportar'); return }
-    const data = stockData.map(r => ({
-      Producto: r.nombre,
-      Especificación: r.especificacion,
-      Categoría: r.categoria,
-      Ubicación: r.ubicacion_nombre,
-      'Stock Actual': r.stock_actual,
-      'Stock Mínimo': r.stock_minimo,
-      Estado: r.estado
-    }))
+    const data = stockData.map(r => {
+      const prod = productos.find(p => p.id === r.producto_id)
+      return {
+        Producto: r.nombre,
+        'UoM de Compra': prod?.purchase_unit_qty
+          ? `${prod.purchase_unit_qty} ${unidadesDB.find(u => u.id === prod.purchase_unit_id)?.abreviatura || prod.unidad_medida || ''}`.trim()
+          : (prod?.unidad_medida || '—'),
+        Categoría: r.categoria,
+        Ubicación: r.ubicacion_nombre,
+        'Stock Actual': r.stock_actual,
+        'Stock Mínimo': r.stock_minimo,
+        Estado: r.estado
+      }
+    })
     exportToCSV(data, `stock_${new Date().toISOString().split('T')[0]}`)
     toast.success('Exportado', 'Stock exportado a CSV')
   }
@@ -279,12 +286,20 @@ export default function Stock() {
       )
     },
     {
-      header: 'Especificación',
-      accessor: 'especificacion',
+      header: 'UoM de Compra',
+      accessor: 'producto_id',
       sortKey: 'especificacion',
-      render: (value) => (
-        <span className="text-xs text-slate-600 dark:text-slate-400">{value || '—'}</span>
-      )
+      render: (value, row) => {
+        const prod = productos.find(p => p.id === value)
+        return (
+          <UoMBadge
+            qty={prod?.purchase_unit_qty}
+            symbol={unidadesDB.find(u => u.id === prod?.purchase_unit_id)?.abreviatura}
+            unitName={unidadesDB.find(u => u.id === prod?.purchase_unit_id)?.nombre || prod?.unidad_medida}
+            size="sm"
+          />
+        )
+      }
     },
     {
       header: 'Categoría',
