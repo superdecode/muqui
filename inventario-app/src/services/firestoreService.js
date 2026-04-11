@@ -641,6 +641,7 @@ const firestoreService = {
 
       const nuevoProducto = {
         ...productoData,
+        frecuencia_inventario: (productoData.frecuencia_inventario || '').toUpperCase(),
         codigo_legible: codigoLegible,
         concatenado: `${productoData.nombre} ${productoData.especificacion || ''}`.trim(),
         estado: productoData.estado || 'ACTIVO',
@@ -670,6 +671,7 @@ const firestoreService = {
 
       const datosActualizados = {
         ...productoData,
+        frecuencia_inventario: productoData.frecuencia_inventario ? productoData.frecuencia_inventario.toUpperCase() : undefined,
         concatenado: `${productoData.nombre} ${productoData.especificacion || ''}`.trim(),
         updated_at: serverTimestamp()
       }
@@ -987,6 +989,8 @@ const firestoreService = {
             cantidad: prod.cantidad,
             cantidad_enviada: prod.cantidad,
             cantidad_recibida: null,
+            cantidad_original: prod.cantidad_original || null,
+            unidad_original_id: prod.unidad_original_id || null,
             observaciones: prod.observaciones || ''
           })
         })
@@ -2658,6 +2662,8 @@ const firestoreService = {
             venta_id: ventaRef.id,
             producto_id: prod.producto_id,
             cantidad: prod.cantidad,
+            cantidad_original: prod.cantidad_original || null,
+            unidad_original_id: prod.unidad_original_id || null,
             observaciones: prod.observaciones || ''
           })
 
@@ -2730,6 +2736,8 @@ const firestoreService = {
             merma_id: mermaRef.id,
             producto_id: prod.producto_id,
             cantidad: prod.cantidad,
+            cantidad_original: prod.cantidad_original || null,
+            unidad_original_id: prod.unidad_original_id || null,
             observaciones: prod.observaciones || ''
           })
 
@@ -3675,7 +3683,20 @@ const firestoreService = {
       console.error('Error obteniendo salidas odoo:', error)
       return []
     }
-  }
+  },
+
+  syncSalidasOdoo: async () => {
+    try {
+      const db = getDB()
+      const snap = await getDocs(
+        query(collection(db, 'salidas_odoo'), orderBy('fecha_creacion', 'desc'))
+      )
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    } catch (error) {
+      console.error('Error sincronizando salidas odoo:', error)
+      return []
+    }
+  },
 }
 
 /**

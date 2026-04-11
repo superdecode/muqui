@@ -367,6 +367,7 @@ const dataService = {
 
   // SALIDAS ODOO
   getSalidasOdoo: async () => firestoreService.getSalidasOdoo(),
+  syncSalidasOdoo: async () => firestoreService.syncSalidasOdoo(),
 
   // Obtener puntos de venta directamente desde Odoo mediante Cloud Function
   getOdooPOS: async () => {

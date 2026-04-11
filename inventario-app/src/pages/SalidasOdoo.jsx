@@ -5,7 +5,7 @@ import {
   BookOpen, Plus, Search, Download, Upload, Edit2, Trash2,
   ChevronDown, ChevronUp, X, Save, Package, DollarSign,
   FileSpreadsheet, CheckCircle, ArrowDownLeft, ArrowRightLeft,
-  MapPin, Clock, CheckCircle2, XCircle, Store, SlidersHorizontal
+  MapPin, Clock, CheckCircle2, XCircle, Store, SlidersHorizontal, RefreshCw
 } from 'lucide-react'
 import { useSalidasOdoo } from '../hooks/useSalidasOdoo'
 import { useToastStore } from '../stores/toastStore'
@@ -989,6 +989,22 @@ function TabMapeoPOS() {
 function TabSalidas() {
   const { data: salidas = [], isLoading } = useQuery({ queryKey: ['salidas-odoo'], queryFn: () => dataService.getSalidasOdoo() })
   const [filtroEstado, setFiltroEstado] = useState('')
+  const queryClient = useQueryClient()
+  const toast = useToastStore()
+  const [sincronizando, setSincronizando] = useState(false)
+
+  const handleSync = async () => {
+    setSincronizando(true)
+    try {
+      const result = await dataService.syncSalidasOdoo()
+      queryClient.invalidateQueries({ queryKey: ['salidas-odoo'] })
+      toast.success('Sincronizado', `${result.length} salidas cargadas`)
+    } catch {
+      toast.error('Error', 'No se pudo sincronizar las salidas')
+    } finally {
+      setSincronizando(false)
+    }
+  }
 
   const salidasFiltradas = filtroEstado ? salidas.filter(s => s.estado === filtroEstado) : salidas
 
@@ -1009,6 +1025,17 @@ function TabSalidas() {
 
   return (
     <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Salidas Odoo</h3>
+        <button
+          onClick={handleSync}
+          disabled={sincronizando}
+          className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors disabled:opacity-50"
+        >
+          <RefreshCw size={14} className={sincronizando ? 'animate-spin' : ''} />
+          {sincronizando ? 'Sincronizando...' : 'Sincronizar'}
+        </button>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4 border border-slate-200 dark:border-slate-600">
           <p className="text-xs text-slate-500 uppercase font-semibold">Total</p>
