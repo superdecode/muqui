@@ -14,6 +14,7 @@ import dataService from '../services/dataService'
 import { buildEquivalenceMap, getCompatibleUnits, calcCostInConsumptionUnit } from '../utils/unitConversion'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import Button from '../components/common/Button'
+import UoMBadge from '../components/common/UoMBadge'
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
@@ -146,6 +147,10 @@ function TabRecetas() {
   const toast = useToastStore()
   const { canEdit, canDelete: canDeletePerm, isReadOnly } = usePermissions()
   const { data: productosParaImport = [] } = useQuery({ queryKey: ['productos'], queryFn: () => dataService.getProductos() })
+  const { data: unidadesDB = [] } = useQuery({
+    queryKey: ['config-unidades'],
+    queryFn: () => dataService.getUnidadesMedida()
+  })
   const canWrite = canEdit('salidas_odoo')
   const canDel   = canDeletePerm('salidas_odoo')
   const readOnly = isReadOnly('recetarios')
@@ -424,7 +429,7 @@ function RecetaRow({ rec, expandido, setExpandido, canWrite, canDel, onEdit, onD
             <div className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
               <table className="w-full text-sm">
                 <thead><tr className="bg-slate-100 dark:bg-slate-600/50">
-                  {['Ingrediente', 'SKU', 'Espec.', 'Cantidad', 'Unidad', 'Costo/u', 'Subtotal'].map(h => (
+                  {['Ingrediente', 'SKU', 'Espec.', 'Costo/u', 'Cantidad Uso', 'Unidad', 'Subtotal'].map(h => (
                     <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">{h}</th>
                   ))}
                 </tr></thead>
@@ -434,9 +439,16 @@ function RecetaRow({ rec, expandido, setExpandido, canWrite, canDel, onEdit, onD
                       <td className="px-3 py-2"><div className="flex items-center gap-1.5"><Package size={13} className="text-slate-400" /><span className="font-medium text-slate-800 dark:text-slate-200">{ing.nombre}</span></div></td>
                       <td className="px-3 py-2 text-xs text-slate-500 font-mono">{ing.sku || '—'}</td>
                       <td className="px-3 py-2 text-xs text-slate-500">{ing.especificacion || '—'}</td>
-                      <td className="px-3 py-2 text-right font-semibold">{ing.cantidad}</td>
-                      <td className="px-3 py-2 text-xs text-slate-500">{ing.unidad_medida}</td>
                       <td className="px-3 py-2 text-right">{fmtCosto(ing.costo_unitario)}</td>
+                      <td className="px-3 py-2 text-right font-semibold">{ing.cantidad}</td>
+                      <td className="px-3 py-2">
+                        <UoMBadge
+                          qty={ing.purchase_unit_qty || ing.cantidad}
+                          symbol={unidadesDB.find(u => u.id === ing.purchase_unit_id)?.abreviatura || ing.unidad_medida}
+                          unitName={unidadesDB.find(u => u.id === ing.purchase_unit_id)?.nombre}
+                          size="sm"
+                        />
+                      </td>
                       <td className="px-3 py-2 text-right font-bold">{fmtCosto((ing.costo_unitario || 0) * (ing.cantidad || 0))}</td>
                     </tr>
                   ))}
@@ -504,8 +516,18 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
   const updateConsumptionUnit = (i, unitId) => {
     setForm(f => ({ ...f, ingredientes: f.ingredientes.map((ing, idx) => {
       if (idx !== i) return ing
-      const unit = unidadesDB.find(u => u.id === unitId)
-      return { ...ing, consumption_unit_id: unitId, unidad_medida: unit?.nombre || ing.unidad_medida }
+      let unidad_medida = ing.unidad_medida
+      if (unitId === '__presentation__') {
+        const prod = productosActivos.find(p => p.id === ing.producto_id) || {}
+        const unitTarget = unidadesDB.find(u => u.id === ing.purchase_unit_id)
+        const bSym = unitTarget?.abreviatura || unitTarget?.nombre || prod.unidad_medida || ing.unidad_medida || ''
+        const qQty = prod.purchase_unit_qty || 1
+        unidad_medida = `Unidad (${qQty} ${bSym})`.trim()
+      } else {
+        const unit = unidadesDB.find(u => u.id === unitId)
+        if (unit) unidad_medida = unit.nombre
+      }
+      return { ...ing, consumption_unit_id: unitId, unidad_medida }
     }) }))
   }
 
@@ -605,9 +627,9 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
                       <tr>
                         <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Producto</th>
                         <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Espec.</th>
-                        <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Unidad</th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Costo/u</th>
-                        <th className="px-3 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Cantidad</th>
+                        <th className="px-3 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Cantidad Uso</th>
+                        <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Unidad</th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Subtotal</th>
                         <th className="px-2 py-3"></th>
                       </tr>
@@ -656,26 +678,9 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
                             </div>
                           </td>
                           <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-400 truncate">{ing.especificacion || '—'}</td>
-                          <td className="px-3 py-2.5">
-  {ing.purchase_unit_id ? (
-    <select
-      value={ing.consumption_unit_id || ing.purchase_unit_id || ''}
-      onChange={e => updateConsumptionUnit(i, e.target.value)}
-      disabled={readOnly}
-      className="w-full px-1.5 py-1 text-xs border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:ring-1 focus:ring-primary-500 disabled:opacity-60"
-    >
-      {getCompatibleUnits(ing.purchase_unit_id, eqMap).map(uid => {
-        const u = unidadesDB.find(u => u.id === uid)
-        return u ? <option key={uid} value={uid}>{u.abreviatura || u.nombre}</option> : null
-      })}
-    </select>
-  ) : (
-    <span className="text-xs text-slate-500">{ing.unidad_medida || '—'}</span>
-  )}
-</td>
                           <td className="px-3 py-2.5 text-right">
                             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{fmtCosto(ing.costo_unitario)}</span>
-                            {ing.purchase_unit_id && ing.consumption_unit_id && ing.consumption_unit_id !== ing.purchase_unit_id && (
+                            {ing.purchase_unit_id && ing.consumption_unit_id && ing.consumption_unit_id !== ing.purchase_unit_id && ing.consumption_unit_id !== '__presentation__' && (
                               <p className="text-[10px] text-blue-500 mt-0.5">
                                 {(() => {
                                   const prod = productosActivos.find(p => p.id === ing.producto_id)
@@ -691,6 +696,36 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
                             <input type="number" value={ing.cantidad || ''} onChange={e => updateCantidad(i, e.target.value)}
                               disabled={readOnly} min={0} step="0.001" placeholder="0.000"
                               className="w-full px-2.5 py-2 text-sm text-center font-bold border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:opacity-60" />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            {ing.purchase_unit_id ? (
+                              <select
+                                value={ing.consumption_unit_id || ing.purchase_unit_id || ''}
+                                onChange={e => updateConsumptionUnit(i, e.target.value)}
+                                disabled={readOnly}
+                                className="w-full px-1.5 py-1 text-xs border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:ring-1 focus:ring-primary-500 disabled:opacity-60"
+                              >
+                                {(() => {
+                                  const prod = productosActivos.find(p => p.id === ing.producto_id) || {}
+                                  const unitTarget = unidadesDB.find(u => u.id === ing.purchase_unit_id)
+                                  const bSym = unitTarget?.abreviatura || unitTarget?.nombre || prod.unidad_medida || ing.unidad_medida || ''
+                                  const qQty = prod.purchase_unit_qty || 1
+                                  return (
+                                    <>
+                                      {qQty > 1 && (
+                                        <option value="__presentation__">Unidad ({qQty} {bSym})</option>
+                                      )}
+                                      {getCompatibleUnits(ing.purchase_unit_id, eqMap).map(uid => {
+                                        const u = unidadesDB.find(x => x.id === uid)
+                                        return u ? <option key={uid} value={uid}>{u.abreviatura || u.nombre}</option> : null
+                                      })}
+                                    </>
+                                  )
+                                })()}
+                              </select>
+                            ) : (
+                              <span className="text-xs text-slate-500">{ing.unidad_medida || '—'}</span>
+                            )}
                           </td>
                           <td className="px-3 py-2.5 text-right text-sm font-bold text-slate-900 dark:text-slate-100">{fmtCosto((ing.costo_unitario || 0) * (ing.cantidad || 0))}</td>
                           <td className="px-2 py-2.5 text-center">
