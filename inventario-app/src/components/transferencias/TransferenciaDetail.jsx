@@ -776,6 +776,7 @@ export default function TransferenciaDetail({
                         const cantOriginal = detalle.cantidad_original !== undefined ? detalle.cantidad_original : cantEnviada
                         const detalleId = detalle.id ?? detalle.detalle_id ?? `idx_${index}`
                         const currentValue = cantidadesRecibidas[detalleId] !== undefined ? cantidadesRecibidas[detalleId] : cantOriginal
+                        const cantRecibida = detalle.cantidad_recibida ?? null
                         return (
                           <tr key={detalle.id || index} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                             <td className="px-4 py-4">
