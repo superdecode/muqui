@@ -120,6 +120,7 @@ async function procesarVentaOdoo(orderId, ubicacionId = 'tienda_principal', tipo
           ubicacion_id: ubicacionId,
           fecha_creacion: admin.firestore.FieldValue.serverTimestamp(),
           estado: 'COMPLETADO',
+          exit_type: 'VENTA_ODDO',
           descripcion: `Venta Odoo: ${line.productName} (${line.quantity} × ${ing.cantidad} ${ing.unidad_medida || ''})`,
         };
 

@@ -989,6 +989,7 @@ function TabMapeoPOS() {
 function TabSalidas() {
   const { data: salidas = [], isLoading } = useQuery({ queryKey: ['salidas-odoo'], queryFn: () => dataService.getSalidasOdoo() })
   const [filtroEstado, setFiltroEstado] = useState('')
+  const [filtroTipo, setFiltroTipo] = useState('')
   const queryClient = useQueryClient()
   const toast = useToastStore()
   const [sincronizando, setSincronizando] = useState(false)
@@ -1006,7 +1007,24 @@ function TabSalidas() {
     }
   }
 
-  const salidasFiltradas = filtroEstado ? salidas.filter(s => s.estado === filtroEstado) : salidas
+  const exitTypeBadge = (type) => {
+    if (!type) return null
+    const map = {
+      VENTA_ODDO: { label: 'Venta Odoo', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' }
+    }
+    const entry = map[type] || { label: type, cls: 'bg-slate-100 text-slate-700' }
+    return (
+      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${entry.cls}`}>
+        {entry.label}
+      </span>
+    )
+  }
+
+  const salidasFiltradas = salidas.filter(s => {
+    const matchEstado = !filtroEstado || s.estado === filtroEstado
+    const matchTipo = !filtroTipo || s.exit_type === filtroTipo
+    return matchEstado && matchTipo
+  })
 
   const formatFecha = (ts) => {
     if (!ts) return '—'
@@ -1058,13 +1076,25 @@ function TabSalidas() {
         </div>
       </div>
 
-      {filtroEstado && (
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500">Filtrando por:</span>
-          <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${estadoBadge(filtroEstado)}`}>{filtroEstado}</span>
-          <button onClick={() => setFiltroEstado('')} className="p-1 hover:bg-slate-100 rounded"><X size={14} className="text-slate-400" /></button>
-        </div>
-      )}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={() => setFiltroTipo(f => f === 'VENTA_ODDO' ? '' : 'VENTA_ODDO')}
+          className={`px-2.5 py-0.5 rounded-full text-xs font-semibold cursor-pointer border transition-colors ${
+            filtroTipo === 'VENTA_ODDO'
+              ? 'bg-violet-200 text-violet-800 border-violet-300'
+              : 'bg-violet-100 text-violet-700 border-violet-200 hover:bg-violet-200'
+          }`}
+        >
+          Venta Odoo
+        </button>
+        {filtroEstado && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-500">Filtrando por:</span>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${estadoBadge(filtroEstado)}`}>{filtroEstado}</span>
+            <button onClick={() => setFiltroEstado('')} className="p-1 hover:bg-slate-100 rounded"><X size={14} className="text-slate-400" /></button>
+          </div>
+        )}
+      </div>
 
       {isLoading ? <LoadingSpinner text="Cargando salidas..." /> : salidasFiltradas.length === 0 ? (
         <div className="py-12 text-center">
@@ -1081,6 +1111,7 @@ function TabSalidas() {
               <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Cantidad</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Fecha</th>
               <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Estado</th>
+              <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Tipo</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {salidasFiltradas.map(s => (
@@ -1094,6 +1125,7 @@ function TabSalidas() {
                   <td className="px-4 py-3 text-center font-bold text-sm">{s.cantidad || 0}</td>
                   <td className="px-4 py-3 text-xs text-slate-500">{formatFecha(s.fecha_creacion)}</td>
                   <td className="px-4 py-3 text-center"><span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${estadoBadge(s.estado)}`}>{s.estado || 'PENDIENTE'}</span></td>
+                  <td className="px-4 py-3 text-center">{exitTypeBadge(s.exit_type)}</td>
                 </tr>
               ))}
             </tbody>
