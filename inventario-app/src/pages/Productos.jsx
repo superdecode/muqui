@@ -636,43 +636,43 @@ export default function Productos() {
           <div className="overflow-x-auto">
             <table className="w-full table-fixed">
               <colgroup>
-                <col style={{width: '30%'}} />
+                <col style={{width: '24%'}} />
                 <col style={{width: '10%'}} />
                 <col style={{width: '10%'}} />
                 <col style={{width: '8%'}} />
-                <col style={{width: '13%'}} />
+                <col style={{width: '14%'}} />
+                <col style={{width: '12%'}} />
                 <col style={{width: '10%'}} />
-                <col style={{width: '9%'}} />
-                <col style={{width: '6%'}} />
-                <col style={{width: '4%'}} />
+                <col style={{width: '7%'}} />
+                <col style={{width: '5%'}} />
               </colgroup>
               <thead className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-700">
                 <tr>
-                  <th onClick={() => handleSort('nombre')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                  <th onClick={() => handleSort('nombre')} className="px-3 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Producto<SortIcon column="nombre" /></span>
                   </th>
                   <th onClick={() => handleSort('especificacion')} className="px-4 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">UoM de Compra<SortIcon column="especificacion" /></span>
                   </th>
-                  <th onClick={() => handleSort('costo_unidad')} className="px-6 py-4 text-right text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                  <th onClick={() => handleSort('costo_unidad')} className="px-3 py-4 text-right text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Costo/Unidad<SortIcon column="costo_unidad" /></span>
                   </th>
-                  <th onClick={() => handleSort('stock_minimo')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                  <th onClick={() => handleSort('stock_minimo')} className="px-3 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Stock Mínimo<SortIcon column="stock_minimo" /></span>
                   </th>
-                  <th onClick={() => handleSort('categoria')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                  <th onClick={() => handleSort('categoria')} className="px-3 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Categoría<SortIcon column="categoria" /></span>
                   </th>
-                  <th onClick={() => handleSort('frecuencia_inventario')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                  <th onClick={() => handleSort('frecuencia_inventario')} className="px-3 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Tipo de Conteo<SortIcon column="frecuencia_inventario" /></span>
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  <th className="px-3 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                     Ubicaciones
                   </th>
-                  <th onClick={() => handleSort('estado')} className="px-6 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
+                  <th onClick={() => handleSort('estado')} className="px-3 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer hover:text-primary-600 select-none">
                     <span className="inline-flex items-center">Estado<SortIcon column="estado" /></span>
                   </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  <th className="px-3 py-4 text-right text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                     Acciones
                   </th>
                 </tr>
@@ -683,7 +683,7 @@ export default function Productos() {
                     key={item.id || index}
                     className="hover:bg-gradient-to-r hover:from-slate-50 dark:hover:from-slate-700/50 hover:to-transparent transition-colors"
                   >
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-3">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
                           <Package className="text-blue-600" size={20} />
@@ -694,7 +694,7 @@ export default function Productos() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-3">
                       <UoMBadge
                         qty={item.purchase_unit_qty}
                         symbol={unidadesDB.find(u => u.id === item.purchase_unit_id)?.abreviatura}
@@ -702,25 +702,25 @@ export default function Productos() {
                         size="sm"
                       />
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-3 py-3 text-right">
                       <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {item.costo_unidad ? `$${Number(item.costo_unidad).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '-'}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-3">
                       <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{item.stock_minimo || 0}</span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-3">
                       <span className={`px-3 py-1 rounded-full text-xs font-bold ${getCategoryColor(item.categoria)}`}>
                         {item.categoria || 'SIN CATEGORÍA'}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-3">
                       <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-xs font-medium">
                         {item.frecuencia_inventario ? item.frecuencia_inventario.toUpperCase() : '-'}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-3">
                       <div className="text-sm">
                         {(() => {
                           const ubicacionesPermitidas = getUbicacionesPermitidasParaProducto(item, ubicaciones, empresas)
@@ -758,7 +758,7 @@ export default function Productos() {
                         })()}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-3">
                       <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
                         item.estado === 'ACTIVO'
                           ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
@@ -767,7 +767,7 @@ export default function Productos() {
                         {formatLabel(item.estado)}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-3">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => handleEdit(item)}
