@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
 import Alert from '../common/Alert'
@@ -7,6 +7,7 @@ import { Search, Plus, X, AlertCircle, Package, Factory, ArrowRight, Trash2 } fr
 import dataService from '../../services/dataService'
 import { useAuthStore } from '../../stores/authStore'
 import { getUserAllowedUbicacionIds } from '../../utils/userFilters'
+import UoMBadge from '../common/UoMBadge'
 
 export default function ProduccionForm({ onClose, onSave, isLoading = false, editMode = false, initialData = null }) {
   const { user } = useAuthStore()
@@ -47,6 +48,16 @@ export default function ProduccionForm({ onClose, onSave, isLoading = false, edi
     queryFn: () => dataService.getProductos()
   })
 
+  // Cargar unidades y equivalencias para el selector de unidad de consumo
+  const { data: unidadesDB = [] } = useQuery({
+    queryKey: ['config-unidades'],
+    queryFn: () => dataService.getUnidadesMedida()
+  })
+  const { data: equivalencias = [] } = useQuery({
+    queryKey: ['config-equivalencias'],
+    queryFn: () => dataService.getUnitEquivalences()
+  })
+
   // Cargar inventario de la ubicación seleccionada
   const { data: inventario = [] } = useQuery({
     queryKey: ['inventario', formData.ubicacion_id],
@@ -54,7 +65,17 @@ export default function ProduccionForm({ onClose, onSave, isLoading = false, edi
     enabled: !!formData.ubicacion_id
   })
 
-  // Helpers
+  // Helper: devuelve IDs de unidades compatibles con la unidad base de un producto
+  const getCompatibleUnitIds = useMemo(() => (baseUnitId) => {
+    if (!baseUnitId) return []
+    const compatible = new Set([baseUnitId])
+    equivalencias.forEach(eq => {
+      if (eq.from_unit_id === baseUnitId) compatible.add(eq.to_unit_id)
+      if (eq.to_unit_id === baseUnitId) compatible.add(eq.from_unit_id)
+    })
+    return [...compatible]
+  }, [equivalencias])
+
   const getProductoStock = (productoId) => {
     const inv = inventario.find(i => String(i.producto_id) === String(productoId))
     return inv?.stock_actual || inv?.cantidad || 0
@@ -117,6 +138,12 @@ export default function ProduccionForm({ onClose, onSave, isLoading = false, edi
     setLineas(lineas.map(l => {
       if (l.id !== lineaId) return l
       if (l.insumos.find(i => i.producto_id === producto.id)) return l
+      // Resolver unidad base y símbolo del producto
+      const unit = unidadesDB.find(u => u.id === producto.purchase_unit_id)
+      const unitSymbol = unit?.abreviatura || unit?.nombre || producto.unidad_medida || ''
+      const especificacion = producto.purchase_unit_qty && unitSymbol
+        ? `${producto.purchase_unit_qty} ${unitSymbol}`.trim()
+        : (producto.especificacion || '')
       return {
         ...l,
         insumos: [...l.insumos, {
@@ -124,7 +151,11 @@ export default function ProduccionForm({ onClose, onSave, isLoading = false, edi
           producto_nombre: producto.nombre,
           cantidad: 1,
           stock: producto.stock,
-          unidad_medida: producto.unidad_medida
+          unidad_medida: unit?.nombre || producto.unidad_medida,
+          purchase_unit_id: producto.purchase_unit_id,
+          especificacion,
+          // Forzar a elegir la unidad de consumo en BOM, sin valor por defecto
+          consumption_unit_id: ''
         }],
         insumoSearch: '',
         showInsumoDropdown: false
@@ -146,6 +177,18 @@ export default function ProduccionForm({ onClose, onSave, isLoading = false, edi
         ...l,
         insumos: l.insumos.map(i =>
           i.producto_id === productoId ? { ...i, cantidad: Math.max(0.01, cantidad) } : i
+        )
+      }
+    }))
+  }
+
+  const updateInsumoUnidad = (lineaId, productoId, consumption_unit_id) => {
+    setLineas(lineas.map(l => {
+      if (l.id !== lineaId) return l
+      return {
+        ...l,
+        insumos: l.insumos.map(i =>
+          i.producto_id === productoId ? { ...i, consumption_unit_id } : i
         )
       }
     }))
@@ -335,7 +378,13 @@ export default function ProduccionForm({ onClose, onSave, isLoading = false, edi
                         </div>
                         <div>
                           <p className="font-semibold text-slate-900 dark:text-slate-100">{productoInfo?.nombre || linea.producto_nombre}</p>
-                          <p className="text-xs text-slate-500">{productoInfo?.especificacion || ''} {productoInfo?.unidad_medida && `| ${productoInfo.unidad_medida}`}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 flex-wrap">
+                            <span>{productoInfo?.codigo_legible || productoInfo?.id}</span>
+                            <span className="text-slate-300">|</span>
+                            <UoMBadge qty={productoInfo?.purchase_unit_qty} symbol={unidadesDB.find(u => u.id === productoInfo?.purchase_unit_id)?.abreviatura} unitName={unidadesDB.find(u => u.id === productoInfo?.purchase_unit_id)?.nombre || productoInfo?.unidad_medida} size="sm" />
+                            <span className="text-slate-300">|</span>
+                            <span>Stock: {productoInfo?.stock ?? 0}</span>
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -384,7 +433,13 @@ export default function ProduccionForm({ onClose, onSave, isLoading = false, edi
                                 className="p-3 hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer border-b last:border-b-0 border-slate-100 dark:border-slate-600"
                               >
                                 <p className="font-medium text-sm text-slate-900 dark:text-slate-100">{p.nombre}</p>
-                                <p className="text-xs text-slate-500">{p.especificacion || 'Sin especificación'} | Stock: {p.stock}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 flex-wrap">
+                                  <span>{p.codigo_legible || p.id}</span>
+                                  <span className="text-slate-300">|</span>
+                                  <UoMBadge qty={p.purchase_unit_qty} symbol={unidadesDB.find(u => u.id === p.purchase_unit_id)?.abreviatura} unitName={unidadesDB.find(u => u.id === p.purchase_unit_id)?.nombre || p.unidad_medida} size="sm" />
+                                  <span className="text-slate-300">|</span>
+                                  <span>Stock: {p.stock ?? 0}</span>
+                                </p>
                               </div>
                             ))
                           )}
@@ -418,39 +473,71 @@ export default function ProduccionForm({ onClose, onSave, isLoading = false, edi
                         const insumoInfo = getProductoInfo(insumo.producto_id)
                         const stock = getProductoStock(insumo.producto_id)
                         const exceedsStock = insumo.cantidad > stock
+                        const compatibleIds = getCompatibleUnitIds(insumo.purchase_unit_id)
+                        const compatibleUnits = unidadesDB.filter(u => compatibleIds.includes(u.id))
+                        const hasEquivalencias = compatibleUnits.length > 1
                         return (
-                          <div key={insumo.producto_id} className="flex items-center gap-3 bg-white dark:bg-slate-800 rounded-lg p-2.5 border border-slate-200 dark:border-slate-700">
-                            <div className="p-1.5 bg-orange-100 dark:bg-orange-800 rounded-lg">
-                              <Package size={14} className="text-orange-600 dark:text-orange-300" />
+                          <div key={insumo.producto_id} className="flex flex-col gap-2 bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                            {/* Fila superior: icono + nombre + stock + cant */}
+                            <div className="flex items-center gap-3">
+                              <div className="p-1.5 bg-orange-100 dark:bg-orange-800 rounded-lg flex-shrink-0">
+                                <Package size={14} className="text-orange-600 dark:text-orange-300" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate">{insumoInfo?.nombre || insumo.producto_nombre}</p>
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                  {/* Especificación: read-only */}
+                                  {insumo.especificacion && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">{insumo.especificacion}</span>
+                                  )}
+                                  {/* Unidad de Medida: read-only */}
+                                  {insumo.unidad_medida && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium">{insumo.unidad_medida}</span>
+                                  )}
+                                  <span className="text-xs text-slate-500">Stock: {stock}</span>
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-center">
+                                <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-0.5">Cant. Uso</span>
+                                <input
+                                  type="number"
+                                  min="0.01"
+                                  step="any"
+                                  value={insumo.cantidad}
+                                  title="Cantidad Uso"
+                                  onChange={(e) => updateInsumoCantidad(linea.id, insumo.producto_id, parseFloat(e.target.value) || 0)}
+                                  className={`w-20 px-2 py-1.5 border-2 rounded-lg text-center font-bold text-sm focus:ring-2 focus:ring-orange-500 ${
+                                    exceedsStock
+                                      ? 'border-red-400 bg-red-50 text-red-700'
+                                      : 'border-orange-300 dark:border-orange-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'
+                                  }`}
+                                />
+                              </div>
+                              {hasEquivalencias ? (
+                                <select
+                                  value={insumo.consumption_unit_id || ''}
+                                  onChange={e => updateInsumoUnidad(linea.id, insumo.producto_id, e.target.value)}
+                                  className="w-24 px-2 py-1.5 border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-sm focus:ring-2 focus:ring-orange-500"
+                                >
+                                  <option value="" disabled>Unid. Uso</option>
+                                  {compatibleUnits.map(u => (
+                                    <option key={u.id} value={u.id}>{u.abreviatura || u.nombre}</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span className="text-xs text-amber-600 dark:text-amber-400 max-w-[80px] leading-tight">Solo 1 unid. conf.</span>
+                              )}
+                              {exceedsStock && (
+                                <span className="text-xs text-red-600 font-medium">!</span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => removeInsumo(linea.id, insumo.producto_id)}
+                                className="p-1 hover:bg-red-50 rounded text-red-500" // -> Changed to eliminate the bottom row
+                              >
+                                <Trash2 size={14} />
+                              </button>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate">{insumoInfo?.nombre || insumo.producto_nombre}</p>
-                              <p className="text-xs text-slate-500">
-                                Stock: {stock} {insumoInfo?.unidad_medida || insumo.unidad_medida || ''}
-                              </p>
-                            </div>
-                            <input
-                              type="number"
-                              min="0.01"
-                              step="any"
-                              value={insumo.cantidad}
-                              onChange={(e) => updateInsumoCantidad(linea.id, insumo.producto_id, parseFloat(e.target.value) || 0)}
-                              className={`w-20 px-2 py-1.5 border-2 rounded-lg text-center font-bold text-sm focus:ring-2 focus:ring-orange-500 ${
-                                exceedsStock
-                                  ? 'border-red-400 bg-red-50 text-red-700'
-                                  : 'border-orange-300 dark:border-orange-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'
-                              }`}
-                            />
-                            {exceedsStock && (
-                              <span className="text-xs text-red-600 font-medium">!</span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => removeInsumo(linea.id, insumo.producto_id)}
-                              className="p-1 hover:bg-red-50 rounded text-red-500"
-                            >
-                              <Trash2 size={14} />
-                            </button>
                           </div>
                         )
                       })}
@@ -484,7 +571,13 @@ export default function ProduccionForm({ onClose, onSave, isLoading = false, edi
                               className="p-2.5 hover:bg-orange-50 dark:hover:bg-orange-900/20 cursor-pointer border-b last:border-b-0 border-slate-100 dark:border-slate-600"
                             >
                               <p className="font-medium text-sm text-slate-900 dark:text-slate-100">{p.nombre}</p>
-                              <p className="text-xs text-slate-500">{p.especificacion || 'Sin especificación'} | Stock: {p.stock} {p.unidad_medida || ''}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 flex-wrap">
+                                <span>{p.codigo_legible || p.id}</span>
+                                <span className="text-slate-300">|</span>
+                                <UoMBadge qty={p.purchase_unit_qty} symbol={unidadesDB.find(u => u.id === p.purchase_unit_id)?.abreviatura} unitName={unidadesDB.find(u => u.id === p.purchase_unit_id)?.nombre || p.unidad_medida} size="sm" />
+                                <span className="text-slate-300">|</span>
+                                <span>Stock: {p.stock ?? 0}</span>
+                              </p>
                             </div>
                           ))
                         )}
