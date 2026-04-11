@@ -5,7 +5,7 @@ import {
   BookOpen, Plus, Search, Download, Upload, Edit2, Trash2,
   ChevronDown, ChevronUp, X, Save, Package, DollarSign,
   FileSpreadsheet, CheckCircle, ArrowDownLeft, ArrowRightLeft,
-  MapPin, Clock, CheckCircle2, XCircle, Store, SlidersHorizontal, RefreshCw
+  MapPin, Clock, CheckCircle2, XCircle, Store, SlidersHorizontal
 } from 'lucide-react'
 import { useSalidasOdoo } from '../hooks/useSalidasOdoo'
 import { useToastStore } from '../stores/toastStore'
@@ -650,9 +650,9 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
                       <tr>
                         <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Producto</th>
                         <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Espec.</th>
-                        <th className="px-3 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Costo/u</th>
-                        <th className="px-3 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Cantidad Uso</th>
+                        <th className="px-3 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Costo/u</th>
                         <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Unidad</th>
+                        <th className="px-3 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Cantidad Uso</th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Subtotal</th>
                         <th className="px-2 py-3"></th>
                       </tr>
@@ -663,10 +663,10 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
                           <td className="px-3 py-2">
                             <div className="relative">
                               {ing.producto_id && activeSearchRow !== i ? (
-                                <div className="flex items-center gap-2 px-2.5 py-1.5 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg">
-                                  <Package size={13} className="text-green-600 shrink-0" />
-                                  <span className="text-sm font-medium text-green-800 dark:text-green-300 truncate flex-1">{ing.nombre}</span>
-                                  {!readOnly && <button type="button" onClick={() => clearProduct(i)} className="shrink-0 p-0.5 hover:bg-green-200 rounded"><X size={11} className="text-green-600" /></button>}
+                                <div className="flex items-center gap-2 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+                                  <Package size={13} className="text-blue-600 shrink-0" />
+                                  <span className="text-sm font-medium text-blue-800 dark:text-blue-300 truncate flex-1">{ing.nombre}</span>
+                                  {!readOnly && <button type="button" onClick={() => clearProduct(i)} className="shrink-0 p-0.5 hover:bg-blue-200 rounded"><X size={11} className="text-blue-600" /></button>}
                                 </div>
                               ) : (
                                 <div>
@@ -701,7 +701,7 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
                             </div>
                           </td>
                           <td className="px-3 py-2.5 text-sm text-slate-600 dark:text-slate-400 truncate">{ing.especificacion || '—'}</td>
-                          <td className="px-3 py-2.5 text-right">
+                          <td className="px-3 py-2.5 text-center">
                             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{fmtCosto(ing.costo_unitario)}</span>
                             {ing.purchase_unit_id && ing.consumption_unit_id && ing.consumption_unit_id !== ing.purchase_unit_id && ing.consumption_unit_id !== '__presentation__' && (
                               <p className="text-[10px] text-blue-500 mt-0.5">
@@ -714,11 +714,6 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
                                 })()}
                               </p>
                             )}
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <input type="number" value={ing.cantidad || ''} onChange={e => updateCantidad(i, e.target.value)}
-                              disabled={readOnly} min={0} step="0.001" placeholder="0.000"
-                              className="w-full px-2.5 py-2 text-sm text-center font-bold border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:opacity-60" />
                           </td>
                           <td className="px-3 py-2.5">
                             {ing.purchase_unit_id ? (
@@ -754,6 +749,11 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
                                 <option>{ing.unidad_medida || 'Sin UoM'}</option>
                               </select>
                             )}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <input type="number" value={ing.cantidad || ''} onChange={e => updateCantidad(i, e.target.value)}
+                              disabled={readOnly} min={0} step="0.001" placeholder="0.000"
+                              className="w-full px-2.5 py-2 text-sm text-center font-bold border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:opacity-60" />
                           </td>
                           <td className="px-3 py-2.5 text-right text-sm font-bold text-slate-900 dark:text-slate-100">{fmtCosto((ing.costo_unitario || 0) * (ing.cantidad || 0))}</td>
                           <td className="px-2 py-2.5 text-center">
@@ -1037,21 +1037,6 @@ function TabSalidas() {
   const [filtroTipo, setFiltroTipo] = useState('')
   const queryClient = useQueryClient()
   const toast = useToastStore()
-  const [sincronizando, setSincronizando] = useState(false)
-
-  const handleSync = async () => {
-    setSincronizando(true)
-    try {
-      const result = await dataService.syncSalidasOdoo()
-      queryClient.invalidateQueries({ queryKey: ['salidas-odoo'] })
-      toast.success('Sincronizado', `${result.length} salidas cargadas`)
-    } catch {
-      toast.error('Error', 'No se pudo sincronizar las salidas')
-    } finally {
-      setSincronizando(false)
-    }
-  }
-
   const exitTypeBadge = (type) => {
     if (!type) return null
     const map = {
@@ -1088,16 +1073,8 @@ function TabSalidas() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div>
         <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Salidas Odoo</h3>
-        <button
-          onClick={handleSync}
-          disabled={sincronizando}
-          className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={sincronizando ? 'animate-spin' : ''} />
-          {sincronizando ? 'Sincronizando...' : 'Sincronizar'}
-        </button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4 border border-slate-200 dark:border-slate-600">
