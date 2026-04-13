@@ -10,12 +10,15 @@ import { exportConsolidatedToExcel } from '../utils/excelExport'
 import MultiSelectUbicaciones from '../components/reportes/MultiSelectUbicaciones'
 import TablaConsolidada from '../components/reportes/TablaConsolidada'
 import { useToastStore } from '../stores/toastStore'
-import { safeFormatDate, safeParseDate, formatDisplayId } from '../utils/formatters'
+import { safeFormatDate, safeParseDate, formatDisplayId, formatCantidad } from '../utils/formatters'
 import { useAuthStore } from '../stores/authStore'
 import dataService from '../services/dataService'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { usePermissions } from '../hooks/usePermissions'
+
+const fmtProducto = (producto, fallback) =>
+  producto ? (producto.especificacion ? `${producto.nombre} - ${producto.especificacion}` : producto.nombre) : fallback
 
 const getDefaultDates = () => {
   const hoy = new Date()
@@ -42,6 +45,14 @@ const COLOR_CLASSES = {
   orange: 'bg-orange-100 text-orange-600 border-orange-200',
   teal: 'bg-teal-100 text-teal-600 border-teal-200',
   indigo: 'bg-indigo-100 text-indigo-600 border-indigo-200'
+}
+
+// Format report cell value: apply precise quantity formatting for numbers
+function fmtReportCell(v) {
+  if (typeof v === 'number') {
+    return formatCantidad(v)
+  }
+  return v
 }
 
 // Badge component for método values
@@ -290,7 +301,7 @@ export default function Reportes() {
           })
 
           return {
-            Producto: producto?.nombre || item.producto_id,
+            Producto: fmtProducto(producto, item.producto_id),
             Ubicación: ubicacion?.nombre || item.ubicacion_id,
             Entradas: entradas,
             Salidas: salidas,
@@ -344,14 +355,18 @@ export default function Reportes() {
         const ff = new Date(dateRange.fechaFin)
         ff.setHours(23, 59, 59, 999)
 
+        const estadosValidos = ['COMPLETADO', 'PARCIAL', 'EN_PROCESO', 'PARCIALMENTE_COMPLETADO']
         let data = movimientos.filter(mov => {
+          // Exclude ODOO_VENTA direct movements (they appear in Kardex)
+          if (mov.origen === 'ODOO_VENTA' || mov.exit_type === 'VENTA_ODOO') return false
+          const estado = (mov.estado || '').toUpperCase()
+          if (!estadosValidos.includes(estado)) return false
           const fecha = safeParseDate(mov.fecha_documento || mov.fecha_creacion)
           return fecha && fecha >= fi && fecha <= ff
         })
-        
+
         if (ubFilter) data = data.filter(m => m.origen_id === ubFilter || m.destino_id === ubFilter)
-        
-        // Sort by fecha_documento (most recent first)
+
         data.sort((a, b) => {
           const fa = safeParseDate(a.fecha_documento || a.fecha_creacion) || new Date(0)
           const fb = safeParseDate(b.fecha_documento || b.fecha_creacion) || new Date(0)
@@ -361,21 +376,17 @@ export default function Reportes() {
         return data.map(mov => {
           const origen = ubicaciones.find(u => u.id === mov.origen_id)
           const destino = ubicaciones.find(u => u.id === mov.destino_id)
-
-          // Calcular cantidad de items (productos únicos) y cantidad total
           const detalles = detalleMovimientos.filter(d => d.movimiento_id === mov.id)
           const cantidadItems = detalles.length
           const cantidadTotal = detalles.reduce((sum, d) => sum + (d.cantidad_enviada || d.cantidad || 0), 0)
-
           return {
             Código: formatDisplayId(mov, 'MV'),
             Tipo: mov.tipo_movimiento || 'TRANSFERENCIA',
             Fecha: safeFormatDate(mov.fecha_documento || mov.fecha_creacion, 'dd/MM/yyyy'),
-            Origen: origen?.nombre || mov.origen_id,
-            Destino: destino?.nombre || mov.destino_id,
+            Origen: origen?.nombre || mov.origen_id || '—',
+            Destino: destino?.nombre || mov.destino_id || '—',
             'Cant. Items': cantidadItems,
-            'Cant. Productos': cantidadTotal,
-            Estado: mov.estado
+            'Cant. Productos': cantidadTotal
           }
         })
       }
@@ -419,8 +430,9 @@ export default function Reportes() {
 
         // Calculate entradas and salidas from confirmed movements in date range
         const movsConfirmados = movimientos.filter(m => {
+          if (m.origen === 'ODOO_VENTA' || m.exit_type === 'VENTA_ODOO') return false
           const estado = m.estado?.toUpperCase() || ''
-          if (!estado.startsWith('CONFIRM')) return false
+          if (!['COMPLETADO', 'PARCIAL', 'EN_PROCESO', 'PARCIALMENTE_COMPLETADO'].includes(estado)) return false
           const fecha = safeParseDate(m.fecha_documento || m.fecha_creacion || m.fecha_confirmacion)
           return fecha && fecha >= fi && fecha <= ff
         })
@@ -439,22 +451,7 @@ export default function Reportes() {
         if (ubFilter) results = results.filter(r => r.ubicacion_id === ubFilter)
 
         if (results.length === 0) {
-          // Fallback: show current inventory if no conteos found
-          let data = inventario
-          if (ubFilter) data = data.filter(i => i.ubicacion_id === ubFilter)
-          return data.map(item => {
-            const producto = productos.find(p => p.id === item.producto_id)
-            const ubicacion = ubicaciones.find(u => u.id === item.ubicacion_id)
-            return {
-              Producto: producto?.nombre || item.producto_id,
-              Ubicación: ubicacion?.nombre || item.ubicacion_id,
-              'Conteo Inicial': '-',
-              Entradas: '-',
-              Salidas: '-',
-              'Conteo Final': '-',
-              Consumo: 'Sin conteos en período'
-            }
-          })
+          return [] // No conteos en el período — mostrar vacío
         }
 
         return results.map(r => {
@@ -464,7 +461,7 @@ export default function Reportes() {
           const cf = r.conteoFinal ?? 0
           const consumo = ci + r.entradas - r.salidas - cf
           return {
-            Producto: producto?.nombre || r.producto_id,
+            Producto: fmtProducto(producto, r.producto_id),
             Ubicación: ubicacion?.nombre || r.ubicacion_id,
             'Conteo Inicial': ci,
             Entradas: r.entradas,
@@ -475,45 +472,114 @@ export default function Reportes() {
         })
       }
       case 'rotacion': {
-        const movsByProduct = {}
-        movimientos.forEach(mov => {
-          if (mov.detalles && Array.isArray(mov.detalles)) {
-            mov.detalles.forEach(d => {
-              movsByProduct[d.producto_id] = (movsByProduct[d.producto_id] || 0) + (d.cantidad || 1)
-            })
-          }
-        })
-        return productos.map(p => ({
-          Producto: p.nombre,
-          Categoría: p.categoria || '-',
-          Movimientos: movsByProduct[p.id] || 0,
-          Rotación: movsByProduct[p.id] > 5 ? 'Alta' : movsByProduct[p.id] > 0 ? 'Media' : 'Baja'
-        })).sort((a, b) => b.Movimientos - a.Movimientos)
-      }
-      case 'kardex': {
-        // Reporte Kardex: Historial detallado línea por línea de movimientos
         const fi = new Date(dateRange.fechaInicio)
         const ff = new Date(dateRange.fechaFin)
         ff.setHours(23, 59, 59, 999)
 
-        // Filtrar ubicaciones seleccionadas o todas las del usuario
-        const ubicacionesFiltro = filterUbicaciones.length > 0 ? filterUbicaciones : userUbicaciones.map(u => u.id)
+        const movsByProduct = {}
+        // Count via detalle_movimientos (TRANSFERENCIA, COMPRA, PRODUCCION)
+        const movsValidos = movimientos.filter(m => {
+          if (m.origen === 'ODOO_VENTA' || m.exit_type === 'VENTA_ODOO') return false
+          const estado = (m.estado || '').toUpperCase()
+          if (!['COMPLETADO', 'PARCIAL', 'EN_PROCESO', 'PARCIALMENTE_COMPLETADO'].includes(estado)) return false
+          const fecha = safeParseDate(m.fecha_documento || m.fecha_confirmacion || m.fecha_creacion)
+          return fecha && fecha >= fi && fecha <= ff
+        })
+        const movIdsValidos = new Set(movsValidos.map(m => m.id))
+        detalleMovimientos.forEach(det => {
+          if (!movIdsValidos.has(det.movimiento_id)) return
+          movsByProduct[det.producto_id] = (movsByProduct[det.producto_id] || 0) + 1
+        })
+        // Also count ODOO_VENTA exits per product
+        movimientos.forEach(m => {
+          if (m.origen !== 'ODOO_VENTA' && m.exit_type !== 'VENTA_ODOO') return
+          if (m.estado === 'ERROR') return
+          const fecha = safeParseDate(m.fecha_creacion)
+          if (!fecha || fecha < fi || fecha > ff) return
+          if (m.producto_id) movsByProduct[m.producto_id] = (movsByProduct[m.producto_id] || 0) + 1
+        })
 
-        // Filtrar productos seleccionados o todos
+        let result = productos.map(p => ({
+          Producto: fmtProducto(p, p.nombre),
+          Categoría: p.categoria || '—',
+          Movimientos: movsByProduct[p.id] || 0,
+          Rotación: (movsByProduct[p.id] || 0) > 5 ? 'Alta' : (movsByProduct[p.id] || 0) > 0 ? 'Media' : 'Baja'
+        })).sort((a, b) => b.Movimientos - a.Movimientos)
+
+        if (ubFilter) {
+          // Filter to products that appear in ubicacion inventory
+          const prodIdsEnUbicacion = new Set(inventario.filter(i => i.ubicacion_id === ubFilter).map(i => i.producto_id))
+          result = result.filter(r => {
+            const p = productos.find(x => fmtProducto(x, x.nombre) === r.Producto)
+            return p && prodIdsEnUbicacion.has(p.id)
+          })
+        }
+        return result
+      }
+      case 'kardex': {
+        const fi = new Date(dateRange.fechaInicio)
+        const ff = new Date(dateRange.fechaFin)
+        ff.setHours(23, 59, 59, 999)
+
+        const ubicacionesFiltro = filterUbicaciones.length > 0 ? filterUbicaciones : userUbicaciones.map(u => u.id)
         const productosFiltrados = filterProductos.length > 0
           ? productos.filter(p => filterProductos.includes(p.id))
           : productos
+
+        const estadosMovValidos = ['COMPLETADO', 'PARCIAL', 'EN_PROCESO', 'PARCIALMENTE_COMPLETADO']
+
+        // Pre-filter movements in range (standard inventory movements)
+        const movsEnRango = movimientos.filter(mov => {
+          if (mov.origen === 'ODOO_VENTA' || mov.exit_type === 'VENTA_ODOO') return false
+          const estado = (mov.estado || '').toUpperCase()
+          if (!estadosMovValidos.includes(estado)) return false
+          const fecha = safeParseDate(mov.fecha_documento || mov.fecha_confirmacion || mov.fecha_creacion)
+          return fecha && fecha >= fi && fecha <= ff
+        })
+
+        // Pre-filter ODOO_VENTA exits in range
+        const odooVentasEnRango = movimientos.filter(mov => {
+          if (mov.origen !== 'ODOO_VENTA' && mov.exit_type !== 'VENTA_ODOO') return false
+          if ((mov.estado || '').toUpperCase() === 'ERROR') return false
+          const fecha = safeParseDate(mov.fecha_creacion)
+          return fecha && fecha >= fi && fecha <= ff
+        })
+
+        // Pre-filter conteos in range
+        const conteosEnRango = conteos.filter(c => {
+          if (!['COMPLETADO', 'PARCIALMENTE_COMPLETADO'].includes(c.estado?.toUpperCase())) return false
+          const fecha = safeParseDate(c.fecha_completado || c.fecha_programada)
+          return fecha && fecha >= fi && fecha <= ff
+        })
 
         const kardexLines = []
 
         productosFiltrados.forEach(producto => {
           ubicacionesFiltro.forEach(ubicacionId => {
-            // Encontrar stock inicial (último conteo antes del rango)
+            const ubicNombre = ubicaciones.find(u => u.id === ubicacionId)?.nombre || ubicacionId
+            const prodNombre = fmtProducto(producto, producto.id)
+
+            // Check if there's any activity for this product/location in range
+            const movsDet = movsEnRango.filter(mov =>
+              (mov.destino_id === ubicacionId || mov.origen_id === ubicacionId) &&
+              detalleMovimientos.some(d => d.movimiento_id === mov.id && d.producto_id === producto.id)
+            )
+            const odooVentas = odooVentasEnRango.filter(m =>
+              m.producto_id === producto.id && m.ubicacion_id === ubicacionId
+            )
+            const conteosProducto = conteosEnRango.filter(c =>
+              c.ubicacion_id === ubicacionId &&
+              detalleConteos.some(d => d.conteo_id === c.id && d.producto_id === producto.id)
+            )
+
+            if (movsDet.length === 0 && odooVentas.length === 0 && conteosProducto.length === 0) return
+
+            // Get opening balance (last conteo before range, or inventory)
             const conteosAnteriores = conteos
               .filter(c =>
                 c.ubicacion_id === ubicacionId &&
                 ['COMPLETADO', 'PARCIALMENTE_COMPLETADO'].includes(c.estado?.toUpperCase()) &&
-                safeParseDate(c.fecha_completado || c.fecha_programada) < fi
+                (safeParseDate(c.fecha_completado || c.fecha_programada) || new Date(0)) < fi
               )
               .sort((a, b) => {
                 const da = safeParseDate(a.fecha_completado || a.fecha_programada) || new Date(0)
@@ -521,117 +587,143 @@ export default function Reportes() {
                 return db - da
               })
 
-            let saldoAnterior = 0
-            let codigoConteoInicial = '-'
+            let saldoInicial = 0
+            let codigoSaldoInicial = 'Inv. base'
             if (conteosAnteriores.length > 0) {
-              const ultimoConteo = conteosAnteriores[0]
-              codigoConteoInicial = formatDisplayId(ultimoConteo, 'CT')
-              const detalle = detalleConteos.find(d =>
-                d.conteo_id === ultimoConteo.id && d.producto_id === producto.id
-              )
-              if (detalle) {
-                saldoAnterior = detalle.cantidad_fisica ?? detalle.cantidad_sistema ?? 0
-              }
+              const ct = conteosAnteriores[0]
+              codigoSaldoInicial = formatDisplayId(ct, 'CT')
+              const det = detalleConteos.find(d => d.conteo_id === ct.id && d.producto_id === producto.id)
+              if (det) saldoInicial = det.cantidad_fisica ?? det.cantidad_sistema ?? 0
             } else {
-              // Si no hay conteo anterior, usar inventario base
-              const invItem = inventario.find(i =>
-                i.producto_id === producto.id && i.ubicacion_id === ubicacionId
-              )
-              saldoAnterior = invItem?.stock_actual ?? 0
+              const invItem = inventario.find(i => i.producto_id === producto.id && i.ubicacion_id === ubicacionId)
+              saldoInicial = invItem?.stock_actual ?? 0
             }
 
-            let saldoActual = saldoAnterior
+            // Add opening balance line
+            kardexLines.push({
+              fechaObj: new Date(fi.getTime() - 1),
+              producto: prodNombre,
+              ubicacion: ubicNombre,
+              tipo: 'SALDO INICIAL',
+              documento: codigoSaldoInicial,
+              entradas: '—',
+              salidas: '—',
+              saldo: saldoInicial,
+              orden: fi.getTime() - 1
+            })
 
-            // Agregar línea de saldo inicial
-            if (saldoAnterior > 0) {
-              kardexLines.push({
-                fecha: fi,
-                producto: producto.nombre,
-                ubicacion: ubicaciones.find(u => u.id === ubicacionId)?.nombre || ubicacionId,
-                tipo: 'SALDO INICIAL',
-                documento: codigoConteoInicial,
-                entradas: 0,
-                salidas: 0,
-                saldo: saldoAnterior,
-                orden: 0
-              })
-            }
+            let saldoActual = saldoInicial
 
-            // Procesar movimientos en el rango
-            const movimientosRelevantes = movimientos
-              .filter(mov => {
-                const estadoMov = (mov.estado || '').toUpperCase()
-                if (!['COMPLETADO', 'PARCIAL', 'EN_PROCESO'].includes(estadoMov)) return false
+            // Build event list from all sources
+            const events = []
 
-                const fechaMov = safeParseDate(mov.fecha_documento || mov.fecha_confirmacion || mov.fecha_creacion)
-                if (!fechaMov || fechaMov < fi || fechaMov > ff) return false
-
-                // Verificar si afecta este producto y ubicación
-                const detalles = detalleMovimientos.filter(d =>
-                  d.movimiento_id === mov.id && d.producto_id === producto.id
-                )
-                return detalles.some(d =>
-                  mov.destino_id === ubicacionId || mov.origen_id === ubicacionId
-                )
-              })
-              .sort((a, b) => {
-                const da = safeParseDate(a.fecha_documento || a.fecha_confirmacion || a.fecha_creacion) || new Date(0)
-                const db = safeParseDate(b.fecha_documento || b.fecha_confirmacion || b.fecha_creacion) || new Date(0)
-                return da - db
-              })
-
-            movimientosRelevantes.forEach(mov => {
-              const detalles = detalleMovimientos.filter(d =>
-                d.movimiento_id === mov.id && d.producto_id === producto.id
-              )
-
-              detalles.forEach(det => {
-                let entrada = 0
-                let salida = 0
-                let tipoMovimiento = mov.tipo_movimiento || 'TRANSFERENCIA'
-
-                if (mov.destino_id === ubicacionId) {
-                  entrada = det.cantidad_recibida ?? det.cantidad ?? 0
-                  saldoActual += entrada
-                }
-                if (mov.origen_id === ubicacionId) {
-                  salida = det.cantidad_enviada ?? det.cantidad ?? 0
-                  saldoActual -= salida
-                }
-
-                const fechaMov = safeParseDate(mov.fecha_documento || mov.fecha_confirmacion || mov.fecha_creacion)
-                kardexLines.push({
-                  fecha: fechaMov,
-                  producto: producto.nombre,
-                  ubicacion: ubicaciones.find(u => u.id === ubicacionId)?.nombre || ubicacionId,
-                  tipo: tipoMovimiento,
+            movsDet.forEach(mov => {
+              const dets = detalleMovimientos.filter(d => d.movimiento_id === mov.id && d.producto_id === producto.id)
+              dets.forEach(det => {
+                const fecha = safeParseDate(mov.fecha_documento || mov.fecha_confirmacion || mov.fecha_creacion)
+                const esEntrada = mov.destino_id === ubicacionId
+                const esSalida = mov.origen_id === ubicacionId
+                if (!esEntrada && !esSalida) return
+                events.push({
+                  fecha,
+                  tipo: mov.tipo_movimiento || 'TRANSFERENCIA',
                   documento: formatDisplayId(mov, 'MV'),
-                  entradas: entrada,
-                  salidas: salida,
-                  saldo: saldoActual,
-                  orden: fechaMov.getTime()
+                  cantidad: esEntrada
+                    ? (det.cantidad_recibida ?? det.cantidad ?? 0)
+                    : (det.cantidad_enviada ?? det.cantidad ?? 0),
+                  esEntrada
                 })
               })
+            })
+
+            odooVentas.forEach(m => {
+              events.push({
+                fecha: safeParseDate(m.fecha_creacion),
+                tipo: 'VENTA ODOO',
+                documento: m.order_name || String(m.order_id || '-'),
+                cantidad: m.cantidad_stock || m.cantidad || 0,
+                esEntrada: false
+              })
+            })
+
+            conteosProducto.forEach(c => {
+              const det = detalleConteos.find(d => d.conteo_id === c.id && d.producto_id === producto.id)
+              if (!det) return
+              events.push({
+                fecha: safeParseDate(c.fecha_completado || c.fecha_programada),
+                tipo: 'AJUSTE CONTEO',
+                documento: formatDisplayId(c, 'CT'),
+                cantidadFisica: det.cantidad_fisica ?? det.cantidad_sistema ?? 0,
+                esConteo: true
+              })
+            })
+
+            // Sort events chronologically
+            events.sort((a, b) => (a.fecha || new Date(0)) - (b.fecha || new Date(0)))
+
+            events.forEach(ev => {
+              if (ev.esConteo) {
+                const diff = ev.cantidadFisica - saldoActual
+                saldoActual = ev.cantidadFisica
+                kardexLines.push({
+                  fechaObj: ev.fecha,
+                  producto: prodNombre,
+                  ubicacion: ubicNombre,
+                  tipo: ev.tipo,
+                  documento: ev.documento,
+                  entradas: diff > 0 ? diff : 0,
+                  salidas: diff < 0 ? Math.abs(diff) : 0,
+                  saldo: saldoActual,
+                  orden: (ev.fecha || new Date(0)).getTime()
+                })
+              } else if (ev.esEntrada) {
+                saldoActual += ev.cantidad
+                kardexLines.push({
+                  fechaObj: ev.fecha,
+                  producto: prodNombre,
+                  ubicacion: ubicNombre,
+                  tipo: ev.tipo,
+                  documento: ev.documento,
+                  entradas: ev.cantidad,
+                  salidas: 0,
+                  saldo: saldoActual,
+                  orden: (ev.fecha || new Date(0)).getTime()
+                })
+              } else {
+                saldoActual -= ev.cantidad
+                kardexLines.push({
+                  fechaObj: ev.fecha,
+                  producto: prodNombre,
+                  ubicacion: ubicNombre,
+                  tipo: ev.tipo,
+                  documento: ev.documento,
+                  entradas: 0,
+                  salidas: ev.cantidad,
+                  saldo: saldoActual,
+                  orden: (ev.fecha || new Date(0)).getTime()
+                })
+              }
             })
           })
         })
 
         return kardexLines
           .sort((a, b) => {
-            // Ordenar por producto, ubicación y fecha
             if (a.producto !== b.producto) return a.producto.localeCompare(b.producto)
             if (a.ubicacion !== b.ubicacion) return a.ubicacion.localeCompare(b.ubicacion)
             return a.orden - b.orden
           })
           .map(line => ({
-            Fecha: safeFormatDate(line.fecha, 'dd/MM/yyyy HH:mm'),
+            Fecha: line.tipo === 'SALDO INICIAL'
+              ? safeFormatDate(line.fechaObj, 'dd/MM/yyyy')
+              : safeFormatDate(line.fechaObj, 'dd/MM/yyyy HH:mm'),
             Producto: line.producto,
             Ubicación: line.ubicacion,
             Tipo: line.tipo,
             Documento: line.documento,
             Entradas: line.entradas,
             Salidas: line.salidas,
-            Saldo: line.saldo
+            Saldo: typeof line.saldo === 'number' ? formatCantidad(line.saldo) : line.saldo
           }))
       }
       default:
@@ -718,7 +810,7 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
   const val = row[h] ?? '-'
   if (h === 'Estado' && val === 'Normal') return '<td><span class="badge badge-ok">Normal</span></td>'
   if (h === 'Estado' && val === 'Bajo') return '<td><span class="badge badge-bad">Bajo</span></td>'
-  return `<td>${val}</td>`
+  return `<td>${fmtReportCell(val)}</td>`
 }).join('')}</tr>`).join('')}</tbody></table></div>
 <div class="footer">Sistema de Control de Inventario &copy; ${new Date().getFullYear()}</div>
 </body></html>`
@@ -764,7 +856,7 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
   // Opciones para el selector de productos (debe estar antes de cualquier early return)
   const productosOptions = useMemo(() => {
     const sorted = [...productos]
-      .filter(p => p.estado !== 'INACTIVO' && p.estado !== 'ELIMINADO')
+      .filter(p => p.estado !== 'INACTIVO' && p.estado !== 'ELIMINADO' && p.inventariable !== false)
       .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''))
     return sorted.map(p => ({
       value: p.id,
@@ -1031,7 +1123,7 @@ ${selectedReport === 'stock' ? `<div class="scard"><div class="v">${data.filter(
                             <td className="px-4 py-3 text-xs text-slate-400 font-mono">{(currentPage - 1) * pageSize + idx + 1}</td>
                             {reportHeaders.map(h => (
                               <td key={h} className="px-4 py-3 text-slate-900 dark:text-slate-100">
-                                {h === 'Estado' ? <EstadoBadge value={row[h]} /> : h === 'Método' ? <MetodoBadgeInline value={row[h]} /> : (row[h] ?? '-')}
+                                {h === 'Estado' ? <EstadoBadge value={row[h]} /> : h === 'Método' ? <MetodoBadgeInline value={row[h]} /> : (fmtReportCell(row[h]) ?? '-')}
                               </td>
                             ))}
                           </tr>

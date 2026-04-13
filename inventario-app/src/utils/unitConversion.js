@@ -16,6 +16,20 @@ export function buildEquivalenceMap(equivalences = []) {
     map.get(to_unit_id).set(from_unit_id, 1 / factor)
   }
 
+  // Cierre transitivo (Floyd-Warshall) para hallar inversos y saltos múltiples automáticamente
+  const unitIds = Array.from(map.keys())
+  for (const k of unitIds) {
+    for (const i of unitIds) {
+      for (const j of unitIds) {
+        if (i !== j && map.get(i).has(k) && map.get(k).has(j)) {
+          if (!map.get(i).has(j)) {
+            map.get(i).set(j, map.get(i).get(k) * map.get(k).get(j))
+          }
+        }
+      }
+    }
+  }
+
   for (const [unitId, inner] of map) {
     inner.set(unitId, 1)
   }
@@ -59,6 +73,9 @@ export function getCompatibleUnits(unitId, equivalenceMap) {
  * costPerPurchaseUnit / purchaseUnitQty / conversionFactor
  */
 export function calcCostInConsumptionUnit(costPerPurchaseUnit, purchaseUnitQty, fromUnitId, toUnitId, equivalenceMap) {
+  if (toUnitId === '__presentation__') {
+    return costPerPurchaseUnit;
+  }
   if (!purchaseUnitQty || purchaseUnitQty === 0) return 0
   const factor = convertUnits(1, fromUnitId, toUnitId, equivalenceMap)
   if (factor === null) return 0

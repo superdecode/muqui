@@ -240,7 +240,8 @@ exports.odooWebhook = functions.https.onRequest(async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const secret = req.headers['x-odoo-secret'];
+  // Accept secret via header OR query param (native Odoo webhook uses query param)
+  const secret = req.headers['x-odoo-secret'] || req.query.secret;
   const expectedSecret = process.env.ODOO_WEBHOOK_SECRET;
 
   if (!secret || secret !== expectedSecret) {
@@ -249,17 +250,34 @@ exports.odooWebhook = functions.https.onRequest(async (req, res) => {
   }
 
   try {
-    const {
-      tipo = 'sale_order',
-      sale_order_id,
-      pos_order_id,
-      ubicacion_id = 'tienda_principal',
-    } = req.body;
+    const body = req.body;
 
-    const orderId = tipo === 'pos_order' ? pos_order_id : sale_order_id;
+    // Native Odoo webhook format: { _model, id, state, ... }
+    // Legacy format: { tipo, pos_order_id/sale_order_id, ubicacion_id }
+    let tipo, orderId, ubicacion_id;
+
+    if (body._model) {
+      // Native Odoo webhook
+      const model = body._model; // 'pos.order' or 'sale.order'
+      const state = body.state;
+      orderId = body.id;
+      ubicacion_id = body.ubicacion_id || 'tienda_principal';
+      tipo = model === 'pos.order' ? 'pos_order' : 'sale_order';
+
+      // Only process paid/done orders
+      if (!['paid', 'done', 'sale'].includes(state)) {
+        console.log(`⏭️  Ignorando estado: ${state} para orden #${orderId}`);
+        return res.status(200).json({ success: true, skipped: true, state });
+      }
+    } else {
+      // Legacy format
+      tipo = body.tipo || 'sale_order';
+      orderId = tipo === 'pos_order' ? body.pos_order_id : body.sale_order_id;
+      ubicacion_id = body.ubicacion_id || 'tienda_principal';
+    }
 
     if (!orderId) {
-      return res.status(400).json({ error: `Missing ${tipo === 'pos_order' ? 'pos_order_id' : 'sale_order_id'}` });
+      return res.status(400).json({ error: 'Missing order id' });
     }
 
     console.log(`🎯 Webhook recibido - Tipo: ${tipo}, Orden: #${orderId}, Ubicación: ${ubicacion_id}`);
@@ -272,6 +290,75 @@ exports.odooWebhook = functions.https.onRequest(async (req, res) => {
   } catch (error) {
     console.error('❌ Error en webhook:', error);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// SALIDAS ODOO: Sincronizar ventas del día desde Odoo (pull manual)
+exports.sincronizarVentasHoy = functions.runWith({ timeoutSeconds: 540, memory: "512MB" }).https.onCall(async (data, context) => {
+  try {
+    const OdooClient = require('./src/odooClient');
+    const odoo = new OdooClient(
+      process.env.ODOO_URL,
+      process.env.ODOO_DB,
+      process.env.ODOO_USER,
+      process.env.ODOO_PASSWORD
+    );
+
+    const ubicacionId = (data && data.ubicacion_id) || 'tienda_principal';
+
+    // 1. Obtener órdenes POS pagadas hoy
+    const orders = await odoo.getTodayPOSOrders();
+    console.log(`📋 Órdenes POS hoy: ${orders.length}`);
+
+    if (orders.length === 0) {
+      return { success: true, procesadas: 0, omitidas: 0, errores: 0, detalle: [] };
+    }
+
+    // 2. Verificar cuáles ya fueron procesadas (evitar duplicados)
+    const db = require('firebase-admin').firestore();
+    const yaProcessedSnap = await db.collection('movimientos')
+      .where('origen', '==', 'ODOO_VENTA')
+      .where('tipo_orden', '==', 'pos_order')
+      .get();
+
+    const yaProcessedIds = new Set(
+      yaProcessedSnap.docs.map(d => String(d.data().order_id))
+    );
+
+    // 3. Procesar solo las nuevas
+    let procesadas = 0, omitidas = 0, errores = 0;
+    const detalle = [];
+
+    for (const order of orders) {
+      const orderId = String(order.id);
+      if (yaProcessedIds.has(orderId)) {
+        omitidas++;
+        detalle.push({ id: order.id, nombre: order.name, estado: 'omitida', razon: 'ya procesada' });
+        continue;
+      }
+
+      try {
+        const result = await procesarVentaOdoo(order.id, ubicacionId, 'pos_order', order.name);
+        procesadas++;
+        detalle.push({
+          id: order.id,
+          nombre: order.name,
+          estado: 'procesada',
+          movimientos: result.movimientosCreados
+        });
+      } catch (err) {
+        errores++;
+        detalle.push({ id: order.id, nombre: order.name, estado: 'error', razon: err.message });
+        console.error(`❌ Error procesando orden ${order.id}:`, err.message);
+      }
+    }
+
+    console.log(`✅ Sync: ${procesadas} procesadas, ${omitidas} omitidas, ${errores} errores`);
+    return { success: true, procesadas, omitidas, errores, detalle };
+
+  } catch (error) {
+    console.error('❌ Error en sincronizarVentasHoy:', error);
+    throw new functions.https.HttpsError('internal', error.message);
   }
 });
 
@@ -289,6 +376,24 @@ exports.getOdooPOS = functions.https.onCall(async (data, context) => {
     return { success: true, posList };
   } catch (error) {
     console.error('Error obteniendo POS de Odoo:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// SALIDAS ODOO: Obtener lista de Productos (Variantes) desde Odoo
+exports.getOdooProducts = functions.https.onCall(async (data, context) => {
+  try {
+    const OdooClient = require('./src/odooClient');
+    const odoo = new OdooClient(
+      process.env.ODOO_URL,
+      process.env.ODOO_DB,
+      process.env.ODOO_USER,
+      process.env.ODOO_PASSWORD
+    );
+    const products = await odoo.getProducts();
+    return { success: true, products };
+  } catch (error) {
+    console.error('Error obteniendo productos de Odoo:', error);
     throw new functions.https.HttpsError('internal', error.message);
   }
 });

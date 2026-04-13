@@ -717,6 +717,13 @@ export async function verificarStockBajo(productoId, ubicacionId) {
     }
     
     const producto = { id: productoSnap.id, ...productoSnap.data() }
+
+    // Skip if product has sin_alerta flag
+    if (producto.sin_alerta === true) {
+      console.log(`ℹ️ Producto ${productoId} tiene sin_alerta=true, omitiendo notificación`)
+      return { success: true, message: 'Sin alerta desactivado' }
+    }
+
     const stockMinimo = producto.stock_minimo || 0
     
     // 3. Comparar stock actual vs mínimo

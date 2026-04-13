@@ -356,6 +356,7 @@ const dataService = {
   getRecetas: async () => firestoreService.getRecetas(),
   createReceta: async (data) => firestoreService.createReceta(data),
   updateReceta: async (id, data) => firestoreService.updateReceta(id, data),
+  duplicateReceta: async (id) => firestoreService.duplicateReceta(id),
   deleteReceta: async (id) => firestoreService.deleteReceta(id),
   batchCreateRecetas: async (recetas) => firestoreService.batchCreateRecetas(recetas),
 
@@ -364,6 +365,7 @@ const dataService = {
   createMapeoPOS: async (data) => firestoreService.createMapeoPOS(data),
   updateMapeoPOS: async (id, data) => firestoreService.updateMapeoPOS(id, data),
   deleteMapeoPOS: async (id) => firestoreService.deleteMapeoPOS(id),
+  upsertMapeoPOSDefault: async (ubicacionId) => firestoreService.upsertMapeoPOSDefault(ubicacionId),
 
   // SALIDAS ODOO
   getSalidasOdoo: async () => firestoreService.getSalidasOdoo(),
@@ -384,6 +386,18 @@ const dataService = {
     const functions = getFunctions();
     const getProducts = httpsCallable(functions, 'getOdooProducts');
     const result = await getProducts();
+    return result.data;
+  },
+
+  createSalidaOdooManual: async (data) => firestoreService.createSalidaOdooManual(data),
+  deleteSalidaOdoo: async (id) => firestoreService.deleteSalidaOdoo(id),
+
+  // Sincronizar ventas POS del día desde Odoo (pull manual)
+  sincronizarVentasHoy: async (ubicacionId = 'tienda_principal') => {
+    const { getFunctions, httpsCallable } = await import('firebase/functions');
+    const fns = getFunctions();
+    const fn = httpsCallable(fns, 'sincronizarVentasHoy', { timeout: 540000 });
+    const result = await fn({ ubicacion_id: ubicacionId });
     return result.data;
   }
 }

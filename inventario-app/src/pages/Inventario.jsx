@@ -26,6 +26,7 @@ export default function Inventario() {
 
   // Filtrar inventario
   const filteredInventario = inventario?.filter(item => {
+    if (item.inventariable === false) return false
     const matchesSearch = item.producto?.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesCategory = !categoriaFilter || item.categoria === categoriaFilter
     return matchesSearch && matchesCategory
@@ -233,7 +234,7 @@ export default function Inventario() {
                     Producto
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                    Especificación
+                    UoM de Compra
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                     Stock Actual

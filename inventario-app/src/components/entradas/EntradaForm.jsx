@@ -207,6 +207,7 @@ export default function EntradaForm({ onClose, onSave, isLoading = false }) {
   // Filtrar productos por búsqueda
   const filteredProducts = productos
     .filter(product => {
+      if (product.inventariable === false) return false
       if (!formData.destino_id) return false
       const ubicPermitidas = product.ubicaciones_permitidas || []
       const matchUbicacion = ubicPermitidas.length === 0 || ubicPermitidas.includes(formData.destino_id)
@@ -624,7 +625,7 @@ export default function EntradaForm({ onClose, onSave, isLoading = false }) {
                 <thead className="bg-gradient-ocean">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Producto</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">ID</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">UoM de Compra</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider">Stock Actual</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider">Cantidad</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider">Unidad</th>
@@ -652,7 +653,7 @@ export default function EntradaForm({ onClose, onSave, isLoading = false }) {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="font-mono text-sm text-slate-700 dark:text-slate-300">{producto.id}</span>
+                        <span className="text-sm text-slate-600 dark:text-slate-400">{producto.especificacion || '-'}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-sm font-semibold ${

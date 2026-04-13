@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { collection, onSnapshot, orderBy, query as fbQuery } from 'firebase/firestore'
 import { getDB } from '../../config/firebase.config'
@@ -10,6 +10,7 @@ import { Search, Package, ArrowRight, AlertCircle, X, ArrowRightLeft, ShoppingCa
 import dataService from '../../services/dataService'
 import { useAuthStore } from '../../stores/authStore'
 import { useToastStore } from '../../stores/toastStore'
+import { buildEquivalenceMap, getCompatibleUnits, convertUnits } from '../../utils/unitConversion'
 
 // ========== BENEFICIARIO MODAL ==========
 function BeneficiarioModal({ isOpen, onClose, onCreate }) {
@@ -213,9 +214,14 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
     enabled: !!formData.origen_id
   })
 
+  const { data: unidadesDB = [] } = useQuery({ queryKey: ['config-unidades'], queryFn: () => dataService.getUnidadesMedida() })
+  const { data: equivalencias = [] } = useQuery({ queryKey: ['config-equivalencias'], queryFn: () => dataService.getUnitEquivalences() })
+  const eqMap = useMemo(() => buildEquivalenceMap(equivalencias), [equivalencias])
+
   // Filtrar productos por búsqueda y agregar stock disponible
   const filteredProducts = productos
     .filter(product => {
+      if (product.inventariable === false) return false
       // Verificar que el producto esté asignado a la ubicación de origen
       if (!formData.origen_id) return false
 
@@ -253,7 +259,14 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
 
     // Agregar producto con cantidad inicial según stock disponible
     const cantidadInicial = producto.stock > 0 ? 1 : 0
-    setSelectedProductos([...selectedProductos, { ...producto, cantidad: cantidadInicial }])
+    const qQty = producto.purchase_unit_qty || 1
+    const defaultUnit = qQty !== 1 ? '__presentation__' : (producto.purchase_unit_id || '')
+    
+    setSelectedProductos([...selectedProductos, { 
+      ...producto, 
+      cantidad: cantidadInicial, 
+      exit_unit_id: defaultUnit 
+    }])
     setError('') // Limpiar error si había
     setSearchTerm('') // Limpiar búsqueda después de agregar
   }
@@ -267,10 +280,21 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
   const handleCantidadChange = (productoId, cantidad) => {
     setSelectedProductos(selectedProductos.map(p => {
       if (p.id === productoId) {
-        // Si el producto no tiene stock, permitir 0 como mínimo
-        // Si tiene stock, el mínimo es 0.01
+        // Calcular el stock máximo disponible en la UNIDAD SELECCIONADA
+        let maxAvailable = p.stock || 0
+        if (p.stock > 0 && p.exit_unit_id && p.exit_unit_id !== '__presentation__') {
+          // Stock total en unidad base (ej: 10 bolsas * 3 kg = 30 Kg)
+          const stockBase = p.stock * (p.purchase_unit_qty || 1)
+          
+          // Convertir a la unidad seleccionada (ej: Kg -> gr)
+          const factorToSelected = (p.exit_unit_id === p.purchase_unit_id) ? 1 : convertUnits(1, p.purchase_unit_id, p.exit_unit_id, eqMap)
+          if (factorToSelected !== null) maxAvailable = stockBase * factorToSelected
+        }
+
         const minCantidad = p.stock > 0 ? 0.01 : 0
-        const cantidadValida = Math.max(minCantidad, Math.min(cantidad, p.stock > 0 ? p.stock : 9999))
+        // Permitir un pequeño margen de error por redondeo (0.000001)
+        const cantidadValida = Math.max(minCantidad, Math.min(cantidad, p.stock > 0 ? maxAvailable + 0.000001 : 9999))
+        
         return { ...p, cantidad: cantidadValida }
       }
       return p
@@ -358,10 +382,31 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
       const saveData = {
         ...formData,
         tipo_movimiento: tipoMovimiento,
-        productos: selectedProductos.map(p => ({
-          producto_id: p.id,
-          cantidad: p.cantidad
-        }))
+        productos: selectedProductos.map(p => {
+          let cantidad = p.cantidad
+          if (p.exit_unit_id && p.exit_unit_id !== '__presentation__') {
+            const factorToBase = (p.exit_unit_id === p.purchase_unit_id) ? 1 : (convertUnits(1, p.exit_unit_id, p.purchase_unit_id, eqMap) || 1)
+            const qtyBase = p.cantidad * factorToBase
+            cantidad = qtyBase / (p.purchase_unit_qty || 1)
+          }
+          let unidadNombre = ''
+          if (p.exit_unit_id === '__presentation__') {
+            const unitTarget = unidadesDB.find(u => u.id === p.purchase_unit_id)
+            const bSym = unitTarget?.abreviatura || unitTarget?.nombre || p.unidad_medida || ''
+            unidadNombre = `Unidad (${p.purchase_unit_qty || 1} ${bSym})`.trim()
+          } else {
+            const u = unidadesDB.find(x => x.id === p.exit_unit_id)
+            unidadNombre = u ? (u.abreviatura || u.nombre) : ''
+          }
+          
+          return {
+            producto_id: p.id,
+            cantidad: parseFloat(cantidad.toFixed(6)),
+            unidad_original_id: p.exit_unit_id,
+            unidad_original_nombre: unidadNombre,
+            cantidad_original_ingresada: p.cantidad
+          }
+        })
       }
       if (tipoMovimiento === 'VENTA') {
         const benef = activeBeneficiarios.find(b => b.id === formData.beneficiario_id)
@@ -675,9 +720,10 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
                 <thead className="bg-gradient-ocean">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Producto</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">ID</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">UoM de Compra</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider">Stock Disp.</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider">Cantidad</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider">Unidad</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider w-20"></th>
                   </tr>
                 </thead>
@@ -704,7 +750,7 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="font-mono text-sm text-slate-700 dark:text-slate-300">{producto.id}</span>
+                        <span className="text-sm text-slate-600 dark:text-slate-400">{producto.especificacion || '-'}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-sm font-semibold ${
@@ -712,7 +758,7 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
                             ? 'bg-red-100 text-red-800'
                             : 'bg-green-100 text-green-800'
                         }`}>
-                          {producto.stock} {producto.unidad_medida}
+                          {producto.stock}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -725,6 +771,35 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
                           onChange={(e) => handleCantidadChange(producto.id, parseFloat(e.target.value) || 0)}
                           className="w-24 px-3 py-2 border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-center font-bold focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                         />
+                      </td>
+                      <td className="px-4 py-3">
+                        {producto.purchase_unit_id ? (
+                          <select
+                            value={producto.exit_unit_id || ''}
+                            onChange={(e) => handleUnidadChange(producto.id, e.target.value)}
+                            className="w-full px-2 py-2 border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-sm font-semibold focus:ring-2 focus:ring-primary-500"
+                          >
+                            {(() => {
+                              const unitTarget = unidadesDB.find(u => u.id === producto.purchase_unit_id)
+                              const bSym = unitTarget?.abreviatura || unitTarget?.nombre || producto.unidad_medida || ''
+                              const qQty = producto.purchase_unit_qty || 1
+                              return (
+                                <>
+                                  {qQty > 1 && (
+                                    <option value="__presentation__">Unidad ({qQty} {bSym})</option>
+                                  )}
+                                  {getCompatibleUnits(producto.purchase_unit_id, eqMap).map(uId => {
+                                    const u = unidadesDB.find(x => x.id === uId)
+                                    if (!u) return null
+                                    return <option key={u.id} value={u.id}>{u.nombre}</option>
+                                  })}
+                                </>
+                              )
+                            })()}
+                          </select>
+                        ) : (
+                          <span className="text-sm text-slate-500">{producto.unidad_medida || '-'}</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button
@@ -801,7 +876,7 @@ export default function TransferenciaForm({ onClose, onSave, isLoading = false }
                                         ID: {product.id} | {product.especificacion || 'Sin especificación'}
                                       </p>
                                       <p className={`text-sm font-medium ${product.stock === 0 ? 'text-red-700' : 'text-green-700'}`}>
-                                        Stock: {product.stock} {product.unidad_medida}
+                                        Stock: {product.stock}
                                       </p>
                                     </div>
                                   </div>

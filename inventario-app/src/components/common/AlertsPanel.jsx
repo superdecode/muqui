@@ -3,7 +3,7 @@ import { X, AlertCircle, AlertTriangle, Info, CheckCircle, Package, ArrowRightLe
 import { useAlertasStore } from '../../stores/alertasStore'
 import { useNavigate } from 'react-router-dom'
 import { safeFormatDate } from '../../utils/formatters'
-import { markAsRead, markAsOpened, resolveNotification, markAllAsRead, deleteNotification } from '../../services/notificationService'
+import { markAsRead, markAsOpened, resolveNotification, deleteNotification } from '../../services/notificationService'
 
 const AlertsPanel = ({ isOpen, onClose, anchorRef }) => {
   const navigate = useNavigate()
@@ -129,9 +129,10 @@ const AlertsPanel = ({ isOpen, onClose, anchorRef }) => {
     resolveNotification(alertaId)
   }
 
-  const handleMarkAllAsRead = () => {
-    alertasActivas.forEach(a => { if (isUnread(a)) marcarComoLeida(a.id) })
-    markAllAsRead(userId)
+  const handleMarkAllAsRead = async () => {
+    const unread = alertasActivas.filter(a => isUnread(a))
+    unread.forEach(a => marcarComoLeida(a.id))
+    await Promise.all(unread.map(a => markAsRead(a.id, userId)))
   }
 
   return (

@@ -25,6 +25,11 @@ export function useSalidasOdoo() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['salidas_odoo_recetas'] })
   })
 
+  const duplicarReceta = useMutation({
+    mutationFn: (id) => dataService.duplicateReceta(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['salidas_odoo_recetas'] })
+  })
+
   const importarRecetas = useMutation({
     mutationFn: (recetas) => dataService.batchCreateRecetas(recetas),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['salidas_odoo_recetas'] })
@@ -38,6 +43,7 @@ export function useSalidasOdoo() {
     crearReceta,
     actualizarReceta,
     eliminarReceta,
+    duplicarReceta,
     importarRecetas
   }
 }

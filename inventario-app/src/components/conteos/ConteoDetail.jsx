@@ -497,7 +497,7 @@ export default function ConteoDetail({ conteo, onClose, onEdit, onCancelar, isCa
                     <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10">
                       <tr>
                         <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Producto</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Especificación (Unidad)</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">UoM de Compra</th>
                         <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Sistema</th>
                         <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Físico</th>
                         <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">Diferencia</th>

@@ -8,6 +8,7 @@ import {
 import Card from '../components/common/Card'
 import Button from '../components/common/Button'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import StatusToggle from '../components/common/StatusToggle'
 import { useToastStore } from '../stores/toastStore'
 import { useAuthStore } from '../stores/authStore'
 import dataService from '../services/dataService'
@@ -252,7 +253,24 @@ function TabUsuarios({ usuarios, empresas, ubicaciones, isLoading, canWrite = tr
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Rol</label><select value={form.rol || ''} onChange={e => handleRolChange(e.target.value)} className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm"><option value="">Seleccione...</option>{rolesDB.map(r => <option key={r.id} value={r.nombre || r.label}>{r.nombre || r.label}</option>)}</select><p className="text-xs text-slate-400 mt-1">Los permisos se heredan del rol asignado</p></div>
-            <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Estado</label><select value={form.estado} onChange={e => setForm({ ...form, estado: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm"><option value="ACTIVO">Activo</option><option value="INACTIVO">Inactivo</option></select></div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Estado</label>
+              <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all duration-200 ${
+                form.estado === 'ACTIVO'
+                  ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-700/40 dark:bg-emerald-900/10'
+                  : 'border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/30'
+              }`}>
+                <span className={`text-xs font-semibold ${
+                  form.estado === 'ACTIVO' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'
+                }`}>{form.estado === 'ACTIVO' ? 'Activo' : 'Inactivo'}</span>
+                <StatusToggle
+                  value={form.estado}
+                  onChange={val => setForm({ ...form, estado: val })}
+                  size="sm"
+                  showLabel={false}
+                />
+              </div>
+            </div>
             <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Contraseña {editingUser ? '(vacío=no cambiar)' : '*'}</label><input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm" /></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -446,6 +464,27 @@ function TabSedes({ empresas, ubicaciones, isLoading, canWrite = true, canDelete
           <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nombre *</label><input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm" /></div>
           <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Dirección</label><input value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm" /></div>
           <div className="grid grid-cols-2 gap-4"><div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Teléfono</label><input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm" /></div><div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Responsable</label><input value={form.responsable} onChange={e => setForm({ ...form, responsable: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm" /></div></div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Estado</label>
+            <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all duration-200 ${
+              form.estado === 'ACTIVO'
+                ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-700/40 dark:bg-emerald-900/10'
+                : 'border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/30'
+            }`}>
+              <div>
+                <p className={`text-sm font-semibold ${
+                  form.estado === 'ACTIVO' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'
+                }`}>{form.estado === 'ACTIVO' ? 'Sede Activa' : 'Sede Inactiva'}</p>
+                <p className="text-xs text-slate-400">{form.estado === 'ACTIVO' ? 'Visible para operaciones' : 'No visible en el sistema'}</p>
+              </div>
+              <StatusToggle
+                value={form.estado}
+                onChange={val => setForm({ ...form, estado: val })}
+                size="sm"
+                showLabel={false}
+              />
+            </div>
+          </div>
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-200"><Button variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button><Button onClick={() => { if (!form.nombre) { toast.error('Requerido', 'Nombre obligatorio'); return }; editing ? updateMut.mutate({ id: editing.id, data: form }) : createMut.mutate(form) }} disabled={createMut.isPending || updateMut.isPending}><Save size={16} className="mr-1.5" />Guardar</Button></div>
         </div>
       </Modal>
@@ -553,6 +592,27 @@ function TabUbicaciones({ ubicaciones, empresas, isLoading, canWrite = true, can
             <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Sede</label><select value={form.empresa_id} onChange={e => setForm({ ...form, empresa_id: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm"><option value="">Sin asignar</option>{(empresas || []).filter(e => e.estado !== 'INACTIVO').map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
           </div>
           <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Dirección</label><input value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm" /></div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Estado</label>
+            <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all duration-200 ${
+              (form.estado || 'ACTIVO') === 'ACTIVO'
+                ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-700/40 dark:bg-emerald-900/10'
+                : 'border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/30'
+            }`}>
+              <div>
+                <p className={`text-sm font-semibold ${(form.estado || 'ACTIVO') === 'ACTIVO' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                  {(form.estado || 'ACTIVO') === 'ACTIVO' ? 'Ubicación Activa' : 'Ubicación Inactiva'}
+                </p>
+                <p className="text-xs text-slate-400">{(form.estado || 'ACTIVO') === 'ACTIVO' ? 'Disponible para operaciones' : 'No visible en el sistema'}</p>
+              </div>
+              <StatusToggle
+                value={form.estado || 'ACTIVO'}
+                onChange={val => setForm({ ...form, estado: val })}
+                size="sm"
+                showLabel={false}
+              />
+            </div>
+          </div>
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-200"><Button variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button><Button onClick={() => { if (!form.nombre) { toast.error('Requerido', 'Nombre obligatorio'); return }; editing ? updateMut.mutate({ id: editing.id, data: form }) : createMut.mutate(form) }} disabled={createMut.isPending || updateMut.isPending}><Save size={16} className="mr-1.5" />Guardar</Button></div>
         </div>
       </Modal>
@@ -567,7 +627,7 @@ function TabRoles({ canWrite = true, canDelete = true }) {
   const [searchRol, setSearchRol] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
-  const [form, setForm] = useState({ nombre: '', color: '', permisos: {} })
+  const [form, setForm] = useState({ nombre: '', color: '', permisos: {}, estado: 'ACTIVO' })
   const [expandedMovimientos, setExpandedMovimientos] = useState(false)
 
   const { data: rolesDB = [], isLoading } = useQuery({ queryKey: ['admin-roles'], queryFn: () => dataService.getRoles() })
@@ -651,7 +711,12 @@ function TabRoles({ canWrite = true, canDelete = true }) {
           return (
             <div key={rol.id || rol.nombre || rol.label} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
               <div className="flex items-start justify-between mb-3">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${(rol.color || 'bg-slate-100 text-slate-800').toLowerCase()}`}>{rol.nombre || rol.label}</span>
+                <div className="flex flex-col items-start gap-1">
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${(rol.color || 'bg-slate-100 text-slate-800').toLowerCase()}`}>{rol.nombre || rol.label}</span>
+                  {(rol.estado === 'INACTIVO') && (
+                    <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Inactivo</span>
+                  )}
+                </div>
                 {canWrite && <div className="flex items-center gap-1">
                   <button onClick={() => openEdit(rol)} className="p-1 hover:bg-blue-50 rounded-lg text-blue-600"><Edit2 size={14} /></button>
                   {canDelete && !isAdminRol(rol) && <button onClick={() => { if (window.confirm(`¿Eliminar rol "${rol.nombre || rol.label}"?`)) deleteMut.mutate(rol.id) }} className="p-1 hover:bg-red-50 rounded-lg text-red-600"><Trash2 size={14} /></button>}
@@ -702,6 +767,24 @@ function TabRoles({ canWrite = true, canDelete = true }) {
           <div className="grid grid-cols-2 gap-4">
             <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nombre *</label><input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm" placeholder="Ej: Supervisor" disabled={editing && isAdminRol(editing)} /></div>
             <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Color</label><select value={form.color || ''} onChange={e => setForm({ ...form, color: e.target.value })} className={`w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm ${!form.color ? 'text-slate-500' : ''}`}><option value="" disabled>Seleccionar color</option>{COLOR_OPTIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}</select></div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Estado</label>
+              <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all duration-200 ${
+                form.estado === 'ACTIVO'
+                  ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-700/40 dark:bg-emerald-900/10'
+                  : 'border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/30'
+              }`}>
+                <span className={`text-xs font-semibold ${
+                  form.estado === 'ACTIVO' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'
+                }`}>{form.estado === 'ACTIVO' ? 'Activo' : 'Inactivo'}</span>
+                <StatusToggle
+                  value={form.estado || 'ACTIVO'}
+                  onChange={val => setForm({ ...form, estado: val })}
+                  size="sm"
+                  showLabel={false}
+                />
+              </div>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-bold text-slate-900 dark:text-slate-100 mb-2">Matriz de Permisos por Módulo</label>

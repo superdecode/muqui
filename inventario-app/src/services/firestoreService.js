@@ -3585,12 +3585,20 @@ const firestoreService = {
 
   createReceta: async (data) => {
     const db = getDB()
+    // Validate SKU uniqueness for active recipes
+    if (data.sku_odoo && data.activo !== false) {
+      const snap = await getDocs(query(collection(db, 'salidas_odoo_recetas'), where('sku_odoo', '==', data.sku_odoo), where('activo', '==', true)))
+      if (!snap.empty) {
+        const conflict = snap.docs[0].data()
+        throw new Error(`Ya existe una receta activa para el SKU ${data.sku_odoo}: "${conflict.nombre}"`)
+      }
+    }
     const id = await getNextSequentialCode('REC')
     const costoTotal = calcularCostoTotal(data.ingredientes)
     await setDoc(doc(db, 'salidas_odoo_recetas', id), {
       ...data,
       costo_total: costoTotal,
-      activo: true,
+      activo: data.activo !== false,
       fecha_creacion: serverTimestamp(),
       ultima_actualizacion: serverTimestamp()
     })
@@ -3599,6 +3607,14 @@ const firestoreService = {
 
   updateReceta: async (id, data) => {
     const db = getDB()
+    // Validate SKU uniqueness when activating
+    if (data.sku_odoo && data.activo !== false) {
+      const snap = await getDocs(query(collection(db, 'salidas_odoo_recetas'), where('sku_odoo', '==', data.sku_odoo), where('activo', '==', true)))
+      const conflict = snap.docs.find(d => d.id !== id)
+      if (conflict) {
+        throw new Error(`Ya existe una receta activa para el SKU ${data.sku_odoo}: "${conflict.data().nombre}"`)
+      }
+    }
     const costoTotal = calcularCostoTotal(data.ingredientes)
     await updateDoc(doc(db, 'salidas_odoo_recetas', id), {
       ...data,
@@ -3607,12 +3623,25 @@ const firestoreService = {
     })
   },
 
-  deleteReceta: async (id) => {
+  duplicateReceta: async (id) => {
     const db = getDB()
-    await updateDoc(doc(db, 'salidas_odoo_recetas', id), {
+    const original = await getDoc(doc(db, 'salidas_odoo_recetas', id))
+    if (!original.exists()) throw new Error('Receta no encontrada')
+    const data = original.data()
+    const newId = await getNextSequentialCode('REC')
+    await setDoc(doc(db, 'salidas_odoo_recetas', newId), {
+      ...data,
+      nombre: `${data.nombre} (Copia)`,
       activo: false,
+      fecha_creacion: serverTimestamp(),
       ultima_actualizacion: serverTimestamp()
     })
+    return { id: newId, ...data, nombre: `${data.nombre} (Copia)`, activo: false }
+  },
+
+  deleteReceta: async (id) => {
+    const db = getDB()
+    await deleteDoc(doc(db, 'salidas_odoo_recetas', id))
   },
 
   batchCreateRecetas: async (recetas) => {
@@ -3665,6 +3694,20 @@ const firestoreService = {
     })
   },
 
+  upsertMapeoPOSDefault: async (ubicacionId) => {
+    const db = getDB()
+    await setDoc(doc(db, 'mapeo_pos', '__default__'), {
+      odoo_pos_id: '__default__',
+      odoo_pos_name: '(Fallback global)',
+      ubicacion_id: ubicacionId,
+      activo: true,
+      es_default: true,
+      notas: 'Ubicación por defecto cuando no se encuentra mapeo POS',
+      ultima_actualizacion: serverTimestamp()
+    }, { merge: true })
+  },
+
+
   deleteMapeoPOS: async (id) => {
     const db = getDB()
     await deleteDoc(doc(db, 'mapeo_pos', id))
@@ -3676,7 +3719,11 @@ const firestoreService = {
     try {
       const db = getDB()
       const snap = await getDocs(
-        query(collection(db, 'salidas_odoo'), orderBy('fecha_creacion', 'desc'))
+        query(
+          collection(db, 'movimientos'),
+          where('origen', '==', 'ODOO_VENTA'),
+          orderBy('fecha_creacion', 'desc')
+        )
       )
       return snap.docs.map(d => ({ id: d.id, ...d.data() }))
     } catch (error) {
@@ -3689,12 +3736,77 @@ const firestoreService = {
     try {
       const db = getDB()
       const snap = await getDocs(
-        query(collection(db, 'salidas_odoo'), orderBy('fecha_creacion', 'desc'))
+        query(
+          collection(db, 'movimientos'),
+          where('origen', '==', 'ODOO_VENTA'),
+          orderBy('fecha_creacion', 'desc')
+        )
       )
       return snap.docs.map(d => ({ id: d.id, ...d.data() }))
     } catch (error) {
       console.error('Error sincronizando salidas odoo:', error)
       return []
+    }
+  },
+
+  createSalidaOdooManual: async (data) => {
+    try {
+      const db = getDB()
+      const cantidadSalida = parseFloat(data.cantidad) || 0
+      const cantidadStock = parseFloat(data.cantidad_stock) || cantidadSalida
+
+      const ref = await addDoc(collection(db, 'movimientos'), {
+        tipo: 'SALIDA',
+        origen: 'ODOO_VENTA',
+        tipo_orden: 'manual',
+        order_id: data.orden_odoo || 'manual',
+        producto_id: data.producto_id || null,
+        nombre_producto: data.nombre_producto || '',
+        producto_odoo_nombre: data.producto_odoo_nombre || data.descripcion || 'Manual',
+        producto_odoo_sku: null,
+        recetario_nombre: null,
+        cantidad: cantidadSalida,
+        cantidad_stock: cantidadStock,
+        unidad_medida: data.unidad_medida || '',
+        unidad_medida_id: data.unidad_medida_id || null,
+        costo_unitario: parseFloat(data.costo_unitario) || 0,
+        costo_total: (parseFloat(data.costo_unitario) || 0) * cantidadSalida,
+        ubicacion_id: data.ubicacion_id || '',
+        descripcion: data.descripcion || 'Salida manual Odoo',
+        estado: 'COMPLETADO',
+        exit_type: 'VENTA_ODOO',
+        fecha_creacion: serverTimestamp(),
+      })
+
+      // Descontar stock del inventario
+      if (data.producto_id && data.ubicacion_id && cantidadStock > 0) {
+        const inventarioSnap = await firestoreService.queryWithFilters('inventario', [
+          where('producto_id', '==', data.producto_id),
+          where('ubicacion_id', '==', data.ubicacion_id)
+        ])
+        if (inventarioSnap.length > 0) {
+          const invRef = doc(db, 'inventario', inventarioSnap[0].id)
+          await updateDoc(invRef, {
+            stock_actual: (inventarioSnap[0].stock_actual || 0) - cantidadStock,
+            ultima_actualizacion: serverTimestamp()
+          })
+        }
+      }
+
+      return { id: ref.id }
+    } catch (error) {
+      console.error('Error creando salida manual:', error)
+      throw error
+    }
+  },
+
+  deleteSalidaOdoo: async (id) => {
+    try {
+      const db = getDB()
+      await deleteDoc(doc(db, 'movimientos', id))
+    } catch (error) {
+      console.error('Error eliminando salida odoo:', error)
+      throw error
     }
   },
 }

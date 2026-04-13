@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { format } from 'date-fns'
+import { formatCantidad } from '../../utils/formatters'
 
 function MetodoBadge({ metodo }) {
   if (metodo === 'conteo_reciente') {
@@ -65,7 +66,7 @@ export default function TablaConsolidada({ consolidatedData, ubicaciones }) {
                 >
                   <td className="px-4 py-3 text-xs text-slate-400 font-mono">{idx + 1}</td>
                   <td className="px-4 py-3 text-slate-900 dark:text-slate-100 font-medium">{item.nombre}</td>
-                  <td className="px-4 py-3 text-center text-slate-900 dark:text-slate-100 font-semibold">{item.total_unidades}</td>
+                  <td className="px-4 py-3 text-center text-slate-900 dark:text-slate-100 font-semibold">{formatCantidad(item.total_unidades)}</td>
                   <td className="px-4 py-3 text-center text-slate-600 dark:text-slate-400">{item.stock_minimo}</td>
                   <td className="px-4 py-3 text-center">
                     <EstadoBadge cantidad={item.total_unidades} stockMinimo={item.stock_minimo} />
@@ -125,7 +126,7 @@ export default function TablaConsolidada({ consolidatedData, ubicaciones }) {
                                       {ubicacion?.nombre || ub.ubicacion_id}
                                     </td>
                                     <td className="px-4 py-2 text-center font-medium text-slate-900 dark:text-slate-100">
-                                      {ub.cantidad}
+                                      {formatCantidad(ub.cantidad)}
                                     </td>
                                     <td className="px-4 py-2 text-center text-slate-600 dark:text-slate-400 text-xs">
                                       {formatFecha(ub.fecha_ultimo_conteo)}

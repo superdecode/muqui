@@ -12,9 +12,9 @@ import { getDB } from '../config/firebase.config'
 
 const UNIT_TYPES = {
   'KG': 'mass', 'KILOGRAMO': 'mass', 'G': 'mass', 'GRAMO': 'mass', 'GRAMOS': 'mass',
-  'MG': 'mass', 'MILIGRAMO': 'mass', 'LB': 'mass', 'LIBRA': 'mass', 'OZ': 'mass', 'ONZA': 'mass',
+  'MG': 'mass', 'MILIGRAMO': 'mass',
   'L': 'volume', 'LITRO': 'volume', 'LITROS': 'volume', 'ML': 'volume', 'MILILITRO': 'volume',
-  'CC': 'volume', 'GAL': 'volume', 'GALON': 'volume',
+  'CC': 'volume',
   'M': 'length', 'METRO': 'length', 'CM': 'length', 'CENTIMETRO': 'length',
   'MM': 'length', 'MILIMETRO': 'length',
   'UNIDAD': 'unit', 'UNIDADES': 'unit', 'UND': 'unit', 'PZA': 'unit', 'PIEZA': 'unit',
@@ -49,13 +49,11 @@ export async function migrateUnitTypes() {
 
 const DEFAULT_EQUIVALENCES = [
   ['KG', 'G', 1000],
-  ['KG', 'MG', 1000000],
+  ['G', 'MG', 1000],
   ['L', 'ML', 1000],
-  ['L', 'CC', 1000],
-  ['KG', 'LB', 2.20462],
-  ['KG', 'OZ', 35.274],
+  ['ML', 'CC', 1],
   ['M', 'CM', 100],
-  ['M', 'MM', 1000],
+  ['CM', 'MM', 10],
 ]
 
 export async function seedDefaultEquivalences() {

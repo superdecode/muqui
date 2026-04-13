@@ -10,7 +10,7 @@ import dataService from '../../services/dataService'
 import { useToastStore } from '../../stores/toastStore'
 import { useAuthStore } from '../../stores/authStore'
 import { exportTransferenciaToExcel } from '../../utils/exportUtils'
-import { formatDisplayId, safeFormatDate } from '../../utils/formatters'
+import { formatDisplayId, safeFormatDate, formatCantidad } from '../../utils/formatters'
 import { buildEquivalenceMap, convertUnits } from '../../utils/unitConversion'
 import UoMBadge from '../common/UoMBadge'
 
@@ -758,7 +758,7 @@ export default function TransferenciaDetail({
                     <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
                       <tr>
                         <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Producto</th>
-                        <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Especificación (Unidad)</th>
+                        <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">UoM de Compra</th>
                         <th className="px-4 py-4 text-center text-sm font-semibold text-slate-700 dark:text-slate-300">
                         {transferencia.tipo_movimiento === 'VENTA' ? 'Cantidad' : 'Enviada'}
                       </th>
@@ -800,7 +800,7 @@ export default function TransferenciaDetail({
                             <td className="px-4 py-4 text-center">
                               <div className="flex flex-col items-center">
                                 <span className="text-lg font-bold text-primary-600">
-                                  {detalle?.cantidad_original_ingresada !== undefined ? detalle.cantidad_original_ingresada : (cantOriginal ?? '—')}
+                                  {detalle?.cantidad_original_ingresada !== undefined ? formatCantidad(detalle.cantidad_original_ingresada) : (cantOriginal !== undefined ? formatCantidad(cantOriginal) : '—')}
                                 </span>
                                 {detalle?.unidad_original_nombre ? (
                                   <span className="text-[10px] font-medium text-slate-500 uppercase">
@@ -819,7 +819,7 @@ export default function TransferenciaDetail({
                                 )}
                                 {(detalle?.cantidad_original !== undefined || detalle?.cantidad_original_ingresada !== undefined) && (
                                   <span className="text-[10px] text-blue-500 mt-0.5" title="Impacto exacto en DB (Unidades Base)">
-                                    ({cantEnviada ?? 0} {productoInfo?.unidad_medida || '—'})
+                                    ({formatCantidad(cantEnviada ?? 0)} {productoInfo?.unidad_medida || '—'})
                                   </span>
                                 )}
                               </div>
@@ -854,9 +854,9 @@ export default function TransferenciaDetail({
                                 {(currentValue !== cantOriginal) && (
                                   <div className="text-xs mt-1">
                                     {(currentValue > cantOriginal) ? (
-                                      <span className="text-orange-600 font-medium">+{(currentValue - cantOriginal).toFixed(2)}</span>
+                                      <span className="text-orange-600 font-medium">+{formatCantidad(currentValue - cantOriginal)}</span>
                                     ) : (
-                                      <span className="text-blue-600 font-medium">-{(cantOriginal - currentValue).toFixed(2)}</span>
+                                      <span className="text-blue-600 font-medium">-{formatCantidad(cantOriginal - currentValue)}</span>
                                     )}
                                   </div>
                                 )}
@@ -865,7 +865,7 @@ export default function TransferenciaDetail({
                             {modoRecepcion !== 'parcial' && modoRecepcion !== 'editar' && detalle_has_recibida && (
                               <td className="px-4 py-4 text-center">
                                 <span className={`text-lg font-bold ${cantRecibida !== null && cantRecibida < cantEnviada ? 'text-orange-600' : 'text-green-600'}`}>
-                                  {cantRecibida !== null ? cantRecibida : '—'}
+                                  {cantRecibida !== null ? formatCantidad(cantRecibida) : '—'}
                                 </span>
                               </td>
                             )}
@@ -893,7 +893,7 @@ export default function TransferenciaDetail({
                     <thead className="bg-orange-50 dark:bg-orange-900/30 border-b border-orange-200 dark:border-orange-700">
                       <tr>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-orange-800 dark:text-orange-300">Insumo</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-orange-800 dark:text-orange-300">Especificación</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-orange-800 dark:text-orange-300">UoM de Compra</th>
                         <th className="px-4 py-3 text-center text-sm font-semibold text-orange-800 dark:text-orange-300">Cantidad Consumida</th>
                       </tr>
                     </thead>
@@ -919,7 +919,7 @@ export default function TransferenciaDetail({
                               />
                             </td>
                             <td className="px-4 py-3 text-center">
-                              <span className="text-lg font-bold text-orange-600">{insumo.cantidad}</span>
+                              <span className="text-lg font-bold text-orange-600">{formatCantidad(insumo.cantidad)}</span>
                             </td>
                           </tr>
                         )

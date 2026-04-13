@@ -76,7 +76,7 @@ export default function Stock() {
   // Opciones para selector de productos
   const productosOptions = useMemo(() => {
     return [...productos]
-      .filter(p => p.estado !== 'INACTIVO' && p.estado !== 'ELIMINADO')
+      .filter(p => p.estado !== 'INACTIVO' && p.estado !== 'ELIMINADO' && p.inventariable !== false)
       .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''))
       .map(p => ({ value: p.id, label: p.especificacion ? `${p.nombre} (${p.especificacion})` : p.nombre }))
   }, [productos])
@@ -153,8 +153,9 @@ export default function Stock() {
       
       // Add all active products to ensure complete coverage
       productos.forEach(producto => {
-        // Skip inactive products
+        // Skip inactive or non-inventoriable products
         if (producto.estado === 'INACTIVO' || producto.estado === 'ELIMINADO') return
+        if (producto.inventariable === false) return
         
         // Check if this product should be shown for this location
         // Either it has inventory, or we should create a default entry

@@ -8,6 +8,16 @@ import dataService from '../../services/dataService'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useToastStore } from '../../stores/toastStore'
 
+function fmtStock(v) {
+  if (v === null || v === undefined) return '0'
+  const n = parseFloat(v)
+  if (isNaN(n)) return '0'
+  const fixed = parseFloat(n.toFixed(2))
+  if (fixed % 1 === 0) return fixed.toString()
+  const dec = fixed.toFixed(2).split('.')[1].replace(/0+$/, '')
+  return `${Math.floor(fixed)}.${dec}`
+}
+
 export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSaving = false, editMode = false }) {
   const { canEdit } = usePermissions()
   const toast = useToastStore()
@@ -165,6 +175,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
 
       const productosUbicacion = productos.filter(producto => {
         if (producto.estado === 'INACTIVO' || producto.estado === 'ELIMINADO') return false
+        if (producto.inventariable === false) return false
 
         // Filtrar por ubicaciones_permitidas
         const ubicPermitidas = producto.ubicaciones_permitidas || []
@@ -594,7 +605,7 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
                     <div className="col-span-2">
                       <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-0.5 leading-tight">Sistema</label>
                       <div className="bg-slate-100 dark:bg-slate-700 rounded px-2 py-1 text-center">
-                        <p className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">{producto.stock_sistema}</p>
+                        <p className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">{fmtStock(producto.stock_sistema)}</p>
                       </div>
                     </div>
 

@@ -691,6 +691,11 @@ export default function Productos() {
                         <div>
                           <p className="font-semibold text-slate-900 dark:text-slate-100">{item.nombre}</p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">{item.codigo_legible || item.id}</p>
+                          {item.inventariable === false && (
+                            <span className="inline-flex items-center mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                              No inventariable
+                            </span>
+                          )}
                         </div>
                       </div>
                     </td>

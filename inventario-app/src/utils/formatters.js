@@ -141,6 +141,39 @@ export const formatNumberForCard = (number) => {
   }).format(number)
 }
 
+/**
+ * Formatea cantidades con precisión variable según requerimiento del usuario:
+ * - Hasta 3 decimales si se requiere.
+ * - Por defecto 1 decimal.
+ * - Si tiene > 4 decimales, aproxima a 3.
+ * - Si tiene 2 decimales, muestra los 2.
+ * - Si tiene 3 decimales, muestra los 3.
+ */
+export const formatCantidad = (v) => {
+  if (v === null || v === undefined || isNaN(v)) return '0.0'
+  if (v === 0) return '0.0'
+  
+  const num = typeof v === 'string' ? parseFloat(v) : v
+  
+  // Analizar decimales originales para decidir formato
+  const str = num.toString()
+  const decimalPart = str.split('.')[1] || ''
+  const decimalCount = decimalPart.length
+  
+  // Si tiene más de 4 decimales, aproximar a 3
+  if (decimalCount > 4) {
+    return num.toFixed(3)
+  }
+  
+  // Si tiene 2 o 3 decimales, respetarlos
+  if (decimalCount === 2 || decimalCount === 3) {
+    return num.toFixed(decimalCount)
+  }
+  
+  // Por defecto 1 decimal (para enteros o 1 decimal)
+  return num.toFixed(1)
+}
+
 // Formatear número para reportes (máximo 2 decimales)
 export const formatNumberForReport = (number) => {
   if (number === null || number === undefined) return '0'
@@ -222,7 +255,9 @@ const SKIP_UPPERCASE_KEYS = new Set([
   'origen_id', 'destino_id', 'movimiento_id', 'conteo_id', 'rol',
   'estado', 'tipo', 'tipo_movimiento', 'tipo_conteo', 'tipo_ubicacion',
   'tipo_ajuste', 'tipo_dato', 'categoria_ticket', 'prioridad', 'color',
-  'frecuencia_inventario'
+  'frecuencia_inventario', 'purchase_unit_id', 'exit_unit_id', 
+  'unidad_ingreso_id', 'unidad_original_id', 'unidad_consumo_id',
+  'causa_merma_id', 'proveedor_id', 'beneficiario_id'
 ])
 
 export const uppercaseStrings = (data) => {
@@ -267,4 +302,35 @@ export const formatDisplayId = (record, prefix = 'REG') => {
     return `${prefix}-${hash}`
   }
   return '-'
+}
+/**
+ * Genera la etiqueta de Unidad de Medida (UoM) de Compra formateada.
+ * Ej: "Unidad (3 Kg)" o "Kilogramo"
+ */
+export const getUoMCompra = (producto, unidadesDB = []) => {
+  if (!producto) return '—'
+  const qty = parseFloat(producto.purchase_unit_qty) || 1
+  const unit = unidadesDB.find(u => u.id === producto.purchase_unit_id)
+  const symbol = unit?.abreviatura || unit?.nombre || producto.unidad_medida || '—'
+  
+  if (qty > 1) {
+    return `Unidad (${qty} ${symbol})`.trim()
+  }
+  return symbol
+}
+
+/**
+ * Formatea el stock actual incluyendo la unidad de presentación si aplica.
+ * Ej: "2 Unidades (3 Kg)" o "2 Kilogramos"
+ */
+export const formatStockWithUnit = (stockQty, producto, unidadesDB = []) => {
+  if (!producto) return `${stockQty || 0}`
+  const qty = parseFloat(producto.purchase_unit_qty) || 1
+  const uom = getUoMCompra(producto, unidadesDB)
+  
+  if (qty > 1) {
+    const noun = (parseFloat(stockQty) === 1) ? 'Unidad' : 'Unidades'
+    return `${stockQty || 0} ${noun} (${producto.purchase_unit_qty} ${unidadesDB.find(u => u.id === producto.purchase_unit_id)?.abreviatura || producto.unidad_medida || ''})`.trim()
+  }
+  return `${stockQty || 0} ${uom}`.trim()
 }

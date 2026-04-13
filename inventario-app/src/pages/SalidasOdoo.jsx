@@ -1,20 +1,21 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import {
-  BookOpen, Plus, Search, Download, Upload, Edit2, Trash2,
+  BookOpen, Plus, Search, Download, Upload, Edit2, Trash2, Eye,
   ChevronDown, ChevronUp, X, Save, Package, DollarSign,
   FileSpreadsheet, CheckCircle, ArrowDownLeft, ArrowRightLeft,
-  MapPin, Clock, CheckCircle2, XCircle, Store, SlidersHorizontal, RefreshCw
+  MapPin, Clock, CheckCircle2, XCircle, Store, SlidersHorizontal, RefreshCw, Copy, AlertCircle
 } from 'lucide-react'
 import { useSalidasOdoo } from '../hooks/useSalidasOdoo'
 import { useToastStore } from '../stores/toastStore'
 import { usePermissions } from '../hooks/usePermissions'
 import dataService from '../services/dataService'
-import { buildEquivalenceMap, getCompatibleUnits, calcCostInConsumptionUnit } from '../utils/unitConversion'
+import { buildEquivalenceMap, getCompatibleUnits, calcCostInConsumptionUnit, convertUnits } from '../utils/unitConversion'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import Button from '../components/common/Button'
 import UoMBadge from '../components/common/UoMBadge'
+import ConfirmModal from '../components/common/ConfirmModal'
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
@@ -166,14 +167,13 @@ export default function SalidasOdoo() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function TabRecetas() {
-  const { recetas: recetarios, isLoading, crearReceta: crearRecetario, actualizarReceta: actualizarRecetario, eliminarReceta: eliminarRecetario, importarRecetas: importarRecetarios } = useSalidasOdoo()
+  const { recetas: recetarios, isLoading, crearReceta: crearRecetario, actualizarReceta: actualizarRecetario, eliminarReceta: eliminarRecetario, duplicarReceta, importarRecetas: importarRecetarios } = useSalidasOdoo()
   const toast = useToastStore()
   const { canEdit, canDelete: canDeletePerm, isReadOnly } = usePermissions()
   const { data: productosParaImport = [] } = useQuery({ queryKey: ['productos'], queryFn: () => dataService.getProductos() })
-  const { data: unidadesDB = [] } = useQuery({
-    queryKey: ['config-unidades'],
-    queryFn: () => dataService.getUnidadesMedida()
-  })
+  const { data: unidadesDB = [] } = useQuery({ queryKey: ['config-unidades'], queryFn: () => dataService.getUnidadesMedida() })
+  const { data: equivalencias = [] } = useQuery({ queryKey: ['config-equivalencias'], queryFn: () => dataService.getUnitEquivalences() })
+  const eqMap = useMemo(() => buildEquivalenceMap(equivalencias), [equivalencias])
   const canWrite = canEdit('salidas_odoo')
   const canDel   = canDeletePerm('salidas_odoo')
   const readOnly = isReadOnly('recetarios')
@@ -186,20 +186,47 @@ function TabRecetas() {
   const [modalForm, setModalForm] = useState(false)
   const [modalImport, setModalImport] = useState(false)
   const [editando, setEditando] = useState(null)
+  const [filtroActivo, setFiltroActivo] = useState('activas') // 'todas', 'activas', 'inactivas'
   const [preview, setPreview] = useState(null)
   const [importando, setImportando] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(null) // { id, nombre }
+  const [confirmDuplicate, setConfirmDuplicate] = useState(null) // { id, nombre }
   const fileRef = useRef()
 
   const recetasFiltradas = (recetarios || []).filter(r => {
-    if (!busqueda) return r.activo !== false
+    const matchesActivo = filtroActivo === 'todas' ||
+      (filtroActivo === 'activas' && r.activo !== false) ||
+      (filtroActivo === 'inactivas' && r.activo === false)
+    if (!busqueda) return matchesActivo
     const b = busqueda.toLowerCase()
     return r.activo !== false && (r.nombre?.toLowerCase().includes(b) || r.sku_odoo?.toLowerCase().includes(b))
   })
 
-  const handleEliminar = async (id, nombre) => {
-    if (!window.confirm(`¿Eliminar receta "${nombre}"?`)) return
-    try { await eliminarRecetario.mutateAsync(id); toast.success('Eliminada', `Receta "${nombre}" eliminada`) }
-    catch { toast.error('Error', 'Error al eliminar') }
+  const handleEliminar = async () => {
+    if (!confirmDelete) return
+    const { id, nombre } = confirmDelete
+    try { 
+      await eliminarRecetario.mutateAsync(id)
+      toast.success('Eliminada', `Receta "${nombre}" eliminada exitosamente`) 
+      setConfirmDelete(null)
+    }
+    catch (e) { 
+      toast.error('Error', e.message || 'Error al eliminar') 
+    }
+  }
+
+  const handleDuplicar = async () => {
+    if (!confirmDuplicate) return
+    const { id, nombre } = confirmDuplicate
+    try {
+      const result = await duplicarReceta.mutateAsync(id)
+      toast.success('Duplicada', `Receta "${nombre}" duplicada como inactiva`)
+      setEditando(result)
+      setModalForm(true)
+      setConfirmDuplicate(null)
+    } catch (e) {
+      toast.error('Error', e.message || 'Error al duplicar')
+    }
   }
 
   const handleFileChange = async (e) => {
@@ -238,16 +265,25 @@ function TabRecetas() {
     
     // 1. Calcular los 'Con Receta' (Emparejados) primero y recalcular sus costos dinámicamente
     const listConReceta = list.filter(r => {
-      const activo = r.activo !== false
+      const matchesActivo = filtroActivo === 'todas' ||
+        (filtroActivo === 'activas' && r.activo !== false) ||
+        (filtroActivo === 'inactivas' && r.activo === false)
       const matchesSearch = !busqueda || r.nombre?.toLowerCase().includes(b) || r.sku_odoo?.toLowerCase().includes(b)
-      return activo && matchesSearch
+      return matchesActivo && matchesSearch
     }).map(r => {
       let nuevoCostoTotal = 0
       const ingredientesActualizados = (r.ingredientes || []).map(ing => {
         const prodMatch = productosParaImport.find(p => p.id === ing.producto_id)
         const costoActual = prodMatch ? (parseFloat(prodMatch.costo_unidad) || 0) : (parseFloat(ing.costo_unitario) || 0)
-        nuevoCostoTotal += costoActual * (parseFloat(ing.cantidad) || 0)
-        return { ...ing, costo_unitario: costoActual }
+        const purchaseQty = prodMatch?.purchase_unit_qty || 1
+        const purchaseUnitId = ing.purchase_unit_id || ''
+        const consumptionUnitId = ing.consumption_unit_id || purchaseUnitId
+        const costoEfectivo = (purchaseUnitId && consumptionUnitId)
+          ? calcCostInConsumptionUnit(costoActual, purchaseQty, purchaseUnitId, consumptionUnitId, eqMap)
+          : costoActual
+        const subtotalEfectivo = costoEfectivo * (parseFloat(ing.cantidad) || 0)
+        nuevoCostoTotal += subtotalEfectivo
+        return { ...ing, costo_unitario: costoActual, costo_efectivo: costoEfectivo, subtotal_efectivo: subtotalEfectivo }
       })
       return { ...r, ingredientes: ingredientesActualizados, costo_total: nuevoCostoTotal }
     })
@@ -273,7 +309,7 @@ function TabRecetas() {
     
     // Si es 'todas', combinamos ambas listas
     return [...listConReceta, ...listSinReceta]
-  }, [recetarios, busqueda, filtroEstado, odooProducts])
+  }, [recetarios, busqueda, filtroEstado, filtroActivo, odooProducts])
 
   const handleDescargarPlantilla = () => {
     const ws = XLSX.utils.aoa_to_sheet([
@@ -296,27 +332,62 @@ function TabRecetas() {
     <div className="space-y-5">
       {/* Actions bar */}
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="relative flex-1 w-full sm:max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input type="text" placeholder="Buscar por nombre o SKU..."
-              value={busqueda} onChange={e => setBusqueda(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+        {/* Filtros de Sincronización (Tabs superiores) */}
+        <div className="flex flex-col gap-2">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">Estatus Sincronización Odoo</label>
+          <div className="flex p-1 bg-slate-100 dark:bg-slate-800/50 rounded-2xl w-fit border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+            <button onClick={() => setFiltroEstado('todas')} className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${filtroEstado === 'todas' ? 'bg-white dark:bg-slate-700 text-primary-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              Todas
+            </button>
+            <button onClick={() => setFiltroEstado('sin_receta')} className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${filtroEstado === 'sin_receta' ? 'bg-white dark:bg-slate-700 text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              <RefreshCw size={12} className={filtroEstado === 'sin_receta' ? 'animate-spin' : ''} /> Pendientes
+            </button>
+            <button onClick={() => setFiltroEstado('con_receta')} className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${filtroEstado === 'con_receta' ? 'bg-white dark:bg-slate-700 text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              <CheckCircle size={12} /> Completados
+            </button>
           </div>
-          <div className="flex items-center gap-2">
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+          <div className="flex flex-1 flex-col sm:flex-row items-center gap-3 w-full sm:max-w-3xl">
+            <div className="relative flex-1 w-full sm:max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input type="text" placeholder="Buscar por nombre o SKU..."
+                value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all shadow-sm" />
+            </div>
+            
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex flex-col">
+                <select 
+                  value={filtroActivo} 
+                  onChange={e => setFiltroActivo(e.target.value)}
+                  className="w-full sm:w-44 px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-primary-500 transition-all outline-none"
+                >
+                  <option value="activas">Solo Recetas Activas</option>
+                  <option value="todas">Todas las Recetas</option>
+                  <option value="inactivas">Solo Recetas Inactivas</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <Button 
               variant="outline"
               size="sm"
               onClick={handleSincronizarProductos}
               loading={sincronizando}
               disabled={sincronizando}
+              className="bg-white dark:bg-slate-800"
             >
-              <ArrowRightLeft size={15} className={`mr-1.5 ${sincronizando ? 'animate-spin' : ''}`} /> Sincronizar Odoo
+              <ArrowRightLeft size={15} className={`mr-1.5 ${sincronizando ? 'animate-spin' : ''}`} /> Sincronizar
             </Button>
             <Button 
               variant="outline"
               size="sm"
               onClick={() => { const c = exportarRecetarios(displayData); if (c) toast.success('Exportado', `${c} recetas exportadas`) }}
+              className="bg-white dark:bg-slate-800"
             >
               <Download size={15} className="mr-1.5" /> Exportar
             </Button>
@@ -326,10 +397,11 @@ function TabRecetas() {
                   variant="outline"
                   size="sm"
                   onClick={() => { setModalImport(true); setPreview(null) }}
+                  className="bg-white dark:bg-slate-800"
                 >
                   <Upload size={15} className="mr-1.5" /> Importar
                 </Button>
-                <Button size="sm" onClick={() => { setEditando(null); setModalForm(true) }}>
+                <Button size="sm" onClick={() => { setEditando(null); setModalForm(true) }} className="bg-primary-600 hover:bg-primary-700 shadow-sm">
                   <Plus size={15} className="mr-1.5" /> Nueva Receta
                 </Button>
               </>
@@ -337,12 +409,6 @@ function TabRecetas() {
           </div>
         </div>
 
-        {/* Filtros de estado */}
-        <div className="flex p-1 bg-slate-100 dark:bg-slate-800/50 rounded-2xl w-fit border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
-          <button onClick={() => setFiltroEstado('todas')} className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all ${filtroEstado === 'todas' ? 'bg-white dark:bg-slate-700 text-primary-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Todas</button>
-          <button onClick={() => setFiltroEstado('sin_receta')} className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all ${filtroEstado === 'sin_receta' ? 'bg-white dark:bg-slate-700 text-danger-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Pendiente</button>
-          <button onClick={() => setFiltroEstado('con_receta')} className={`px-4 py-1.5 text-xs font-bold rounded-xl transition-all ${filtroEstado === 'con_receta' ? 'bg-white dark:bg-slate-700 text-green-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Completado</button>
-        </div>
       </div>
       <p className="text-xs text-slate-500">{displayData.length} item{displayData.length !== 1 ? 's' : ''} {filtroEstado === 'sin_receta' ? 'pendientes de configuración' : 'en total'}</p>
 
@@ -368,8 +434,10 @@ function TabRecetas() {
               <tr>
                 <th className="px-4 py-3 w-8"></th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Producto Odoo</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">SKU Odoo</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">SKU</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Estatus Receta</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Ingredientes</th>
+
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Costo Total</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Acciones</th>
               </tr>
@@ -377,15 +445,41 @@ function TabRecetas() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {displayData.map(rec => (
                 <RecetaRow key={rec.id} rec={rec} expandido={expandido} setExpandido={setExpandido}
-                  canWrite={canWrite} canDel={canDel}
+                  canWrite={canWrite} canDel={canDel} unidadesDB={unidadesDB}
                   onEdit={() => { setEditando(rec); setModalForm(true) }}
-                  onDelete={() => handleEliminar(rec.id, rec.nombre)}
-                  onCrear={() => { setEditando({ nombre: rec.nombre, sku_odoo: rec.sku_odoo }); setModalForm(true) }} />
+                  onDelete={() => setConfirmDelete({ id: rec.id, nombre: rec.nombre })}
+                  onCrear={() => { setEditando({ nombre: rec.nombre, sku_odoo: rec.sku_odoo }); setModalForm(true) }}
+                  onDuplicate={() => setConfirmDuplicate({ id: rec.id, nombre: rec.nombre })} />
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      {/* Modales de Confirmación */}
+      <ConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={handleEliminar}
+        title="¿Eliminar Receta?"
+        message={`¿Estás seguro que deseas eliminar permanentemente la receta de "${confirmDelete?.nombre}"? Esta acción no se puede deshacer.`}
+        confirmText="Eliminar permanentemente"
+        variant="danger"
+        icon={Trash2}
+        loading={eliminarRecetario.isPending}
+      />
+
+      <ConfirmModal
+        isOpen={!!confirmDuplicate}
+        onClose={() => setConfirmDuplicate(null)}
+        onConfirm={handleDuplicar}
+        title="¿Duplicar Receta?"
+        message={`Se creará una copia de "${confirmDuplicate?.nombre}" en estado inactivo para que puedas editarla.`}
+        confirmText="Duplicar ahora"
+        variant="info"
+        icon={Copy}
+        loading={duplicarReceta.isPending}
+      />
 
       {modalForm && (
         <ModalReceta receta={editando} readOnly={readOnly}
@@ -406,11 +500,11 @@ function TabRecetas() {
 
 // ─── Receta Row (expandable) ──────────────────────────────────────────────────
 
-function RecetaRow({ rec, expandido, setExpandido, canWrite, canDel, onEdit, onDelete, onCrear }) {
+function RecetaRow({ rec, expandido, setExpandido, canWrite, canDel, onEdit, onDelete, onCrear, onDuplicate, unidadesDB = [] }) {
   const isOpen = expandido === rec.id
   return (
     <>
-      <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer transition-colors"
+      <tr className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 cursor-pointer transition-colors ${rec.activo === false ? 'opacity-50' : ''}`}
         onClick={() => setExpandido(isOpen ? null : rec.id)}>
         <td className="px-4 py-3">{isOpen ? <ChevronUp size={15} className="text-slate-400" /> : <ChevronDown size={15} className="text-slate-400" />}</td>
         <td className="px-4 py-3">
@@ -419,7 +513,24 @@ function RecetaRow({ rec, expandido, setExpandido, canWrite, canDel, onEdit, onD
             <span className="font-semibold text-sm text-slate-900 dark:text-slate-100">{rec.nombre}</span>
           </div>
         </td>
-        <td className="px-4 py-3"><span className="px-2.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-semibold">{rec.sku_odoo}</span></td>
+        <td className="px-4 py-3"><span className="px-2.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-semibold truncate max-w-[120px] inline-block">{rec.sku_odoo}</span></td>
+        <td className="px-4 py-3 text-center">
+          {rec.esVirtual ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-800/40">
+              Pendiente
+            </span>
+          ) : (
+            rec.activo !== false ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800/40">
+                <CheckCircle size={10} /> Activa
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400">
+                <XCircle size={10} /> Inactiva
+              </span>
+            )
+          )}
+        </td>
         <td className="px-4 py-3 text-center">
           <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${(rec.ingredientes?.length || 0) > 0 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'}`}>
             {rec.ingredientes?.length || 0}
@@ -439,6 +550,7 @@ function RecetaRow({ rec, expandido, setExpandido, canWrite, canDel, onEdit, onD
               </button>
             ) : (
               <>
+                <button onClick={onDuplicate} disabled={!canWrite} title="Duplicar receta" className={`p-1.5 rounded-lg transition-colors ${canWrite ? 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700' : 'text-slate-300 cursor-not-allowed'}`}><Copy size={14} /></button>
                 <button onClick={onEdit} disabled={!canWrite} className={`p-1.5 rounded-lg transition-colors ${canWrite ? 'text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30' : 'text-slate-300 cursor-not-allowed'}`}><Edit2 size={14} /></button>
                 {canDel && <button onClick={onDelete} className="p-1.5 text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20 rounded-lg transition-colors"><Trash2 size={14} /></button>}
               </>
@@ -448,11 +560,11 @@ function RecetaRow({ rec, expandido, setExpandido, canWrite, canDel, onEdit, onD
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={6} className="px-4 pb-3 bg-slate-50 dark:bg-slate-700/20">
+          <td colSpan={7} className="px-4 pb-3 bg-slate-50 dark:bg-slate-700/20">
             <div className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
               <table className="w-full text-sm">
                 <thead><tr className="bg-slate-100 dark:bg-slate-600/50">
-                  {['Ingrediente', 'SKU', 'Espec.', 'Costo/u', 'Cantidad Uso', 'Unidad', 'Subtotal'].map(h => (
+                  {['Ingrediente', 'SKU', 'UoM Compra', 'Costo/u', 'Cantidad Uso', 'Unidad Uso', 'Subtotal'].map(h => (
                     <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">{h}</th>
                   ))}
                 </tr></thead>
@@ -464,15 +576,12 @@ function RecetaRow({ rec, expandido, setExpandido, canWrite, canDel, onEdit, onD
                       <td className="px-3 py-2 text-xs text-slate-500">{ing.especificacion || '—'}</td>
                       <td className="px-3 py-2 text-right">{fmtCosto(ing.costo_unitario)}</td>
                       <td className="px-3 py-2 text-right font-semibold">{ing.cantidad}</td>
-                      <td className="px-3 py-2">
-                        <UoMBadge
-                          qty={ing.purchase_unit_qty || ing.cantidad}
-                          symbol={unidadesDB.find(u => u.id === ing.purchase_unit_id)?.abreviatura || ing.unidad_medida}
-                          unitName={unidadesDB.find(u => u.id === ing.purchase_unit_id)?.nombre}
-                          size="sm"
-                        />
+                      <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">
+                        {ing.consumption_unit_id === '__presentation__'
+                          ? `Unidad (${unidadesDB.find(u => u.id === ing.purchase_unit_id)?.abreviatura || ing.unidad_medida})`
+                          : (unidadesDB.find(u => u.id === ing.consumption_unit_id)?.nombre || ing.unidad_medida || '—')}
                       </td>
-                      <td className="px-3 py-2 text-right font-bold">{fmtCosto((ing.costo_unitario || 0) * (ing.cantidad || 0))}</td>
+                      <td className="px-3 py-2 text-right font-bold">{fmtCosto(ing.subtotal_efectivo ?? (ing.costo_unitario || 0) * (ing.cantidad || 0))}</td>
                     </tr>
                   ))}
                   <tr className="bg-primary-50 dark:bg-primary-900/20">
@@ -497,6 +606,8 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
     nombre: initial.nombre || '', sku_odoo: initial.sku_odoo || '', sku_template: initial.sku_template || '',
     ingredientes: initial.ingredientes?.length ? initial.ingredientes.map(ing => ({ ...ing })) : []
   })
+  const [activo, setActivo] = useState(receta ? (receta.activo !== false) : true)
+  const toast = useToastStore()
   const [guardando, setGuardando] = useState(false)
   const [activeSearchRow, setActiveSearchRow] = useState(null)
   const [prodSearchTerm, setProdSearchTerm] = useState('')
@@ -514,7 +625,18 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
       ).slice(0, 15)
     : []
 
-  const costoTotal = calcularCostoTotal(form.ingredientes)
+  const costoTotal = useMemo(() =>
+    form.ingredientes.reduce((s, ing) => {
+      const prod = productosActivos.find(p => p.id === ing.producto_id) || {}
+      const purchaseQty = prod.purchase_unit_qty || 1
+      const purchaseUnitId = ing.purchase_unit_id || ''
+      const consumptionUnitId = ing.consumption_unit_id || purchaseUnitId
+      const costPerConsUnit = (purchaseUnitId && consumptionUnitId)
+        ? calcCostInConsumptionUnit(ing.costo_unitario || 0, purchaseQty, purchaseUnitId, consumptionUnitId, eqMap)
+        : (ing.costo_unitario || 0)
+      return s + costPerConsUnit * (parseFloat(ing.cantidad) || 0)
+    }, 0)
+  , [form.ingredientes, productosActivos, eqMap])
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const addIngrediente = () => {
@@ -573,10 +695,11 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
     
     // Parsear cantidades de string a números formales antes de subirlos a Firebase
     const formPreparado = {
-      ...form, 
-      ingredientes: form.ingredientes.map(ing => ({ 
-        ...ing, 
-        cantidad: parseFloat(parseFloat(ing.cantidad).toFixed(3)) || 0 
+      ...form,
+      activo,
+      ingredientes: form.ingredientes.map(ing => ({
+        ...ing,
+        cantidad: parseFloat(parseFloat(ing.cantidad).toFixed(3)) || 0
       }))
     }
 
@@ -588,7 +711,7 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
       }
     } catch (error) {
       console.error('Error guardando receta:', error)
-      toast.error('Error', 'Hubo un problema al guardar la receta')
+      toast.error('Error', error.message || 'Hubo un problema al guardar la receta')
     } finally { 
       setGuardando(false) 
     }
@@ -601,7 +724,9 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mt-16" />
           <div className="relative z-10 flex items-center justify-between">
             <div className="flex items-center gap-3"><BookOpen className="text-white" size={22} /><h2 className="text-xl font-bold text-white">{receta ? 'Editar Receta' : 'Nueva Receta'}</h2></div>
-            <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-xl"><X className="text-white" size={20} /></button>
+            <div className="flex items-center gap-3">
+              <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-xl"><X className="text-white" size={20} /></button>
+            </div>
           </div>
         </div>
         <div className="flex flex-col flex-1 overflow-hidden">
@@ -649,9 +774,9 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
                     <thead className="bg-slate-50 dark:bg-slate-700/50 sticky top-0 z-10">
                       <tr>
                         <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Producto</th>
-                        <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Espec.</th>
+                        <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">UoM Compra</th>
                         <th className="px-3 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Costo/u</th>
-                        <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Unidad</th>
+                        <th className="px-3 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Unidad Uso</th>
                         <th className="px-3 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Cantidad Uso</th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Subtotal</th>
                         <th className="px-2 py-3"></th>
@@ -755,7 +880,16 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
                               disabled={readOnly} min={0} step="0.001" placeholder="0.000"
                               className="w-full px-2.5 py-2 text-sm text-center font-bold border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:opacity-60" />
                           </td>
-                          <td className="px-3 py-2.5 text-right text-sm font-bold text-slate-900 dark:text-slate-100">{fmtCosto((ing.costo_unitario || 0) * (ing.cantidad || 0))}</td>
+                          <td className="px-3 py-2.5 text-right text-sm font-bold text-slate-900 dark:text-slate-100">{(() => {
+                            const prod = productosActivos.find(p => p.id === ing.producto_id) || {}
+                            const purchaseQty = prod.purchase_unit_qty || 1
+                            const purchaseUnitId = ing.purchase_unit_id || ''
+                            const consumptionUnitId = ing.consumption_unit_id || purchaseUnitId
+                            const costPerConsUnit = (purchaseUnitId && consumptionUnitId)
+                              ? calcCostInConsumptionUnit(ing.costo_unitario || 0, purchaseQty, purchaseUnitId, consumptionUnitId, eqMap)
+                              : (ing.costo_unitario || 0)
+                            return fmtCosto(costPerConsUnit * (parseFloat(ing.cantidad) || 0))
+                          })()}</td>
                           <td className="px-2 py-2.5 text-center">
                             {!readOnly && <button type="button" onClick={() => removeIngrediente(i)} className="p-1.5 text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-900/20 rounded-lg transition-colors"><Trash2 size={14} /></button>}
                           </td>
@@ -773,9 +907,31 @@ function ModalReceta({ receta, readOnly, onClose, onCreate, onUpdate }) {
             <span className="text-lg font-bold text-green-800 dark:text-green-300">{fmtCosto(costoTotal)}</span>
           </div>
         </div>
-        <div className="flex justify-end gap-3 p-5 border-t border-slate-200 dark:border-slate-700 shrink-0">
-          <Button variant="outline" onClick={onClose} disabled={guardando}>{readOnly ? 'Cerrar' : 'Cancelar'}</Button>
-          {!readOnly && <Button onClick={handleSubmit} disabled={!form.nombre || !form.sku_odoo || guardando} loading={guardando}><Save size={16} className="mr-2" /> {receta ? 'Actualizar' : 'Crear Receta'}</Button>}
+        <div className="flex items-center justify-between p-5 border-t border-slate-200 dark:border-slate-700 shrink-0">
+          <div>
+            {receta && receta.id && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 dark:bg-slate-700/50 rounded-2xl border border-slate-200 dark:border-slate-600">
+                <span className={`text-xs font-bold uppercase tracking-wider ${activo ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                  {activo ? 'Receta Activa' : 'Receta Inactiva'}
+                </span>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    if (activo) {
+                      if (window.confirm('¿Desactivar receta? Las ventas podrían generar errores de inventario hasta que otra receta sea activada.')) setActivo(false)
+                    } else setActivo(true)
+                  }} 
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 shadow-sm ${activo ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform duration-300 ${activo ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={onClose} disabled={guardando}>{readOnly ? 'Cerrar' : 'Cancelar'}</Button>
+            {!readOnly && <Button onClick={handleSubmit} disabled={!form.nombre || !form.sku_odoo || guardando} loading={guardando}><Save size={16} className="mr-2" /> {receta ? 'Actualizar' : 'Crear Receta'}</Button>}
+          </div>
         </div>
       </div>
     </div>
@@ -851,8 +1007,11 @@ function TabMapeoPOS() {
   const { data: mapeos = [], isLoading } = useQuery({ queryKey: ['mapeo-pos'], queryFn: () => dataService.getMapeoPOS() })
   const { data: ubicaciones = [] } = useQuery({ queryKey: ['ubicaciones'], queryFn: () => dataService.getUbicaciones() })
   const { data: empresas = [] } = useQuery({ queryKey: ['empresas'], queryFn: () => dataService.getEmpresas() })
+  const { data: salidas = [] } = useQuery({ queryKey: ['salidas-odoo'], queryFn: () => dataService.getSalidasOdoo() })
 
   const [showForm, setShowForm] = useState(false)
+  const [defaultUbicacion, setDefaultUbicacion] = useState('')
+  const [savingDefault, setSavingDefault] = useState(false)
   const [editando, setEditando] = useState(null)
   const [form, setForm] = useState({ odoo_pos_name: '', odoo_pos_id: '', ubicacion_id: '', notas: '' })
   const [sincronizando, setSincronizando] = useState(false)
@@ -939,12 +1098,89 @@ function TabMapeoPOS() {
     }
   }
 
+  // Diagnostic calculations
+  const mapeosActivos = mapeos.filter(m => m.activo !== false)
+  const sinUbicacion = mapeosActivos.filter(m => !m.ubicacion_id)
+  const stuckIds = new Set(
+    salidas
+      .filter(s => s.ubicacion_id === 'tienda_principal' || !s.ubicacion_id)
+      .map(s => String(s.order_id))
+  )
+  const stuckCount = stuckIds.size
+
+  // Unique config_ids seen in recent salidas (from order_id prefix matching — best effort)
+  const ubicacionesUsadasEnSalidas = [...new Set(salidas.map(s => s.ubicacion_id).filter(Boolean))]
+  const ubicacionesSinMapeo = ubicacionesUsadasEnSalidas.filter(uid =>
+    uid !== 'tienda_principal' && !mapeosActivos.some(m => m.ubicacion_id === uid)
+  )
+
+  const handleSaveDefault = async () => {
+    if (!defaultUbicacion) return
+    setSavingDefault(true)
+    try {
+      await dataService.upsertMapeoPOSDefault(defaultUbicacion)
+      toast.success('Guardado', 'Ubicación por defecto actualizada')
+    } catch {
+      toast.error('Error', 'No se pudo guardar')
+    } finally {
+      setSavingDefault(false)
+    }
+  }
+
+  const defaultMapeo = mapeos.find(m => m.odoo_pos_id === '__default__' || m.es_default)
+
   return (
     <div className="space-y-5">
+      {/* Diagnostic banner */}
+      {(stuckCount > 0 || sinUbicacion.length > 0) && (
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 space-y-2">
+          <p className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wide flex items-center gap-1.5">
+            <AlertCircle size={13} /> Diagnóstico de mapeo
+          </p>
+          {stuckCount > 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              ⚠️ <strong>{stuckCount}</strong> orden(es) registradas con ubicación <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded">tienda_principal</code> — el mapeo no resolvió la ubicación correcta en esas ventas. Verifica que cada POS tenga su <strong>ID de Odoo</strong> configurado y que las funciones estén desplegadas.
+            </p>
+          )}
+          {sinUbicacion.length > 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              ⚠️ <strong>{sinUbicacion.length}</strong> mapeo(s) sin ubicación asignada: {sinUbicacion.map(m => <code key={m.id} className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded mx-0.5">{m.odoo_pos_name}</code>)}
+            </p>
+          )}
+          <p className="text-[10px] text-amber-600 dark:text-amber-500">
+            Después de corregir los mapeos, ejecuta <strong>firebase deploy --only functions</strong> para aplicar los cambios en la nube.
+          </p>
+        </div>
+      )}
+
+      {/* Global default fallback */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30 p-4">
+        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Ubicación por defecto (fallback global)</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Si una venta llega y no se encuentra mapeo POS, se usará esta ubicación en lugar de <code className="bg-slate-200 dark:bg-slate-600 px-1 rounded">tienda_principal</code>.</p>
+        <div className="flex items-center gap-2">
+          <select
+            value={defaultUbicacion || defaultMapeo?.ubicacion_id || ''}
+            onChange={e => setDefaultUbicacion(e.target.value)}
+            className="flex-1 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-primary-500">
+            <option value="">Sin fallback (mantener tienda_principal)</option>
+            {ubicacionesActivas.map(ub => {
+              const emp = empresas.find(e => e.id === ub.empresa_id)
+              return <option key={ub.id} value={ub.id}>{ub.nombre}{emp ? ` (${emp.nombre})` : ''}</option>
+            })}
+          </select>
+          <Button size="sm" onClick={handleSaveDefault} disabled={savingDefault || !defaultUbicacion}>
+            {savingDefault ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
+          </Button>
+        </div>
+        {defaultMapeo?.ubicacion_id && (
+          <p className="text-[10px] text-slate-400 mt-1.5">Actual: <strong>{getUbicacionNombre(defaultMapeo.ubicacion_id)}</strong></p>
+        )}
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-slate-600 dark:text-slate-400">Configura qué Punto de Venta de Odoo corresponde a cada ubicación en la app.</p>
-          <p className="text-xs text-slate-400 mt-1">Esto determina de qué ubicación se descuentan los ingredientes cuando llega una venta.</p>
+          <p className="text-xs text-slate-400 mt-1">El <strong>ID Odoo</strong> es el número que identifica el POS en Odoo (campo <code className="bg-slate-100 dark:bg-slate-700 px-1 rounded">pos.config.id</code>).</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleSincronizarOdoo} loading={sincronizando} disabled={sincronizando}>
@@ -964,7 +1200,9 @@ function TabMapeoPOS() {
                 className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-primary-500" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">ID del POS en Odoo <span className="text-slate-400 font-normal">(opcional)</span></label>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                ID del POS en Odoo <span className="text-slate-400 font-normal">(número, ej: 3)</span>
+              </label>
               <input value={form.odoo_pos_id} onChange={e => setForm(f => ({ ...f, odoo_pos_id: e.target.value }))} placeholder="ej: 5"
                 className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-primary-500 font-mono" />
             </div>
@@ -992,7 +1230,7 @@ function TabMapeoPOS() {
         </div>
       )}
 
-      {isLoading ? <LoadingSpinner text="Cargando mapeos..." /> : mapeos.length === 0 ? (
+      {isLoading ? <LoadingSpinner text="Cargando mapeos..." /> : mapeosActivos.filter(m => m.odoo_pos_id !== '__default__').length === 0 ? (
         <div className="py-12 text-center"><MapPin size={48} className="mx-auto text-slate-300 mb-3" /><p className="text-slate-500">No hay mapeos POS configurados.</p></div>
       ) : (
         <div className="border border-slate-200 dark:border-slate-600 rounded-xl overflow-hidden">
@@ -1001,24 +1239,42 @@ function TabMapeoPOS() {
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">POS Odoo</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">ID Odoo</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Ubicación App</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Notas</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Estado</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Acciones</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {mapeos.filter(m => m.activo !== false).map(m => (
-                <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                  <td className="px-4 py-3"><div className="flex items-center gap-2"><Store size={16} className="text-purple-500" /><span className="font-semibold text-sm text-slate-900 dark:text-slate-100">{m.odoo_pos_name}</span></div></td>
-                  <td className="px-4 py-3 text-sm font-mono text-slate-500">{m.odoo_pos_id || '—'}</td>
-                  <td className="px-4 py-3"><div className="flex items-center gap-2"><MapPin size={14} className="text-green-500" /><span className="text-sm text-slate-700 dark:text-slate-300">{getUbicacionNombre(m.ubicacion_id)}</span></div></td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{m.notas || '—'}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-1">
-                      {canWrite && <button onClick={() => handleEdit(m)} className="p-1.5 text-primary-600 hover:bg-primary-50 rounded-lg"><Edit2 size={14} /></button>}
-                      {canWrite && <button onClick={() => { if (window.confirm('¿Eliminar este mapeo?')) eliminarMapeo.mutate(m.id) }} className="p-1.5 text-danger-600 hover:bg-danger-50 rounded-lg"><Trash2 size={14} /></button>}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {mapeosActivos.filter(m => m.odoo_pos_id !== '__default__').map(m => {
+                const sinUb = !m.ubicacion_id
+                const sinId = !m.odoo_pos_id
+                return (
+                  <tr key={m.id} className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 ${sinUb ? 'bg-red-50/30 dark:bg-red-900/10' : ''}`}>
+                    <td className="px-4 py-3"><div className="flex items-center gap-2"><Store size={16} className="text-purple-500" /><span className="font-semibold text-sm text-slate-900 dark:text-slate-100">{m.odoo_pos_name}</span></div></td>
+                    <td className="px-4 py-3">
+                      {sinId
+                        ? <span className="text-xs text-amber-600 italic">Sin ID — mapeo por nombre</span>
+                        : <span className="text-sm font-mono text-slate-500">{m.odoo_pos_id}</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {sinUb
+                        ? <span className="text-xs text-red-600 font-semibold">⚠ Sin ubicación asignada</span>
+                        : <div className="flex items-center gap-2"><MapPin size={14} className="text-green-500" /><span className="text-sm text-slate-700 dark:text-slate-300">{getUbicacionNombre(m.ubicacion_id)}</span></div>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {sinUb
+                        ? <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-100 text-red-700">Sin asignar</span>
+                        : sinId
+                          ? <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-700">Solo nombre</span>
+                          : <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-100 text-green-700">✓ Listo</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-1">
+                        {canWrite && <button onClick={() => handleEdit(m)} className="p-1.5 text-primary-600 hover:bg-primary-50 rounded-lg"><Edit2 size={14} /></button>}
+                        {canWrite && <button onClick={() => { if (window.confirm('¿Eliminar este mapeo?')) eliminarMapeo.mutate(m.id) }} className="p-1.5 text-danger-600 hover:bg-danger-50 rounded-lg"><Trash2 size={14} /></button>}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -1028,127 +1284,879 @@ function TabMapeoPOS() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TAB 3: SALIDAS (Auto-generated exits from Odoo sales)
+// SALIDAS ODOO — Helpers, Modals & Tab
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function TabSalidas() {
-  const { data: salidas = [], isLoading } = useQuery({ queryKey: ['salidas-odoo'], queryFn: () => dataService.getSalidasOdoo() })
-  const [filtroEstado, setFiltroEstado] = useState('')
-  const queryClient = useQueryClient()
-  const toast = useToastStore()
-  const [sincronizando, setSincronizando] = useState(false)
+const ITEMS_PER_PAGE = 15
 
-  const handleSync = async () => {
-    setSincronizando(true)
-    try {
-      const result = await dataService.syncSalidasOdoo()
-      queryClient.invalidateQueries({ queryKey: ['salidas-odoo'] })
-      toast.success('Sincronizado', `${result.length} salidas cargadas`)
-    } catch {
-      toast.error('Error', 'No se pudo sincronizar las salidas')
-    } finally {
-      setSincronizando(false)
+function fmtFecha(ts) {
+  if (!ts) return '—'
+  const d = ts.toDate ? ts.toDate() : new Date(ts)
+  return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function fmtMXN(n) {
+  return `$${(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function getUnitSymbol(unidadesDB, unitId, fallback) {
+  if (!unitId) return (fallback || '').split(/\s+/)[0]
+  const u = unidadesDB.find(x => x.id === unitId)
+  const raw = u?.abreviatura || u?.simbolo || u?.nombre || fallback || ''
+  return raw.split(/\s+/)[0]
+}
+
+function agruparPorOrden(movimientos) {
+  const map = new Map()
+  for (const m of movimientos) {
+    const key = String(m.order_id || 'sin-orden')
+    if (!map.has(key)) {
+      map.set(key, {
+        order_id: key,
+        order_name: m.order_name || null,
+        tipo_orden: m.tipo_orden,
+        ubicacion_id: m.ubicacion_id,
+        fecha_creacion: m.fecha_creacion,
+        estado: m.estado,
+        items: []
+      })
     }
+    const g = map.get(key)
+    // Keep first non-null order_name found
+    if (!g.order_name && m.order_name) g.order_name = m.order_name
+    g.items.push(m)
   }
-
-  const salidasFiltradas = salidas.filter(s => {
-    return !filtroEstado || s.estado === filtroEstado
+  for (const [, grupo] of map) {
+    const hasError = grupo.items.some(i => i.estado === 'ERROR')
+    grupo.estado = hasError ? 'ERROR' : 'COMPLETADO'
+    grupo.costo_total = grupo.items.reduce((s, i) => s + (i.costo_total || 0), 0)
+    grupo.num_ingredientes = grupo.items.length
+    // Aggregate sold products with total qty
+    const prodMap = new Map()
+    for (const i of grupo.items) {
+      const nombre = i.producto_odoo_nombre || 'Sin producto'
+      if (!prodMap.has(nombre)) prodMap.set(nombre, { nombre, qty: 0 })
+      prodMap.get(nombre).qty = i.odoo_qty_line || prodMap.get(nombre).qty
+    }
+    grupo.productos_vendidos = Array.from(prodMap.values())
+    grupo.productos_odoo = grupo.productos_vendidos.map(p => p.nombre)
+    grupo.ingredientes_nombres = [...new Set(grupo.items.map(i => i.nombre_producto).filter(Boolean))]
+  }
+  return Array.from(map.values()).sort((a, b) => {
+    const ta = a.fecha_creacion?.toDate ? a.fecha_creacion.toDate() : new Date(a.fecha_creacion || 0)
+    const tb = b.fecha_creacion?.toDate ? b.fecha_creacion.toDate() : new Date(b.fecha_creacion || 0)
+    return tb - ta
   })
+}
 
-  const formatFecha = (ts) => {
-    if (!ts) return '—'
-    const d = ts.toDate ? ts.toDate() : new Date(ts)
-    return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODAL: Detalle de orden Odoo
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function ModalOrdenDetalle({ grupo, ubicaciones, unidadesDB, onClose, onEliminarItem, eliminando, onRequestDeleteItem }) {
+  const [expandidos, setExpandidos] = useState({})
+
+  const porProducto = {}
+  for (const item of grupo.items) {
+    const key = item.producto_odoo_nombre || 'Sin producto'
+    if (!porProducto[key]) porProducto[key] = []
+    porProducto[key].push(item)
   }
 
-  const estadoBadge = (estado) => {
-    const map = { PENDIENTE: 'bg-amber-100 text-amber-700', PROCESADA: 'bg-green-100 text-green-700', COMPLETADA: 'bg-green-100 text-green-700', ERROR: 'bg-red-100 text-red-700' }
-    return map[estado] || 'bg-slate-100 text-slate-700'
-  }
+  const toggleProducto = (nombre) => setExpandidos(prev => ({ ...prev, [nombre]: !prev[nombre] }))
 
-  const pendientes = salidas.filter(s => s.estado === 'PENDIENTE').length
-  const procesadas = salidas.filter(s => s.estado === 'PROCESADA' || s.estado === 'COMPLETADA').length
-  const errores    = salidas.filter(s => s.estado === 'ERROR').length
+  const ubicacionNombre = ubicaciones.find(u => u.id === grupo.ubicacion_id)?.nombre || grupo.ubicacion_id || '—'
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Salidas Odoo</h3>
-        <button
-          onClick={handleSync}
-          disabled={sincronizando}
-          className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={sincronizando ? 'animate-spin' : ''} />
-          {sincronizando ? 'Sincronizando...' : 'Sincronizar'}
-        </button>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-        <div className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4 border border-slate-200 dark:border-slate-600">
-          <p className="text-xs text-slate-500 uppercase font-semibold">Total</p>
-          <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{salidas.length}</p>
-        </div>
-        <div className="bg-amber-50 dark:bg-amber-900/10 rounded-xl p-4 border border-amber-200 dark:border-amber-800 cursor-pointer hover:ring-2 hover:ring-amber-300"
-          onClick={() => setFiltroEstado(f => f === 'PENDIENTE' ? '' : 'PENDIENTE')}>
-          <p className="text-xs text-amber-600 uppercase font-semibold flex items-center gap-1"><Clock size={12} /> Pendientes</p>
-          <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">{pendientes}</p>
-        </div>
-        <div className="bg-green-50 dark:bg-green-900/10 rounded-xl p-4 border border-green-200 dark:border-green-800 cursor-pointer hover:ring-2 hover:ring-green-300"
-          onClick={() => setFiltroEstado(f => f === 'PROCESADA' ? '' : 'PROCESADA')}>
-          <p className="text-xs text-green-600 uppercase font-semibold flex items-center gap-1"><CheckCircle2 size={12} /> Procesadas</p>
-          <p className="text-2xl font-bold text-green-700 dark:text-green-300">{procesadas}</p>
-        </div>
-        <div className="bg-red-50 dark:bg-red-900/10 rounded-xl p-4 border border-red-200 dark:border-red-800 cursor-pointer hover:ring-2 hover:ring-red-300"
-          onClick={() => setFiltroEstado(f => f === 'ERROR' ? '' : 'ERROR')}>
-          <p className="text-xs text-red-600 uppercase font-semibold flex items-center gap-1"><XCircle size={12} /> Errores</p>
-          <p className="text-2xl font-bold text-red-700 dark:text-red-300">{errores}</p>
-        </div>
-      </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+      <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] min-h-[480px] border border-slate-200 dark:border-slate-700">
 
-      <div className="flex items-center gap-2 flex-wrap">
-        {filtroEstado && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-500">Filtrando por:</span>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${estadoBadge(filtroEstado)}`}>{filtroEstado}</span>
-            <button onClick={() => setFiltroEstado('')} className="p-1 hover:bg-slate-100 rounded"><X size={14} className="text-slate-400" /></button>
+        {/* Header */}
+        <div className="flex items-start justify-between p-5 border-b border-slate-200 dark:border-slate-700">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-base font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1 rounded-lg">
+                {grupo.order_name || `#${grupo.order_id}`}
+              </span>
+              {grupo.estado === 'ERROR' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                  <XCircle size={10} /> ERROR
+                </span>
+              )}
+              {grupo.tipo_orden === 'manual' && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">Manual</span>
+              )}
+            </div>
+            <div className="flex items-center gap-4 mt-1.5 text-xs text-slate-500 flex-wrap">
+              <span className="flex items-center gap-1"><Clock size={10} />{fmtFecha(grupo.fecha_creacion)}</span>
+              <span className="flex items-center gap-1"><MapPin size={10} />{ubicacionNombre}</span>
+              <span className="text-slate-400">{grupo.productos_vendidos?.length ?? grupo.productos_odoo.length} producto(s) · {grupo.num_ingredientes} ingrediente(s) · <span className="font-semibold text-slate-600 dark:text-slate-300">{fmtMXN(grupo.costo_total)}</span></span>
+            </div>
           </div>
-        )}
-      </div>
-
-      {isLoading ? <LoadingSpinner text="Cargando salidas..." /> : salidasFiltradas.length === 0 ? (
-        <div className="py-12 text-center">
-          <ArrowDownLeft size={48} className="mx-auto text-slate-300 mb-3" />
-          <p className="text-slate-500">{salidas.length === 0 ? 'No hay salidas registradas. Se generan automáticamente al recibir ventas desde Odoo.' : 'No hay salidas con ese filtro.'}</p>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors shrink-0"><X size={18} /></button>
         </div>
-      ) : (
-        <div className="border border-slate-200 dark:border-slate-600 rounded-xl overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-slate-50 dark:bg-slate-700/50"><tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Orden</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Producto Odoo</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Ubicación</th>
-              <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Cantidad</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Fecha</th>
-              <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Estado</th>
-            </tr></thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {salidasFiltradas.map(s => (
-                <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                  <td className="px-4 py-3 font-mono text-sm font-semibold text-slate-800 dark:text-slate-200">#{s.sale_order_id || s.orden_id || '—'}</td>
-                  <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{s.nombre_producto || s.producto_nombre || '—'}</p>
-                    <p className="text-xs text-slate-400">{s.sku || s.sku_odoo || ''}</p>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{s.ubicacion_nombre || s.ubicacion_id || '—'}</td>
-                  <td className="px-4 py-3 text-center font-bold text-sm">{s.cantidad || 0}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{formatFecha(s.fecha_creacion)}</td>
-                  <td className="px-4 py-3 text-center"><span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${estadoBadge(s.estado)}`}>{s.estado || 'PENDIENTE'}</span></td>
-                </tr>
-              ))}
+
+        {/* Body: collapsible table */}
+        <div className="overflow-y-auto flex-1">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 dark:bg-slate-700/50 sticky top-0 z-10">
+              <tr className="border-b border-slate-200 dark:border-slate-700">
+                <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase w-8"></th>
+                <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase">Producto / Ingrediente</th>
+                <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase hidden sm:table-cell">Receta</th>
+                <th className="px-4 py-2.5 text-right text-[10px] font-semibold text-slate-500 uppercase">Cantidad</th>
+                <th className="px-4 py-2.5 text-right text-[10px] font-semibold text-slate-500 uppercase">Costo</th>
+                <th className="px-4 py-2.5 w-10"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(porProducto).map(([productoNombre, items]) => {
+                const isOpen = !!expandidos[productoNombre]
+                const subtotal = items.reduce((s, i) => s + (i.costo_total || 0), 0)
+                const qty = items[0]?.odoo_qty_line
+                const hasError = items.some(i => i.estado === 'ERROR')
+                return (
+                  <>
+                    {/* Product header row */}
+                    <tr
+                      key={`hdr-${productoNombre}`}
+                      onClick={() => toggleProducto(productoNombre)}
+                      className="cursor-pointer border-b border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-700/30 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors select-none"
+                    >
+                      <td className="px-4 py-3 text-slate-400">
+                        {isOpen
+                          ? <ChevronUp size={14} className="text-indigo-500" />
+                          : <ChevronDown size={14} className="text-slate-400" />}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Package size={13} className="text-indigo-400 shrink-0" />
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm">{productoNombre}</span>
+                          {qty != null && qty > 0 && (
+                            <span className="text-xs text-slate-400 font-mono bg-slate-100 dark:bg-slate-600 px-1.5 py-0.5 rounded">×{qty}</span>
+                          )}
+                          {items[0]?.producto_odoo_sku && (
+                            <span className="text-xs text-slate-400 font-mono">{items[0].producto_odoo_sku}</span>
+                          )}
+                          {hasError && <span className="text-[10px] text-red-600 font-semibold">⚠ error</span>}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5 ml-5">{items.length} ingrediente{items.length !== 1 ? 's' : ''}</p>
+                      </td>
+                      <td className="px-4 py-3 hidden sm:table-cell">
+                        <span className="text-xs text-slate-400 italic">{items[0]?.recetario_nombre || '—'}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-xs text-slate-400">—</td>
+                      <td className="px-4 py-3 text-right font-semibold text-slate-700 dark:text-slate-300 text-xs whitespace-nowrap">
+                        {fmtMXN(subtotal)}
+                      </td>
+                      <td className="px-4 py-3"></td>
+                    </tr>
+
+                    {/* Ingredient detail rows */}
+                    {isOpen && items.map(item => {
+                      const sym = getUnitSymbol(unidadesDB, item.unidad_medida_id, item.unidad_medida)
+                      return (
+                        <tr key={item.id}
+                          className="border-b border-slate-50 dark:border-slate-700/40 bg-white dark:bg-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors">
+                          <td className="px-4 py-2.5 text-center">
+                            <div className="w-px h-4 bg-slate-200 dark:bg-slate-600 mx-auto"></div>
+                          </td>
+                          <td className="px-4 py-2.5 pl-10">
+                            <p className="font-medium text-slate-700 dark:text-slate-300 text-sm">{item.nombre_producto || '—'}</p>
+                            {item.sku && <p className="text-[10px] text-slate-400 font-mono">{item.sku}</p>}
+                          </td>
+                          <td className="px-4 py-2.5 text-xs text-slate-400 hidden sm:table-cell max-w-[120px] truncate">
+                            {item.recetario_nombre || '—'}
+                          </td>
+                          <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                            <span className="font-semibold text-slate-700 dark:text-slate-300 text-sm">
+                              {typeof item.cantidad === 'number' ? item.cantidad.toFixed(2) : item.cantidad || 0}
+                            </span>
+                            {sym && <span className="text-xs text-slate-400 ml-1">{sym}</span>}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                            {item.estado === 'ERROR'
+                              ? <span className="text-red-500 font-semibold text-[10px]">ERROR</span>
+                              : fmtMXN(item.costo_total)}
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            <button onClick={() => onRequestDeleteItem(item)} disabled={eliminando === item.id} title="Eliminar"
+                              className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-40">
+                              {eliminando === item.id ? <RefreshCw size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </>
+                )
+              })}
             </tbody>
           </table>
         </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+          <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+            Total: <span className="text-indigo-600 dark:text-indigo-400">{fmtMXN(grupo.costo_total)}</span>
+          </p>
+          <button onClick={onClose} className="px-4 py-2 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODAL: Nueva Salida Manual — multi-ingrediente con descuento de stock
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function ModalSalidaManual({ onClose, onSuccess, ubicaciones, productos, unidadesDB, equivalenceMap }) {
+  const toast = useToastStore()
+
+  const [ordenRef, setOrdenRef] = useState('')
+  const [ubicacionId, setUbicacionId] = useState('')
+  const [productoOdoo, setProductoOdoo] = useState('')
+  const [ingredientes, setIngredientes] = useState([{ producto_id: '', cantidad: '', unidad_medida_id: '' }])
+  const [saving, setSaving] = useState(false)
+
+  const addIngrediente = () => setIngredientes(prev => [...prev, { producto_id: '', cantidad: '', unidad_medida_id: '' }])
+  const removeIngrediente = (i) => setIngredientes(prev => prev.filter((_, idx) => idx !== i))
+  const updateIngrediente = (i, field, value) => setIngredientes(prev => prev.map((item, idx) => idx === i ? { ...item, [field]: value } : item))
+
+  const handleSave = async () => {
+    if (!ubicacionId) { toast.error('Campo requerido', 'Selecciona la ubicación'); return }
+    const validos = ingredientes.filter(i => i.producto_id && i.cantidad)
+    if (!validos.length) { toast.error('Campo requerido', 'Agrega al menos un ingrediente con producto y cantidad'); return }
+
+    setSaving(true)
+    try {
+      for (const ing of validos) {
+        const prod = productos.find(p => p.id === ing.producto_id)
+        const cantidadIngreso = parseFloat(ing.cantidad)
+        const unitSym = getUnitSymbol(unidadesDB, ing.unidad_medida_id, '')
+
+        // Calculate stock quantity: convert from recipe unit to product's stock unit if needed
+        let cantidadStock = cantidadIngreso
+        const prodStockUnitId = prod?.unidad_medida_id || null
+        if (ing.unidad_medida_id && prodStockUnitId && ing.unidad_medida_id !== prodStockUnitId && equivalenceMap) {
+          const converted = convertUnits(cantidadIngreso, ing.unidad_medida_id, prodStockUnitId, equivalenceMap)
+          if (converted !== null) cantidadStock = converted
+        }
+
+        await dataService.createSalidaOdooManual({
+          orden_odoo: ordenRef || `manual-${Date.now()}`,
+          ubicacion_id: ubicacionId,
+          producto_id: ing.producto_id,
+          nombre_producto: prod?.nombre || ing.producto_id,
+          producto_odoo_nombre: productoOdoo || 'Salida manual',
+          cantidad: cantidadIngreso,
+          cantidad_stock: cantidadStock,
+          unidad_medida: unitSym,
+          unidad_medida_id: ing.unidad_medida_id || null,
+          costo_unitario: prod?.costo_unitario || 0,
+          descripcion: productoOdoo || 'Salida manual',
+        })
+      }
+      toast.success('Salida creada', `${validos.length} movimiento(s) registrados y stock actualizado`)
+      onSuccess()
+    } catch (e) {
+      toast.error('Error', e.message || 'No se pudo crear la salida')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+      <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh] border border-slate-200 dark:border-slate-700">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700">
+          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <ArrowDownLeft size={20} className="text-emerald-500" /> Nueva Salida Manual
+          </h3>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors"><X size={18} /></button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 p-6 space-y-5">
+          {/* Datos de la orden */}
+          <div className="space-y-3">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Datos de la orden</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Referencia <span className="text-slate-400 font-normal">(opcional)</span></label>
+                <input type="text" placeholder="Ej: POS/2024/001" value={ordenRef}
+                  onChange={e => setOrdenRef(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Ubicación <span className="text-red-500">*</span></label>
+                <select value={ubicacionId} onChange={e => setUbicacionId(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="">Seleccionar...</option>
+                  {ubicaciones.filter(u => u.estado === 'ACTIVO').map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Producto Odoo <span className="text-slate-400 font-normal">(descripción)</span></label>
+                <input type="text" placeholder="Ej: Mango Fusion × 2" value={productoOdoo}
+                  onChange={e => setProductoOdoo(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+            </div>
+          </div>
+
+          {/* Ingredientes */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Ingredientes a descontar</p>
+              <button onClick={addIngrediente}
+                className="flex items-center gap-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 transition-colors">
+                <Plus size={13} /> Agregar
+              </button>
+            </div>
+            <div className="space-y-2">
+              {ingredientes.map((ing, i) => {
+                const selProd = productos.find(p => p.id === ing.producto_id)
+                return (
+                  <div key={i} className="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-600">
+                    <div className="flex-1 grid grid-cols-12 gap-2 items-center">
+                      <div className="col-span-12 sm:col-span-5">
+                        <select value={ing.producto_id} onChange={e => {
+                          updateIngrediente(i, 'producto_id', e.target.value)
+                          const p = productos.find(x => x.id === e.target.value)
+                          if (p?.unidad_medida_id) updateIngrediente(i, 'unidad_medida_id', p.unidad_medida_id)
+                        }}
+                          className="w-full px-2.5 py-2 text-xs border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                          <option value="">Seleccionar producto...</option>
+                          {productos.map(p => <option key={p.id} value={p.id}>{p.nombre}{p.especificacion ? ` - ${p.especificacion}` : ''}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-span-5 sm:col-span-3">
+                        <input type="number" min="0" step="0.01" placeholder="Cantidad" value={ing.cantidad}
+                          onChange={e => updateIngrediente(i, 'cantidad', e.target.value)}
+                          className="w-full px-2.5 py-2 text-xs border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                      </div>
+                      <div className="col-span-5 sm:col-span-3">
+                        <select value={ing.unidad_medida_id} onChange={e => updateIngrediente(i, 'unidad_medida_id', e.target.value)}
+                          className="w-full px-2.5 py-2 text-xs border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                          <option value="">Unidad</option>
+                          {unidadesDB.map(u => <option key={u.id} value={u.id}>{u.abreviatura || u.simbolo || u.nombre}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-span-2 sm:col-span-1 text-center">
+                        {ingredientes.length > 1 && (
+                          <button onClick={() => removeIngrediente(i)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-3 p-6 border-t border-slate-200 dark:border-slate-700">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+            Cancelar
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            className="flex-1 px-4 py-2.5 text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+            {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+            {saving ? 'Guardando...' : `Crear ${ingredientes.filter(i => i.producto_id && i.cantidad).length || ''} salida(s)`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 3: SALIDAS — consolidado por orden Odoo
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function TabSalidas() {
+  const { data: salidas = [], isLoading } = useQuery({
+    queryKey: ['salidas-odoo'],
+    queryFn: () => dataService.getSalidasOdoo(),
+    staleTime: 30000
+  })
+  const { data: ubicaciones = [] } = useQuery({ queryKey: ['ubicaciones'], queryFn: () => dataService.getUbicaciones() })
+  const { data: productos = [] } = useQuery({ queryKey: ['productos'], queryFn: () => dataService.getProductos() })
+  const { data: unidadesDB = [] } = useQuery({ queryKey: ['unidades-medida'], queryFn: () => dataService.getUnidadesMedida() })
+  const { data: equivalences = [] } = useQuery({ queryKey: ['unit-equivalences'], queryFn: () => dataService.getUnitEquivalences() })
+
+  const equivalenceMap = useMemo(() => buildEquivalenceMap(equivalences), [equivalences])
+
+  const queryClient = useQueryClient()
+  const toast = useToastStore()
+
+  const [searchTerm, setSearchTerm] = useState('')
+  const [sincronizando, setSincronizando] = useState(false)
+  const [resultadoSync, setResultadoSync] = useState(null)
+  const [errorSync, setErrorSync] = useState(null)
+  const [modalNueva, setModalNueva] = useState(false)
+  const [grupoDetalle, setGrupoDetalle] = useState(null)
+  const [eliminando, setEliminando] = useState(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [selectedOrders, setSelectedOrders] = useState(new Set())
+  const [deletingBulk, setDeletingBulk] = useState(false)
+
+  // Filters
+  const [filterEstado, setFilterEstado] = useState('')
+  const [filterUbicacion, setFilterUbicacion] = useState('')
+  const [filterTipo, setFilterTipo] = useState('')
+
+  // Confirm modal state
+  const [confirmModal, setConfirmModal] = useState({ open: false, title: '', message: '', onConfirm: null })
+
+  const ordenes = useMemo(() => agruparPorOrden(salidas), [salidas])
+
+  // Build ubicacion lookup
+  const ubicacionMap = useMemo(() => {
+    const m = new Map()
+    for (const u of ubicaciones) m.set(u.id, u.nombre)
+    return m
+  }, [ubicaciones])
+
+  // Distinct ubicaciones used in orders
+  const ubicacionesUsadas = useMemo(() => {
+    const ids = [...new Set(ordenes.map(o => o.ubicacion_id).filter(Boolean))]
+    return ids.map(id => ({ id, nombre: ubicacionMap.get(id) || id }))
+  }, [ordenes, ubicacionMap])
+
+  const handleSync = async () => {
+    setSincronizando(true); setResultadoSync(null); setErrorSync(null)
+    try {
+      const result = await dataService.sincronizarVentasHoy()
+      queryClient.invalidateQueries({ queryKey: ['salidas-odoo'] })
+      setResultadoSync(result)
+      if (result.procesadas > 0) toast.success('Sincronizado', `${result.procesadas} órdenes procesadas`)
+      else if (result.omitidas > 0) toast.success('Al día', `${result.omitidas} órdenes ya existían`)
+      else if (result.errores > 0) toast.error('Con errores', `${result.errores} fallaron`)
+      else toast.success('Sin ventas', 'No hay órdenes POS pagadas hoy')
+    } catch (e) {
+      const msg = e?.message || 'Error al conectar con Odoo'
+      setErrorSync(msg); toast.error('Error', msg)
+    } finally { setSincronizando(false) }
+  }
+
+  const executeDeleteItem = async (item) => {
+    setEliminando(item.id)
+    try {
+      await dataService.deleteSalidaOdoo(item.id)
+      queryClient.invalidateQueries({ queryKey: ['salidas-odoo'] })
+      toast.success('Eliminado', 'Movimiento eliminado')
+      if (grupoDetalle && grupoDetalle.items.length === 1) setGrupoDetalle(null)
+    } catch (e) {
+      toast.error('Error', e.message || 'No se pudo eliminar')
+    } finally { setEliminando(null) }
+  }
+
+  const requestDeleteItem = (item) => {
+    setConfirmModal({
+      open: true,
+      title: 'Eliminar movimiento',
+      message: `¿Eliminar el movimiento de "${item.nombre_producto || 'producto'}"? Esta acción no se puede deshacer.`,
+      onConfirm: () => { setConfirmModal(p => ({ ...p, open: false })); executeDeleteItem(item) }
+    })
+  }
+
+  const requestDeleteOrden = (grupo) => {
+    setConfirmModal({
+      open: true,
+      title: 'Eliminar orden completa',
+      message: `¿Eliminar todos los ${grupo.num_ingredientes} movimientos de la orden ${grupo.order_name || `#${grupo.order_id}`}? Esta acción no se puede deshacer.`,
+      onConfirm: async () => {
+        setConfirmModal(p => ({ ...p, open: false }))
+        setEliminando(grupo.order_id)
+        try {
+          for (const item of grupo.items) await dataService.deleteSalidaOdoo(item.id)
+          queryClient.invalidateQueries({ queryKey: ['salidas-odoo'] })
+          toast.success('Eliminado', `Orden ${grupo.order_name || `#${grupo.order_id}`} eliminada`)
+          setGrupoDetalle(null)
+        } catch (e) {
+          toast.error('Error', e.message || 'No se pudo eliminar')
+        } finally { setEliminando(null) }
+      }
+    })
+  }
+
+  // Filtered orders
+  const ordenesFiltradas = useMemo(() => {
+    return ordenes.filter(o => {
+      if (filterEstado === 'COMPLETADO' && o.estado !== 'COMPLETADO') return false
+      if (filterEstado === 'ERROR' && o.estado !== 'ERROR') return false
+      if (filterEstado === 'manual' && o.tipo_orden !== 'manual') return false
+      if (filterUbicacion && o.ubicacion_id !== filterUbicacion) return false
+      if (filterTipo === 'pos_order' && o.tipo_orden !== 'pos_order') return false
+      if (filterTipo === 'manual' && o.tipo_orden !== 'manual') return false
+      if (searchTerm) {
+        const q = searchTerm.toLowerCase()
+        return (
+          String(o.order_id).toLowerCase().includes(q) ||
+          (o.order_name || '').toLowerCase().includes(q) ||
+          o.productos_odoo.some(p => p.toLowerCase().includes(q)) ||
+          o.ingredientes_nombres.some(n => n.toLowerCase().includes(q)) ||
+          o.items.some(i => (i.recetario_nombre || '').toLowerCase().includes(q))
+        )
+      }
+      return true
+    })
+  }, [ordenes, filterEstado, filterUbicacion, filterTipo, searchTerm])
+
+  // Pagination
+  const totalPages = Math.ceil(ordenesFiltradas.length / ITEMS_PER_PAGE)
+  const paginatedOrdenes = ordenesFiltradas.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1) }, [filterEstado, filterUbicacion, filterTipo, searchTerm])
+
+  const hasActiveFilters = filterEstado || filterUbicacion || filterTipo
+  const clearFilters = () => { setFilterEstado(''); setFilterUbicacion(''); setFilterTipo(''); setSearchTerm('') }
+
+  // Bulk selection helpers
+  const allFilteredIds = ordenesFiltradas.map(o => o.order_id)
+  const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedOrders.has(id))
+  const someSelected = allFilteredIds.some(id => selectedOrders.has(id))
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedOrders(new Set())
+    } else {
+      setSelectedOrders(new Set(allFilteredIds))
+    }
+  }
+
+  const toggleSelectOrder = (orderId) => {
+    setSelectedOrders(prev => {
+      const next = new Set(prev)
+      if (next.has(orderId)) next.delete(orderId)
+      else next.add(orderId)
+      return next
+    })
+  }
+
+  const requestDeleteBulk = () => {
+    const ordenesSeleccionadas = ordenesFiltradas.filter(o => selectedOrders.has(o.order_id))
+    const totalMovimientos = ordenesSeleccionadas.reduce((s, o) => s + o.items.length, 0)
+    setConfirmModal({
+      open: true,
+      title: `Eliminar ${ordenesSeleccionadas.length} orden(es)`,
+      message: `¿Eliminar ${ordenesSeleccionadas.length} orden(es) seleccionada(s) con un total de ${totalMovimientos} movimiento(s)? Esta acción no se puede deshacer.`,
+      onConfirm: async () => {
+        setConfirmModal(p => ({ ...p, open: false }))
+        setDeletingBulk(true)
+        try {
+          for (const orden of ordenesSeleccionadas) {
+            for (const item of orden.items) await dataService.deleteSalidaOdoo(item.id)
+          }
+          queryClient.invalidateQueries({ queryKey: ['salidas-odoo'] })
+          setSelectedOrders(new Set())
+          toast.success('Eliminado', `${ordenesSeleccionadas.length} orden(es) eliminada(s)`)
+        } catch (e) {
+          toast.error('Error', e.message || 'No se pudo eliminar')
+        } finally { setDeletingBulk(false) }
+      }
+    })
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">Salidas Odoo</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {ordenes.length} orden(es) · {salidas.length} movimiento(s) · {fmtMXN(ordenes.reduce((s, o) => s + o.costo_total, 0))} total
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={handleSync} disabled={sincronizando}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl border border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 transition-colors disabled:opacity-50">
+            <RefreshCw size={14} className={sincronizando ? 'animate-spin' : ''} />
+            {sincronizando ? 'Importando...' : 'Sincronizar hoy'}
+          </button>
+          <button onClick={() => setModalNueva(true)}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 transition-colors">
+            <Plus size={14} /> Nueva salida
+          </button>
+        </div>
+      </div>
+
+      {/* Error sync */}
+      {errorSync && (
+        <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3 flex items-start gap-3">
+          <XCircle size={16} className="text-red-500 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-red-700 dark:text-red-400">No se pudo sincronizar</p>
+            <p className="text-xs text-red-600 dark:text-red-400 mt-0.5 break-words">{errorSync}</p>
+          </div>
+          <button onClick={() => setErrorSync(null)} className="text-red-400 hover:text-red-600 shrink-0"><X size={14} /></button>
+        </div>
       )}
+
+      {/* Sync result */}
+      {resultadoSync && (
+        <div className={`rounded-xl border p-3 space-y-2 ${resultadoSync.procesadas > 0 ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50'}`}>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide">Resultado sincronización</p>
+            <button onClick={() => setResultadoSync(null)} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
+          </div>
+          <div className="flex gap-6">
+            <div className="text-center"><p className="text-xl font-bold text-emerald-600">{resultadoSync.procesadas}</p><p className="text-[10px] text-slate-500 uppercase">Procesadas</p></div>
+            <div className="text-center"><p className="text-xl font-bold text-slate-400">{resultadoSync.omitidas}</p><p className="text-[10px] text-slate-500 uppercase">Ya existían</p></div>
+            <div className="text-center"><p className="text-xl font-bold text-red-500">{resultadoSync.errores}</p><p className="text-[10px] text-slate-500 uppercase">Errores</p></div>
+          </div>
+          {resultadoSync.detalle?.length > 0 && (
+            <div className="space-y-1 max-h-32 overflow-y-auto">
+              {resultadoSync.detalle.map((d, i) => (
+                <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-slate-200 dark:border-slate-700 last:border-0 gap-2">
+                  <span className="font-mono text-slate-700 dark:text-slate-300 truncate">{d.nombre || `#${d.id}`}</span>
+                  <span className={`px-2 py-0.5 rounded-full font-semibold shrink-0 ${d.estado === 'procesada' ? 'bg-emerald-100 text-emerald-700' : d.estado === 'omitida' ? 'bg-slate-100 text-slate-500' : 'bg-red-100 text-red-700'}`}>
+                    {d.estado === 'procesada' ? `${d.movimientos ?? 0} mov.` : d.estado === 'omitida' ? 'existía' : d.razon}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Search + Filters */}
+      <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input type="text" placeholder="Buscar orden, producto, ingrediente, receta..." value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <select value={filterEstado} onChange={e => setFilterEstado(e.target.value)}
+            className="px-3 py-2 text-xs border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">Estado: Todos</option>
+            <option value="COMPLETADO">Completadas</option>
+            <option value="ERROR">Con errores</option>
+            <option value="manual">Manuales</option>
+          </select>
+          <select value={filterUbicacion} onChange={e => setFilterUbicacion(e.target.value)}
+            className="px-3 py-2 text-xs border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">Ubicación: Todas</option>
+            {ubicacionesUsadas.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+          </select>
+          <select value={filterTipo} onChange={e => setFilterTipo(e.target.value)}
+            className="px-3 py-2 text-xs border border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">Tipo: Todos</option>
+            <option value="pos_order">POS Odoo</option>
+            <option value="manual">Manual</option>
+          </select>
+          {hasActiveFilters && (
+            <button onClick={clearFilters} className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold hover:text-indigo-800 transition-colors flex items-center gap-1">
+              <X size={12} /> Limpiar
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Bulk action bar */}
+      {selectedOrders.size > 0 && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700">
+          <span className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">
+            {selectedOrders.size} orden(es) seleccionada(s) · {ordenesFiltradas.filter(o => selectedOrders.has(o.order_id)).reduce((s, o) => s + o.items.length, 0)} movimiento(s)
+          </span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSelectedOrders(new Set())}
+              className="text-xs text-indigo-500 hover:text-indigo-700 font-semibold transition-colors flex items-center gap-1">
+              <X size={12} /> Deseleccionar
+            </button>
+            <button onClick={requestDeleteBulk} disabled={deletingBulk}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 transition-colors">
+              {deletingBulk ? <RefreshCw size={12} className="animate-spin" /> : <Trash2 size={12} />}
+              Eliminar seleccionadas
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Table */}
+      {isLoading ? <LoadingSpinner text="Cargando salidas..." /> : ordenesFiltradas.length === 0 ? (
+        <div className="py-16 text-center">
+          <ArrowDownLeft size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+          <p className="text-slate-600 dark:text-slate-400 font-medium">{salidas.length === 0 ? 'No hay salidas registradas aún.' : 'No hay órdenes con esos filtros.'}</p>
+          <p className="text-slate-400 text-sm mt-1">{salidas.length === 0 ? 'Usa "Sincronizar hoy" para importar ventas del día desde Odoo.' : ''}</p>
+        </div>
+      ) : (
+        <>
+          <div className="border border-slate-200 dark:border-slate-600 rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-600">
+                  <tr>
+                    <th className="px-3 py-3 w-8">
+                      <input type="checkbox" checked={allSelected} ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Orden</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Productos vendidos</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Ubicación</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Ing.</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Costo</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Fecha</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Estado</th>
+                    <th className="px-4 py-3 w-24"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                  {paginatedOrdenes.map(orden => (
+                    <tr key={orden.order_id}
+                      className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors cursor-pointer ${selectedOrders.has(orden.order_id) ? 'bg-indigo-50/60 dark:bg-indigo-900/20' : ''}`}
+                      onClick={() => setGrupoDetalle(orden)}>
+                      <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedOrders.has(orden.order_id)}
+                          onChange={() => toggleSelectOrder(orden.order_id)}
+                          className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                      </td>
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setGrupoDetalle(orden)}
+                          className="font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-lg hover:bg-indigo-100 transition-colors">
+                          {orden.order_name || `#${orden.order_id}`}
+                        </button>
+                        {orden.tipo_orden === 'manual' && (
+                          <span className="ml-1.5 text-[10px] text-blue-500 font-semibold">M</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 max-w-[200px]">
+                        {orden.productos_vendidos?.length === 0
+                          ? <span className="text-slate-400 italic text-xs">—</span>
+                          : <div className="text-xs space-y-0.5">
+                              {(orden.productos_vendidos || []).slice(0, 2).map((p, i) => (
+                                <div key={i} className="flex items-center gap-1">
+                                  <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{p.nombre}</span>
+                                  {p.qty > 0 && <span className="text-slate-400 shrink-0">×{p.qty}</span>}
+                                </div>
+                              ))}
+                              {(orden.productos_vendidos?.length || 0) > 2 && (
+                                <span className="text-slate-400">+{orden.productos_vendidos.length - 2} más</span>
+                              )}
+                            </div>
+                        }
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <MapPin size={11} className="text-slate-400 shrink-0" />
+                          {ubicacionMap.get(orden.ubicacion_id) || orden.ubicacion_id || '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                          {orden.num_ingredientes}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap text-xs">
+                        {fmtMXN(orden.costo_total)}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{fmtFecha(orden.fecha_creacion)}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          orden.estado === 'COMPLETADO' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                          'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'}`}>
+                          {orden.estado === 'COMPLETADO' ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
+                          {orden.estado}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => setGrupoDetalle(orden)} title="Ver detalle"
+                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors">
+                            <Eye size={15} />
+                          </button>
+                          <button onClick={() => requestDeleteOrden(orden)} disabled={eliminando === orden.order_id} title="Eliminar orden"
+                            className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-40">
+                            {eliminando === orden.order_id ? <RefreshCw size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-2">
+              <p className="text-xs text-slate-500">
+                Mostrando {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, ordenesFiltradas.length)} de {ordenesFiltradas.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-40">
+                  Anterior
+                </button>
+                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                  let page
+                  if (totalPages <= 7) page = i + 1
+                  else if (currentPage <= 4) page = i + 1
+                  else if (currentPage >= totalPages - 3) page = totalPages - 6 + i
+                  else page = currentPage - 3 + i
+                  return (
+                    <button key={page} onClick={() => setCurrentPage(page)}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentPage === page
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+                      {page}
+                    </button>
+                  )
+                })}
+                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-40">
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Modals */}
+      {modalNueva && (
+        <ModalSalidaManual
+          onClose={() => setModalNueva(false)}
+          onSuccess={() => { setModalNueva(false); queryClient.invalidateQueries({ queryKey: ['salidas-odoo'] }) }}
+          ubicaciones={ubicaciones}
+          productos={productos}
+          unidadesDB={unidadesDB}
+          equivalenceMap={equivalenceMap}
+        />
+      )}
+      {grupoDetalle && (
+        <ModalOrdenDetalle
+          grupo={grupoDetalle}
+          ubicaciones={ubicaciones}
+          unidadesDB={unidadesDB}
+          onClose={() => setGrupoDetalle(null)}
+          onEliminarItem={executeDeleteItem}
+          onRequestDeleteItem={requestDeleteItem}
+          eliminando={eliminando}
+        />
+      )}
+      <ConfirmModal
+        isOpen={confirmModal.open}
+        onClose={() => setConfirmModal(p => ({ ...p, open: false }))}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText="Eliminar"
+        variant="danger"
+      />
     </div>
   )
 }

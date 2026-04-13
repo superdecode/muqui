@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Button from '../common/Button'
 import Alert from '../common/Alert'
@@ -15,6 +15,7 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
     observaciones: ''
   })
   const [error, setError] = useState('')
+  const [filterCategoria, setFilterCategoria] = useState('')
 
   // Cargar ubicaciones desde la base de datos
   const { data: todasUbicaciones = [], isLoading: isLoadingUbicaciones } = useQuery({
@@ -28,32 +29,45 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
     queryFn: () => dataService.getProductos()
   })
 
+  const { data: categorias = [] } = useQuery({
+    queryKey: ['config-categorias'],
+    queryFn: () => dataService.getCategorias()
+  })
+
   // Calcular productos que aplican para este conteo
   const productosParaConteo = useMemo(() => {
     if (!formData.ubicacion_id || !formData.tipo_conteo) return []
-    
-    console.log('📅 Tipo de conteo:', formData.tipo_conteo)
-    
-    const productosFiltrados = todosProductos.filter(producto => {
+
+    return todosProductos.filter(producto => {
       if (producto.estado === 'INACTIVO' || producto.estado === 'ELIMINADO') return false
+      if (producto.inventariable === false) return false
+
+      // Location filter
       const ubicPermitidas = producto.ubicaciones_permitidas || []
-      const matchUbicacion = ubicPermitidas.length === 0 || ubicPermitidas.includes(formData.ubicacion_id)
-      
-      const frecuencia = (producto.frecuencia_inventario || '').toLowerCase()
+      if (ubicPermitidas.length > 0 && !ubicPermitidas.includes(formData.ubicacion_id)) return false
+
+      // Tipo conteo filter
       const tipoConteo = (formData.tipo_conteo || '').toLowerCase()
-      const matchFrecuencia = frecuencia === tipoConteo || frecuencia === 'todos' || tipoConteo === 'todos'
-      
-      const pasaFiltro = matchUbicacion && matchFrecuencia
-      
-      if (pasaFiltro || !matchFrecuencia) {
-        return producto
+      if (tipoConteo !== 'todos') {
+        // frecuencia_inventario can be array or comma-string or single string
+        const rawFrecuencia = producto.frecuencia_inventario
+        let frecuencias = []
+        if (Array.isArray(rawFrecuencia)) {
+          frecuencias = rawFrecuencia.map(s => s.toLowerCase())
+        } else if (typeof rawFrecuencia === 'string' && rawFrecuencia.trim()) {
+          frecuencias = rawFrecuencia.split(',').map(s => s.trim().toLowerCase())
+        }
+        // Include if product has 'todos' or the specific tipoConteo, or has no frecuencia set
+        const matchFrecuencia = frecuencias.length === 0 || frecuencias.includes('todos') || frecuencias.includes(tipoConteo)
+        if (!matchFrecuencia) return false
       }
-      
-      return pasaFiltro
+
+      // Category filter (optional)
+      if (filterCategoria && producto.categoria !== filterCategoria) return false
+
+      return true
     })
-    
-    return productosFiltrados
-  }, [todosProductos, formData.ubicacion_id, formData.tipo_conteo])
+  }, [todosProductos, formData.ubicacion_id, formData.tipo_conteo, filterCategoria])
 
   // Filtrar ubicaciones asignadas al usuario
   const ubicaciones = todasUbicaciones.filter(ubicacion => {
@@ -175,8 +189,30 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
               <option value="semanal">Semanal</option>
               <option value="quincenal">Quincenal</option>
               <option value="mensual">Mensual</option>
-              <option value="todos">Todos los conteos</option>
+              <option value="todos">Todos (inventariables)</option>
             </select>
+          </div>
+
+          {/* Filtro por categoría (opcional) */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Filtrar por Categoría <span className="text-slate-400 text-xs font-normal">(opcional)</span>
+            </label>
+            <select
+              value={filterCategoria}
+              onChange={(e) => setFilterCategoria(e.target.value)}
+              className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            >
+              <option value="">Todas las categorías</option>
+              {categorias.map(cat => (
+                <option key={cat.id || cat} value={cat.nombre || cat}>{cat.nombre || cat}</option>
+              ))}
+            </select>
+            {filterCategoria && (
+              <p className="text-xs text-primary-600 mt-1">
+                Solo se incluirán productos de la categoría &quot;{filterCategoria}&quot;
+              </p>
+            )}
           </div>
 
           {/* Observaciones */}

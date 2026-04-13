@@ -98,9 +98,14 @@ export const exportProductosToCSV = (productos) => {
     'nombre',
     'especificacion',
     'unidad_medida',
+    'purchase_unit_id',
+    'purchase_unit_qty',
+    'costo_unidad',
     'stock_minimo',
     'categoria',
-    'estado'
+    'frecuencia_inventario',
+    'etiquetas',
+    'estado',
   ]
 
   const data = productos.map(item => ({
@@ -108,8 +113,15 @@ export const exportProductosToCSV = (productos) => {
     nombre: item.nombre,
     especificacion: item.especificacion || '',
     unidad_medida: item.unidad_medida,
+    purchase_unit_id: item.purchase_unit_id || '',
+    purchase_unit_qty: item.purchase_unit_qty || '',
+    costo_unidad: item.costo_unidad || 0,
     stock_minimo: item.stock_minimo,
     categoria: item.categoria,
+    frecuencia_inventario: Array.isArray(item.frecuencia_inventario)
+      ? item.frecuencia_inventario.join(',')
+      : (item.frecuencia_inventario || ''),
+    etiquetas: Array.isArray(item.etiquetas) ? item.etiquetas.join(', ') : (item.etiquetas || ''),
     estado: item.estado
   }))
 
