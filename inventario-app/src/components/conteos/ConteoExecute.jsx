@@ -182,21 +182,26 @@ export default function ConteoExecute({ conteo, onClose, onSave, isLoading: isSa
         const matchUbicacion = ubicPermitidas.length === 0 || ubicPermitidas.includes(conteo.ubicacion_id)
 
         // Filtrar por frecuencia_inventario (tipo de conteo)
-        const frecuencia = (producto.frecuencia_inventario || '').toLowerCase()
         const tipoConteo = (conteo.tipo_conteo || '').toLowerCase()
-        // El producto aparece si coincide el tipo O si el producto es "Todos los conteos"
-        // Si tiene frecuencia específica, solo aparece en ese tipo
-        // Si el producto es "todos", aparece en todos los conteos
-        // Si el conteo es "todos", aparecen todos los productos con tipo
-        const matchFrecuencia = frecuencia === tipoConteo || frecuencia === 'todos' || tipoConteo === 'todos'
 
-        const pasaFiltro = matchUbicacion && matchFrecuencia
-
-        if (pasaFiltro || !matchFrecuencia) {
-          return producto
+        // Si el conteo es "todos", incluir todos los productos inventariables sin filtrar por frecuencia
+        if (tipoConteo === 'todos') {
+          return matchUbicacion
         }
 
-        return pasaFiltro
+        // Normalizar frecuencia_inventario: puede ser array o string (legado)
+        const rawFrecuencia = producto.frecuencia_inventario
+        let frecuencias = []
+        if (Array.isArray(rawFrecuencia)) {
+          frecuencias = rawFrecuencia.map(s => s.toLowerCase())
+        } else if (typeof rawFrecuencia === 'string' && rawFrecuencia.trim()) {
+          frecuencias = rawFrecuencia.split(',').map(s => s.trim().toLowerCase())
+        }
+
+        // Incluir si: sin frecuencia asignada, tiene 'todos', o tiene el tipo exacto
+        const matchFrecuencia = frecuencias.length === 0 || frecuencias.includes('todos') || frecuencias.includes(tipoConteo)
+
+        return matchUbicacion && matchFrecuencia
       })
 
 

@@ -189,7 +189,7 @@ export default function ConteoForm({ onClose, onSave, isLoading = false }) {
               <option value="semanal">Semanal</option>
               <option value="quincenal">Quincenal</option>
               <option value="mensual">Mensual</option>
-              <option value="todos">Todos (inventariables)</option>
+              <option value="todos">Todos los productos</option>
             </select>
           </div>
 

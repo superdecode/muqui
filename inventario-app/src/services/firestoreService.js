@@ -641,7 +641,9 @@ const firestoreService = {
 
       const nuevoProducto = {
         ...productoData,
-        frecuencia_inventario: (productoData.frecuencia_inventario || '').toUpperCase(),
+        frecuencia_inventario: Array.isArray(productoData.frecuencia_inventario)
+          ? productoData.frecuencia_inventario.map(t => t.toUpperCase())
+          : ((productoData.frecuencia_inventario || '').toUpperCase()),
         codigo_legible: codigoLegible,
         concatenado: `${productoData.nombre} ${productoData.especificacion || ''}`.trim(),
         estado: productoData.estado || 'ACTIVO',
@@ -671,7 +673,9 @@ const firestoreService = {
 
       const datosActualizados = {
         ...productoData,
-        frecuencia_inventario: productoData.frecuencia_inventario ? productoData.frecuencia_inventario.toUpperCase() : undefined,
+        frecuencia_inventario: Array.isArray(productoData.frecuencia_inventario)
+          ? productoData.frecuencia_inventario.map(t => t.toUpperCase())
+          : (productoData.frecuencia_inventario ? productoData.frecuencia_inventario.toUpperCase() : undefined),
         concatenado: `${productoData.nombre} ${productoData.especificacion || ''}`.trim(),
         updated_at: serverTimestamp()
       }
