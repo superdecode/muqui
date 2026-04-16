@@ -101,7 +101,11 @@ export default function Productos() {
   const filteredProductos = productos.filter(item => {
     const matchesSearch = !searchTerm || item.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || (item.especificacion || '').toLowerCase().includes(searchTerm.toLowerCase()) || (item.id || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesCategory = !categoriaFilter || item.categoria === categoriaFilter
-    const matchesTipoConteo = !tipoConteoFilter || item.frecuencia_inventario === tipoConteoFilter
+    const matchesTipoConteo = !tipoConteoFilter || (
+      Array.isArray(item.frecuencia_inventario)
+        ? item.frecuencia_inventario.map(t => String(t).toUpperCase()).includes(tipoConteoFilter.toUpperCase())
+        : String(item.frecuencia_inventario || '').toUpperCase() === tipoConteoFilter.toUpperCase()
+    )
     const matchesEstado = !estadoFilter || item.estado === estadoFilter
     const matchesEspec = !especificacionFilter || item.especificacion === especificacionFilter
     
@@ -442,7 +446,13 @@ export default function Productos() {
   // ────────────────────────────────────────────────────────────────────────
 
   const categorias = [...new Set(productos.map(item => item.categoria).filter(Boolean))]
-  const tiposConteo = [...new Set(productos.map(item => item.frecuencia_inventario).filter(Boolean))]
+  const tiposConteo = [...new Set(
+    productos.flatMap(item =>
+      Array.isArray(item.frecuencia_inventario)
+        ? item.frecuencia_inventario.map(t => String(t).toUpperCase())
+        : item.frecuencia_inventario ? [String(item.frecuencia_inventario).toUpperCase()] : []
+    )
+  )].sort()
   const especificaciones = [...new Set(productos.map(item => item.especificacion).filter(Boolean))]
   const estados = [...new Set(productos.map(item => item.estado).filter(Boolean))]
 
@@ -721,9 +731,19 @@ export default function Productos() {
                       </span>
                     </td>
                     <td className="px-3 py-3">
-                      <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-xs font-medium">
-                        {item.frecuencia_inventario ? (Array.isArray(item.frecuencia_inventario) ? item.frecuencia_inventario.join(', ').toUpperCase() : item.frecuencia_inventario.toUpperCase()) : '-'}
-                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {(() => {
+                          const tipos = Array.isArray(item.frecuencia_inventario)
+                            ? item.frecuencia_inventario
+                            : item.frecuencia_inventario ? [item.frecuencia_inventario] : []
+                          if (tipos.length === 0) return <span className="text-xs text-slate-400">-</span>
+                          return tipos.map(t => (
+                            <span key={t} className="px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-[11px] font-semibold uppercase">
+                              {t}
+                            </span>
+                          ))
+                        })()}
+                      </div>
                     </td>
                     <td className="px-3 py-3">
                       <div className="text-sm">

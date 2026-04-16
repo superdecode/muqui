@@ -107,7 +107,10 @@ export default function ProductoForm({ producto = null, onClose, onSave, isLoadi
         stock_minimo: producto.stock_minimo || producto.stock_minimo_default || 10,
         frecuencia_inventario: (() => {
           const rawFrecuencia = producto.frecuencia_inventario
-          if (Array.isArray(rawFrecuencia)) return rawFrecuencia
+          if (Array.isArray(rawFrecuencia)) {
+            // Normalize to lowercase so chip buttons (.includes('diario')) work correctly
+            return rawFrecuencia.map(t => String(t).toLowerCase()).filter(Boolean)
+          }
           if (typeof rawFrecuencia === 'string' && rawFrecuencia.trim()) {
             return rawFrecuencia.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
           }

@@ -642,8 +642,8 @@ const firestoreService = {
       const nuevoProducto = {
         ...productoData,
         frecuencia_inventario: Array.isArray(productoData.frecuencia_inventario)
-          ? productoData.frecuencia_inventario.map(t => t.toUpperCase())
-          : ((productoData.frecuencia_inventario || '').toUpperCase()),
+          ? productoData.frecuencia_inventario.map(t => String(t).toUpperCase())
+          : (productoData.frecuencia_inventario ? String(productoData.frecuencia_inventario).toUpperCase() : []),
         codigo_legible: codigoLegible,
         concatenado: `${productoData.nombre} ${productoData.especificacion || ''}`.trim(),
         estado: productoData.estado || 'ACTIVO',
@@ -674,8 +674,8 @@ const firestoreService = {
       const datosActualizados = {
         ...productoData,
         frecuencia_inventario: Array.isArray(productoData.frecuencia_inventario)
-          ? productoData.frecuencia_inventario.map(t => t.toUpperCase())
-          : (productoData.frecuencia_inventario ? productoData.frecuencia_inventario.toUpperCase() : undefined),
+          ? productoData.frecuencia_inventario.map(t => String(t).toUpperCase())
+          : (productoData.frecuencia_inventario ? String(productoData.frecuencia_inventario).toUpperCase() : []),
         concatenado: `${productoData.nombre} ${productoData.especificacion || ''}`.trim(),
         updated_at: serverTimestamp()
       }
