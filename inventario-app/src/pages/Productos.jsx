@@ -226,7 +226,7 @@ export default function Productos() {
         'Nombre': prod.nombre || '',
         'Categoría': prod.categoria || '',
         'Estado': prod.estado || '',
-        'Frecuencia Inventario': (prod.frecuencia_inventario || '').toUpperCase(),
+        'Frecuencia Inventario': Array.isArray(prod.frecuencia_inventario) ? prod.frecuencia_inventario.join(', ').toUpperCase() : (prod.frecuencia_inventario || '').toUpperCase(),
         'Costo Unitario': prod.costo_unidad || 0,
         'Unidad de Medida': unitNombre,
         'Cant. por Unidad': prod.purchase_unit_qty || '',
@@ -722,7 +722,7 @@ export default function Productos() {
                     </td>
                     <td className="px-3 py-3">
                       <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-xs font-medium">
-                        {item.frecuencia_inventario ? item.frecuencia_inventario.toUpperCase() : '-'}
+                        {item.frecuencia_inventario ? (Array.isArray(item.frecuencia_inventario) ? item.frecuencia_inventario.join(', ').toUpperCase() : item.frecuencia_inventario.toUpperCase()) : '-'}
                       </span>
                     </td>
                     <td className="px-3 py-3">
